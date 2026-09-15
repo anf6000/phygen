@@ -1,0 +1,76 @@
+{
+  "manifestVersion": 1,
+  "id": "physarum",
+  "title": "Physarum transport network",
+  "description": "A seeded CPU physarum simulation. Agents sense the trail in front, to the left and to the right, turn toward the strongest reading and deposit a trace. three.js draws the trail through a palette lookup.",
+  "contractVersion": "1.0.0",
+  "entry": "src/adapter.js",
+  "configuration": {
+    "baseline": "config.json",
+    "schema": "config.schema.json"
+  },
+  "allowedEditPaths": [
+    "src/",
+    "config.json"
+  ],
+  "protectedPaths": [
+    "manifest.json",
+    "package.json",
+    "package-lock.json",
+    "config.schema.json",
+    "index.html",
+    "server.mjs",
+    "src/adapter.js",
+    "src/main.js",
+    "tools/",
+    "test/"
+  ],  "pinnedDependencies": [
+    {
+      "name": "three",
+      "version": "0.170.0"
+    }
+  ],
+  "resourceLimits": {
+    "maxPackageBytes": 2097152,
+    "maxFiles": 64,
+    "maxAgents": 200000,
+    "maxTrailPixels": 4194304,
+    "maxStepsPerEvaluation": 20000,
+    "maxPlaybackSteps": 2000000
+  },
+  "evaluation": {
+    "viewport": {
+      "width": 768,
+      "height": 768,
+      "dpr": 1
+    },
+    "seedCount": 2,
+    "captureStages": {
+      "candidates": [
+        "early",
+        "middle",
+        "late"
+      ],
+      "finalist": [
+        "early",
+        "middle",
+        "late",
+        "dense"
+      ]
+    },
+    "requiredMetadata": [
+      "frameId",
+      "simulationStep",
+      "timestep",
+      "rendererBackend",
+      "sourceHash"
+    ]
+  },
+  "browserCapabilities": {
+    "canvas": true,
+    "webgl2": true,
+    "requiredExtensions": []
+  },
+  "assets": [],
+  "licenses": []
+}

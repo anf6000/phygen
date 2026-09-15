@@ -1,0 +1,9 @@
+i want to build a self-evolving artwork based on a physarum simulation in threejs.
+
+i want to use pi harness to spawn agents to create new variants and autonomously decide which variant is the best one. we need a custom web ui interface where i only specify the amount of evolutions along with a prompt which direction to take.
+
+the most important is the judgement of the visual output, it has to happen like a human would judge an artwork, ie with vision / multimodal models based on aesthetic criteria (composition, color etc). i suggest kimi k3 via kilo in Pi.
+
+i want a minimal animated interface that show the versions in a tree-like structure (see reference.jfif). each node is one artwork. it is clickable and launches a live artwork.
+
+design the system so that other threejs artworks can be imported to create a new tree. aks if unsure and suggest features and a way to implement this. it will run locally in a browser, later on a hetzner cpu server. 

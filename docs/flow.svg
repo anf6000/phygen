@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 420" role="img" aria-label="Phygen flow: interface, controller, agents, capture, judge, and the version tree">
+  <style>
+    .box { fill: #fffdf9; stroke: #ded3c2; stroke-width: 1.5; }
+    .accent { fill: #fdf8ef; stroke: #8a5a2b; stroke-width: 1.5; }
+    .t { font: 600 14px system-ui, sans-serif; fill: #2f2a24; }
+    .s { font: 12px system-ui, sans-serif; fill: #6c6257; }
+    .l { stroke: #b9ad9a; stroke-width: 1.5; fill: none; marker-end: url(#a); }
+    .l2 { stroke: #2f2a24; stroke-width: 2; fill: none; marker-end: url(#a); }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#b9ad9a" />
+    </marker>
+  </defs>
+
+  <rect class="box" x="16" y="24" width="200" height="88" rx="8" />
+  <text class="t" x="34" y="54">Interface</text>
+  <text class="s" x="34" y="76">direction, evolutions,</text>
+  <text class="s" x="34" y="94">limit, version tree</text>
+
+  <rect class="accent" x="272" y="24" width="220" height="88" rx="8" />
+  <text class="t" x="290" y="54">Controller</text>
+  <text class="s" x="290" y="76">rounds, budgets, jobs,</text>
+  <text class="s" x="290" y="94">selection rules, recovery</text>
+
+  <rect class="box" x="548" y="24" width="180" height="88" rx="8" />
+  <text class="t" x="566" y="54">Author sessions</text>
+  <text class="s" x="566" y="76">one workspace each,</text>
+  <text class="s" x="566" y="94">file tools only</text>
+
+  <rect class="box" x="548" y="164" width="180" height="88" rx="8" />
+  <text class="t" x="566" y="194">Capture</text>
+  <text class="s" x="566" y="216">seeded steps, fixed</text>
+  <text class="s" x="566" y="234">viewport, PNG frames</text>
+
+  <rect class="box" x="548" y="304" width="180" height="88" rx="8" />
+  <text class="t" x="566" y="334">Vision judge</text>
+  <text class="s" x="566" y="356">images only, no code,</text>
+  <text class="s" x="566" y="374">anonymous labels</text>
+
+  <rect class="box" x="788" y="164" width="176" height="88" rx="8" />
+  <text class="t" x="806" y="194">Records</text>
+  <text class="s" x="806" y="216">versions, comparisons,</text>
+  <text class="s" x="806" y="234">usage, events</text>
+
+  <rect class="box" x="272" y="164" width="220" height="228" rx="8" />
+  <text class="t" x="290" y="194">Version tree</text>
+  <text class="s" x="290" y="216">root, three candidates per</text>
+  <text class="s" x="290" y="234">round, promoted lineage,</text>
+  <text class="s" x="290" y="252">rejected and failed kept</text>
+  <text class="s" x="290" y="286">One node can be played live</text>
+  <text class="s" x="290" y="304">on the artwork origin.</text>
+  <text class="s" x="290" y="338">Snapshots are immutable and</text>
+  <text class="s" x="290" y="356">live outside the package.</text>
+
+  <path class="l2" d="M 216 68 L 268 68" />
+  <path class="l" d="M 492 68 L 544 68" />
+  <path class="l" d="M 638 112 L 638 160" />
+  <path class="l" d="M 728 208 L 784 208" />
+  <path class="l2" d="M 638 252 L 638 300" />
+  <path class="l2" d="M 544 208 L 496 208" />
+  <path class="l" d="M 272 120 L 150 120 L 150 196 L 268 196" />
+  <text class="s" x="34" y="150">start, pause, stop,</text>
+  <text class="s" x="34" y="168">progress events, results</text>
+</svg>

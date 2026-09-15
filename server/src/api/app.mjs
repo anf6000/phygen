@@ -1,0 +1,569 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// app.mjs — the controller API.
+//
+// The interface talks to this server only. Artwork code never does: it runs on
+// the separate live origin.
+// ────────────────────────────────────────────────────────────────────────────
+import { readFile, stat } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+
+import Fastify from 'fastify';
+import fastifyStatic from '@fastify/static';
+
+import { ArtworkError } from '../../../runtime/contract.js';
+import { checkPackage } from '../../../runtime/node/package-checks.js';
+import { publishSnapshot } from '../artwork/workspace.mjs';
+import { round6 } from '../util.mjs';
+import { isInside } from '../artifacts.mjs';
+
+const STAGE_ORDER = ['early', 'early-mid', 'middle', 'late-mid', 'late', 'dense-early', 'dense-early-mid', 'dense-middle', 'dense-late-mid', 'dense-late'];
+
+function fail(reply, code, message, detail = {}) {
+  const status = {
+    package_invalid: 400,
+    artwork_not_found: 404,
+    version_not_found: 404,
+    run_not_found: 404,
+    capture_not_found: 404,
+    payload_invalid: 400,
+    run_state_invalid: 409,
+    budget_exceeded: 400,
+    capture_unavailable: 503,
+    isolation_required: 503,
+    provider_unavailable: 503,
+  }[code] ?? 500;
+  reply.code(status).send({ error: { code, message, detail } });
+}
+
+function stageRank(stage) {
+  const index = STAGE_ORDER.indexOf(stage);
+  return index === -1 ? STAGE_ORDER.length : index;
+}
+
+const STAGE_PATTERN = /^[a-z0-9][a-z0-9-]{0,23}$/;
+
+/**
+ * Validate the evaluation protocol. These values become record fields and file
+ * names, so every one of them is bounded here.
+ * @returns {string|null} the problem, or null when the protocol is valid
+ */
+function validateProtocol(protocol) {
+  const { viewport, seeds, frameRoles, stepSchedule, denseFrameRoles, denseStepSchedule, tieBreak } = protocol;
+  if (!viewport || !Number.isInteger(viewport.width) || !Number.isInteger(viewport.height)) return 'viewport.width and viewport.height must be integers';
+  if (viewport.width < 64 || viewport.width > 16384) return 'viewport.width must be from 64 to 16384';
+  if (viewport.height < 64 || viewport.height > 16384) return 'viewport.height must be from 64 to 16384';
+  if (typeof viewport.dpr !== 'number' || viewport.dpr < 0.25 || viewport.dpr > 4) return 'viewport.dpr must be from 0.25 to 4';
+  if (!Array.isArray(seeds) || seeds.length < 1 || seeds.length > 8) return 'seeds must hold from 1 to 8 values';
+  if (!seeds.every((seed) => Number.isInteger(seed) && seed >= 0 && seed <= 4294967295)) return 'every seed must be an integer from 0 to 4294967295';
+  if (typeof tieBreak !== 'boolean') return 'tieBreak must be true or false';
+
+  for (const [label, roles, steps] of [
+    ['frameRoles', frameRoles, stepSchedule],
+    ['denseFrameRoles', denseFrameRoles, denseStepSchedule],
+  ]) {
+    if (!Array.isArray(roles) || roles.length < 1 || roles.length > 8) return `${label} must hold from 1 to 8 names`;
+    if (!roles.every((role) => typeof role === 'string' && STAGE_PATTERN.test(role))) {
+      return `${label} must hold lowercase names of letters, digits, and hyphens`;
+    }
+    if (new Set(roles).size !== roles.length) return `${label} repeats a name`;
+    if (!Array.isArray(steps) || steps.length !== roles.length) return `${label} and its schedule must have the same length`;
+    if (!steps.every((step) => Number.isInteger(step) && step >= 1 && step <= 200000)) return 'every scheduled step must be an integer from 1 to 200000';
+  }
+  return null;
+}
+
+export function buildApp({ store, events, budget, controller, capture, provider, config, artifacts, detection, captureStatus, catalog }) {
+  const app = Fastify({ logger: false, bodyLimit: config.server.requestBodyLimit });
+
+  app.setErrorHandler((error, request, reply) => {
+    if (error instanceof ArtworkError) {
+      fail(reply, error.code, error.message, error.details ?? {});
+      return;
+    }
+    if (error.statusCode === 400) {
+      fail(reply, 'payload_invalid', error.message);
+      return;
+    }
+    request.log.error(error);
+    fail(reply, 'internal_error', error.message ?? 'The server failed');
+  });
+
+  const webRoot = join(config.repoRoot, 'web', 'dist');
+  // wildcard: true reads the file at request time, so a rebuilt interface is
+  // served without a server restart.
+  app.register(fastifyStatic, { root: webRoot, prefix: '/', wildcard: true, index: ['index.html'], decorateReply: true }).after(() => {});
+
+  // ── health ────────────────────────────────────────────────────────────────
+  app.get('/api/health', async () => ({
+    ok: true,
+    version: config.version,
+    provider: {
+      driver: detection?.driver ?? 'unknown',
+      model: detection?.model ?? config.provider.model,
+      ready: Boolean(detection?.available),
+      substituted: Boolean(detection?.substituted),
+      allowSpend: config.provider.allowSpend,
+      detail: detection?.version ?? null,
+    },
+    capture: {
+      backend: captureStatus.backend,
+      available: captureStatus.available,
+      isolated: captureStatus.isolated,
+      detail: captureStatus.detail,
+    },
+    isolation: {
+      docker: captureStatus.docker.available,
+      image: captureStatus.docker.image,
+      detail: captureStatus.docker.detail,
+    },
+    artworks: store.listArtworks().length,
+    models: catalog ? { source: catalog.status().source, count: catalog.status().count } : { source: 'unavailable', count: 0 },
+  }));
+
+  // ── models and cost ───────────────────────────────────────────────────────
+  app.get('/api/models', async () => {
+    if (!catalog) return { source: 'unavailable', count: 0, models: [], defaultModel: config.provider.model, authorModel: config.provider.authorModel };
+    const status = catalog.status();
+    return {
+      source: status.source,
+      count: status.count,
+      fetchedAt: status.fetchedAt,
+      defaultModel: config.provider.model,
+      authorModel: config.provider.authorModel,
+      models: status.models.map((model) => ({
+        id: model.id,
+        name: model.name,
+        acceptsImages: model.acceptsImages,
+        contextWindow: model.contextWindow,
+        priceInUsdPerMTok: model.priceInUsdPerMTok,
+        priceOutUsdPerMTok: model.priceOutUsdPerMTok,
+        free: model.free,
+      })),
+    };
+  });
+
+  // ── artworks ──────────────────────────────────────────────────────────────
+  app.get('/api/artworks', async () => ({ artworks: store.listArtworks() }));
+
+  app.post('/api/artworks/import', async (request, reply) => {
+    const body = request.body ?? {};
+    if (typeof body.packagePath !== 'string' || body.packagePath.length === 0) {
+      return fail(reply, 'payload_invalid', 'packagePath is required');
+    }
+    const packageDir = resolve(config.repoRoot, body.packagePath);
+    if (!isInside(config.repoRoot, packageDir)) {
+      return fail(reply, 'payload_invalid', 'The package path must stay inside the repository');
+    }
+
+    const check = await checkPackage({ packageDir });
+    if (!check.ok) {
+      return fail(reply, 'package_invalid', check.problems[0] ?? 'The package is invalid', { problems: check.problems });
+    }
+
+    const existing = store.findArtworkByPackagePath(body.packagePath);
+    if (existing) {
+      const artwork = store.getArtwork(existing.id);
+      artwork.rootVersionId = store.getVersion(artwork.rootVersionId).id;
+      return { artwork };
+    }
+
+    const published = await publishSnapshot({
+      workspaceDir: packageDir,
+      snapshotRoot: config.artifactsDir,
+      artworkId: check.manifest.id,
+      packageHash: check.packageHash,
+    });
+
+    const rootVersion = store.createVersion({
+      artworkId: 'pending',
+      parentId: null,
+      generation: 0,
+      title: 'Root',
+      status: 'promoted',
+      direction: null,
+      sourceHash: check.packageHash,
+      snapshotPath: published.path,
+      workspacePath: packageDir,
+      configuration: JSON.parse(await readFile(join(packageDir, check.manifest.configuration.baseline), 'utf8')),
+      changes: [],
+      explanation: 'The imported artwork, exactly as it was.',
+      onLineage: true,
+    });
+
+    const artwork = store.createArtwork({
+      packageId: check.manifest.id,
+      title: check.manifest.title,
+      contractVersion: check.manifest.contractVersion,
+      packagePath: body.packagePath,
+      rootVersionId: rootVersion.id,
+    });
+    store.db.prepare('UPDATE versions SET artwork_id = ? WHERE id = ?').run(artwork.id, rootVersion.id);
+    artwork.rootVersionId = rootVersion.id;
+
+    return reply.code(201).send({ artwork: store.getArtwork(artwork.id) ?? artwork });
+  });
+
+  app.get('/api/artworks/:artworkId/tree', async (request, reply) => {
+    const artwork = store.getArtwork(request.params.artworkId);
+    if (!artwork) return fail(reply, 'artwork_not_found', `No artwork ${request.params.artworkId}`);
+    const versions = store.listVersions(artwork.id);
+    const usageByVersion = store.usageCostByArtwork(artwork.id);
+    const nodes = versions.map((version) => ({
+      ...publicVersion(version),
+      liveUrl: artifacts.liveUrlFor(version.id),
+      onLineage: version.onLineage,
+      usageUsd: round6(usageByVersion.get(version.id) ?? 0),
+      error: version.errorCode ? { code: version.errorCode, message: version.errorMessage } : null,
+    }));
+    const edges = versions
+      .filter((version) => version.parentId)
+      .map((version) => ({ id: `e_${version.id}`, source: version.parentId, target: version.id, onLineage: version.onLineage }));
+    return { artwork, nodes, edges };
+  });
+
+  // ── versions ──────────────────────────────────────────────────────────────
+  app.get('/api/versions/:versionId', async (request, reply) => {
+    const version = store.getVersion(request.params.versionId);
+    if (!version) return fail(reply, 'version_not_found', `No version ${request.params.versionId}`);
+    const captures = store.listCaptures(version.id).map((capture) => ({
+      id: capture.id,
+      stage: capture.stage,
+      step: capture.step,
+      seed: capture.seed,
+      width: capture.width,
+      height: capture.height,
+      dpr: capture.dpr,
+      rendererBackend: capture.rendererBackend,
+      sourceHash: capture.sourceHash,
+      configurationHash: capture.configurationHash,
+      timestep: capture.meta?.timestep ?? null,
+      url: `/api/captures/${capture.id}.png`,
+      createdAt: capture.createdAt,
+    }));
+    const comparisons = store
+      .listComparisons(version.runId ?? '')
+      .filter((comparison) => Object.values(comparison.labels).includes(version.id) || comparison.winnerVersionId === version.id)
+      .map((comparison) => ({
+        id: comparison.id,
+        kind: comparison.kind,
+        round: comparison.round,
+        order: comparison.order,
+        labels: comparison.labels,
+        winnerVersionId: comparison.winnerVersionId,
+        confidence: comparison.confidence,
+        uncertainty: comparison.uncertainty,
+        observations: comparison.verdict.observations ?? [],
+        weaknesses: comparison.verdict.weaknesses ?? [],
+        notes: comparison.verdict.notes ?? '',
+        model: comparison.verdict.model ?? null,
+        stub: comparison.verdict.stub ?? false,
+        judgeSession: comparison.judgeSession,
+        createdAt: comparison.createdAt,
+      }));
+    return {
+      version: { ...publicVersion(version), liveUrl: artifacts.liveUrlFor(version.id), onLineage: version.onLineage, changes: version.changes, explanation: version.explanation },
+      configuration: version.configuration,
+      changes: version.changes,
+      explanation: version.explanation,
+      snapshotPath: version.snapshotPath,
+      captures,
+      evaluations: comparisons,
+      usage: store.listUsageForVersion(version.id),
+      error: version.errorCode ? { code: version.errorCode, message: version.errorMessage } : null,
+    };
+  });
+
+  app.get('/api/versions/:versionId/artifacts/:name', async (request, reply) => {
+    const version = store.getVersion(request.params.versionId);
+    if (!version) return fail(reply, 'version_not_found', `No version ${request.params.versionId}`);
+    const captures = store.listCaptures(version.id);
+    if (captures.length === 0) return fail(reply, 'capture_not_found', 'This version has no capture yet');
+    const name = request.params.name;
+    const chosen =
+      name === 'thumb'
+        ? [...captures].sort((a, b) => stageRank(a.stage) - stageRank(b.stage) || a.step - b.step)[0]
+        : captures.find((capture) => capture.stage === name) ?? captures[0];
+    return sendImage(reply, chosen.path, chosen.id);
+  });
+
+  app.get('/api/captures/:captureId.png', async (request, reply) => {
+    const capture = store.getCapture(String(request.params.captureId).replace(/\.png$/, ''));
+    if (!capture) return fail(reply, 'capture_not_found', 'No such capture');
+    return sendImage(reply, capture.path, capture.id);
+  });
+
+  // ── live embed ────────────────────────────────────────────────────────────
+  app.get('/live/:versionId', async (request, reply) => {
+    const version = store.getVersion(request.params.versionId);
+    if (!version) return fail(reply, 'version_not_found', `No version ${request.params.versionId}`);
+    const liveOrigin = artifacts.liveUrlFor(version.id);
+    const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(version.title)}</title>
+<style>html,body{margin:0;height:100%;background:#12100e}iframe{border:0;width:100%;height:100%;display:block}</style>
+</head>
+<body>
+<iframe src="${escapeHtml(liveOrigin)}" sandbox="${escapeHtml(config.safety.iframeSandbox)}" referrerpolicy="no-referrer" title="${escapeHtml(version.title)}"></iframe>
+</body>
+</html>`;
+    reply
+      .code(200)
+      .type('text/html; charset=utf-8')
+      .header('cache-control', 'no-store')
+      .header('content-security-policy', `default-src 'none'; frame-src ${liveOrigin}; style-src 'unsafe-inline'`)
+      .send(html);
+  });
+
+  // ─ runs ──────────────────────────────────────────────────────────────────
+  app.get('/api/cost-estimate', async (request) => {
+    const evolutions = Math.max(1, Math.min(50, Number(request.query?.evolutions) || 1));
+    const judgeModel = typeof request.query?.model === 'string' && request.query.model.length > 0 ? request.query.model : config.provider.model;
+    const authorModel = typeof request.query?.authorModel === 'string' && request.query.authorModel.length > 0 ? request.query.authorModel : config.provider.authorModel;
+    const bound = budget.boundFor({
+      evolutions,
+      candidatesPerRound: config.evolution.candidatesPerRound,
+      protocol: { tieBreak: config.evolution.tieBreak },
+      authorModel,
+      judgeModel,
+    });
+    return { ...bound, judgeModel: bound.judgeModel ?? { id: judgeModel }, authorModel: bound.authorModel ?? { id: authorModel } };
+  });
+
+  app.post('/api/runs', async (request, reply) => {
+    const body = request.body ?? {};
+    const artwork = store.getArtwork(body.artworkId);
+    if (!artwork) return fail(reply, 'artwork_not_found', `No artwork ${body.artworkId}`);
+    if (typeof body.direction !== 'string' || body.direction.trim().length < 3) {
+      return fail(reply, 'payload_invalid', 'direction is required and must be at least 3 characters');
+    }
+    const evolutions = Number(body.evolutions);
+    if (!Number.isInteger(evolutions) || evolutions < 1 || evolutions > 50) {
+      return fail(reply, 'payload_invalid', 'evolutions must be an integer from 1 to 50');
+    }
+    const limitUsd = Number(body.spendingLimitUsd ?? config.cost.defaultLimitUsd);
+    if (!Number.isFinite(limitUsd) || limitUsd <= 0) {
+      return fail(reply, 'payload_invalid', 'spendingLimitUsd must be a positive number');
+    }
+    if (limitUsd > config.cost.maxRunUsd) {
+      return fail(reply, 'payload_invalid', `spendingLimitUsd may not exceed the configured maximum of ${config.cost.maxRunUsd}`);
+    }
+
+    const branch = body.branchFromVersionId ? store.getVersion(body.branchFromVersionId) : null;
+    if (body.branchFromVersionId && !branch) return fail(reply, 'version_not_found', `No version ${body.branchFromVersionId}`);
+    if (branch && branch.artworkId !== artwork.id) {
+      return fail(reply, 'payload_invalid', 'The branch version belongs to a different artwork');
+    }
+    const rootVersion = branch ?? store.getVersion(artwork.rootVersionId);
+    if (!rootVersion) return fail(reply, 'version_not_found', 'This artwork has no root version');
+
+    const protocol = {
+      viewport: body.evaluation?.viewport ?? config.evolution.viewport,
+      seeds: body.evaluation?.seeds ?? config.evolution.seeds,
+      frameRoles: body.evaluation?.frameRoles ?? config.evolution.frameRoles,
+      stepSchedule: body.evaluation?.stepSchedule ?? config.evolution.stepSchedule,
+      denseFrameRoles: body.evaluation?.denseFrameRoles ?? config.evolution.denseFrameRoles,
+      denseStepSchedule: body.evaluation?.denseStepSchedule ?? config.evolution.denseStepSchedule,
+      tieBreak: body.evaluation?.tieBreak ?? config.evolution.tieBreak,
+    };
+    if (protocol.stepSchedule.length !== protocol.frameRoles.length) {
+      return fail(reply, 'payload_invalid', 'stepSchedule and frameRoles must have the same length');
+    }
+    if (protocol.denseStepSchedule.length !== protocol.denseFrameRoles.length) {
+      return fail(reply, 'payload_invalid', 'denseStepSchedule and denseFrameRoles must have the same length');
+    }
+    const protocolProblem = validateProtocol(protocol);
+    if (protocolProblem) return fail(reply, 'payload_invalid', `The evaluation protocol is invalid: ${protocolProblem}`);
+
+    const judgeModel = typeof body.model === 'string' && body.model.length > 0 ? body.model : config.provider.model;
+    const authorModel = typeof body.authorModel === 'string' && body.authorModel.length > 0 ? body.authorModel : config.provider.authorModel;
+    if (catalog && catalog.status().count > 0) {
+      const judge = catalog.get(judgeModel);
+      if (!judge) return fail(reply, 'payload_invalid', `The model ${judgeModel} is not in the Kilo catalog`);
+      if (!judge.acceptsImages) return fail(reply, 'payload_invalid', `The judge model ${judgeModel} cannot read images`);
+      if (!catalog.get(authorModel)) return fail(reply, 'payload_invalid', `The author model ${authorModel} is not in the Kilo catalog`);
+    }
+
+    const bound = budget.boundFor({
+      evolutions,
+      candidatesPerRound: config.evolution.candidatesPerRound,
+      protocol,
+      authorModel,
+      judgeModel,
+    });
+    if (bound.boundUsd > limitUsd) {
+      return fail(reply, 'budget_exceeded', `The maximum cost of this run is ${bound.boundUsd.toFixed(4)} USD, above the limit of ${limitUsd.toFixed(4)} USD`, bound);
+    }
+
+    const run = store.createRun({
+      artworkId: artwork.id,
+      rootVersionId: rootVersion.id,
+      direction: body.direction.trim(),
+      evolutionsRequested: evolutions,
+      limitUsd,
+      protocol: { ...protocol, providerDriver: detection?.driver ?? 'unknown', providerModel: judgeModel, authorModel, estimate: bound },
+      costBoundUsd: bound.boundUsd,
+    });
+    store.upsertRound({
+      runId: run.id,
+      round: 0,
+      parentVersionId: rootVersion.id,
+      candidateIds: [],
+      winnerVersionId: null,
+      promoted: false,
+      note: 'The run starts from this version.',
+    });
+    events.emit(run.id, 'run.state', { state: run.state, stopReason: null });
+    events.emit(run.id, 'budget', { spentUsd: 0, reservedUsd: 0, limitUsd: run.limitUsd, boundUsd: run.costBoundUsd });
+    // The contract promises that the maximum cost is reserved before the first
+    // request. The per-request reservations take over from the first call.
+    budget.reserve(run, bound.boundUsd, 'run-estimate', { emit: false });
+
+    void controller.start(run.id).catch((error) => {
+      events.emit(run.id, 'error', { code: error.code ?? 'run_failed', message: error.message });
+    });
+
+    return reply.code(201).send({ run: store.getRun(run.id) });
+  });
+
+  app.get('/api/runs', async (request) => {
+    const limit = Math.max(1, Math.min(100, Number(request.query?.limit) || 20));
+    const runs = store.listRuns(limit).map((run) => ({ ...run, rounds: store.listRounds(run.id).filter((round) => round.round > 0) }));
+    return { runs };
+  });
+
+  app.get('/api/runs/:runId', async (request, reply) => {
+    const run = store.getRun(request.params.runId);
+    if (!run) return fail(reply, 'run_not_found', `No run ${request.params.runId}`);
+    return {
+      run: { ...run, rounds: store.listRounds(run.id).filter((round) => round.round > 0) },
+      jobs: store.listJobs(run.id),
+      usage: store.listUsage(run.id),
+      comparisons: store.listComparisons(run.id),
+      active: controller.isActive(run.id),
+    };
+  });
+
+  // The interface polls this while a run moves. It stays small on purpose: the
+  // job, usage, and comparison lists grow for the whole life of a run.
+  app.get('/api/runs/:runId/summary', async (request, reply) => {
+    const run = store.getRun(request.params.runId);
+    if (!run) return fail(reply, 'run_not_found', `No run ${request.params.runId}`);
+    return {
+      run: { ...run, rounds: store.listRounds(run.id).filter((round) => round.round > 0) },
+      active: controller.isActive(run.id),
+    };
+  });
+
+  app.post('/api/runs/:runId/pause', async (request, reply) => {
+    if (!store.getRun(request.params.runId)) return fail(reply, 'run_not_found', 'No such run');
+    return { run: await controller.pause(request.params.runId) };
+  });
+
+  app.post('/api/runs/:runId/resume', async (request, reply) => {
+    if (!store.getRun(request.params.runId)) return fail(reply, 'run_not_found', 'No such run');
+    return { run: await controller.resume(request.params.runId) };
+  });
+
+  app.post('/api/runs/:runId/stop', async (request, reply) => {
+    if (!store.getRun(request.params.runId)) return fail(reply, 'run_not_found', 'No such run');
+    return { run: await controller.stop(request.params.runId) };
+  });
+
+  // ── events ────────────────────────────────────────────────────────────────
+  app.get('/api/runs/:runId/events', async (request, reply) => {
+    const run = store.getRun(request.params.runId);
+    if (!run) return fail(reply, 'run_not_found', `No run ${request.params.runId}`);
+
+    const since = Number(request.headers['last-event-id'] ?? request.query?.since ?? 0) || 0;
+    reply.raw.writeHead(200, {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-store',
+      connection: 'keep-alive',
+      'x-accel-buffering': 'no',
+    });
+
+    const write = (event) => {
+      reply.raw.write(`id: ${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
+    };
+    for (const event of events.since(run.id, since)) write(event);
+
+    const unsubscribe = events.subscribe(run.id, write);
+    const keepAlive = setInterval(() => reply.raw.write(': keep-alive\n\n'), config.server.sseKeepAliveMs);
+
+    request.raw.on('close', () => {
+      clearInterval(keepAlive);
+      unsubscribe();
+    });
+  });
+
+  app.setNotFoundHandler((request, reply) => {
+    if (request.url.startsWith('/api/')) return fail(reply, 'not_found', `No route for ${request.url}`);
+    return serveInterface(reply);
+  });
+
+  async function serveInterface(reply) {
+    const indexPath = join(webRoot, 'index.html');
+    try {
+      const html = await readFile(indexPath, 'utf8');
+      reply.code(200).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(html);
+    } catch {
+      reply
+        .code(200)
+        .type('text/html; charset=utf-8')
+        .send(
+          '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>phygen</title></head><body>' +
+            '<p>The interface is not built. Run <code>npm install &amp;&amp; npm run build</code> in <code>web/</code>.</p>' +
+            '<p>The API is available under <code>/api</code>.</p></body></html>',
+        );
+    }
+  }
+
+  return app;
+}
+
+function publicVersion(version) {
+  return {
+    id: version.id,
+    parentId: version.parentId,
+    generation: version.generation,
+    round: version.round,
+    slot: version.slot,
+    title: version.title,
+    status: version.status,
+    direction: version.direction,
+    thumbnailUrl: `/api/versions/${version.id}/artifacts/thumb`,
+    livePath: `/live/${version.id}`,
+    sourceHash: version.sourceHash,
+    createdAt: version.createdAt,
+  };
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+}
+
+async function sendImage(reply, path, id) {
+  try {
+    const info = await stat(path);
+    if (!info.isFile()) return fail(reply, 'capture_not_found', 'The capture file is missing');
+    // A capture never changes, so a revalidating client gets 304 and no body.
+    const etag = `"${id}-${info.size}"`;
+    if (reply.request?.headers?.['if-none-match'] === etag) {
+      return reply.code(304).header('etag', etag).send();
+    }
+    const body = await readFile(path);
+    return reply
+      .code(200)
+      .type('image/png')
+      .header('cache-control', 'public, max-age=31536000, immutable')
+      .header('etag', etag)
+      .header('content-length', String(body.length))
+      .send(body);
+  } catch (error) {
+    return fail(reply, 'capture_not_found', `The capture file is missing: ${error.code ?? error.message}`);
+  }
+}
+

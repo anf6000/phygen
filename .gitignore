@@ -1,0 +1,11 @@
+node_modules/
+data/
+snapshots/
+web/dist/
+*.log
+*.png
+*.jpg
+*.jpeg
+*.jfif
+.DS_Store
+Thumbs.db

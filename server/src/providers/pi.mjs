@@ -1,0 +1,273 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// pi.mjs — the Pi session driver.
+//
+// Every model request runs one `pi` process in JSON event mode:
+//
+//   pi --mode json -p --provider kilo --model <model> [--tools …] [@image…] <prompt>
+//
+// The provider is the official Kilo provider extension. Author sessions get
+// file tools and no shell. Judge sessions get no tools at all.
+//
+// The driver never decides when to spend. The controller reserves the cost
+// bound first, and the driver refuses to start unless the operator enabled
+// spending.
+// ─────────────────────────────────────────────────────────────────────────────
+import { spawn } from 'node:child_process';
+import { readFile, stat } from 'node:fs/promises';
+import { join } from 'node:path';
+
+import { ArtworkError } from '../../../runtime/contract.js';
+import { truncate, unique } from '../util.mjs';
+
+export class ProviderError extends ArtworkError {
+  constructor(code, message, details) {
+    super(code, message, details);
+    this.name = 'ProviderError';
+  }
+}
+
+const WORKSPACE_ENV_ALLOWLIST = ['PATH', 'Path', 'SystemRoot', 'windir', 'TEMP', 'TMP', 'HOME', 'USERPROFILE', 'LANG', 'LC_ALL', 'ComSpec', 'PATHEXT'];
+
+/** A child process with no credentials, and no server secrets, in its environment. */
+function safeEnv() {
+  const env = {};
+  for (const key of WORKSPACE_ENV_ALLOWLIST) {
+    if (process.env[key] !== undefined) env[key] = process.env[key];
+  }
+  // Pi stores its own credentials outside the environment, in the user profile.
+  env.PI_NO_UPDATE_CHECK = '1';
+  env.NO_COLOR = '1';
+  return env;
+}
+
+async function killTree(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  if (process.platform === 'win32' && child.pid) {
+    await new Promise((resolve) => {
+      const killer = spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+      killer.on('close', resolve);
+      killer.on('error', resolve);
+    });
+    return;
+  }
+  child.kill('SIGKILL');
+}
+
+function normalizeUsage(raw) {
+  const usage = raw && typeof raw === 'object' ? raw : {};
+  const inputTokens = Number(usage.inputTokens ?? usage.input ?? usage.promptTokens ?? 0) || 0;
+  const outputTokens = Number(usage.outputTokens ?? usage.output ?? usage.completionTokens ?? 0) || 0;
+  const cost = usage.cost;
+  const costUsd =
+    typeof cost === 'number'
+      ? cost
+      : Number(cost?.total ?? usage.costUsd ?? usage.totalCostUsd ?? 0) || 0;
+  return { inputTokens, outputTokens, costUsd, costKnown: costUsd > 0, raw: usage };
+}
+
+function textFromMessage(message) {
+  const content = message?.content;
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter((block) => block && (block.type === 'text' || block.type === 'output_text'))
+    .map((block) => block.text ?? '')
+    .join('');
+}
+
+export class PiProvider {
+  constructor({ config, logger = () => {} }) {
+    this.config = config;
+    this.logger = logger;
+    this.detected = null;
+  }
+
+  /** Check the command without spending anything. */
+  async detect() {
+    if (this.detected) return this.detected;
+    const version = await this.#capture([ '--version' ], { timeoutMs: 30000 });
+    const credentials = await this.#credentialsPresent();
+    this.detected = {
+      driver: 'pi',
+      available: version.code === 0,
+      version: version.stdout.trim().split('\n')[0] || null,
+      provider: this.config.provider.providerName,
+      model: this.config.provider.model,
+      credentialsPresent: credentials,
+      allowSpend: this.config.provider.allowSpend,
+    };
+    return this.detected;
+  }
+
+  async #credentialsPresent() {
+    try {
+      const auth = JSON.parse(await readFile(join(process.env.USERPROFILE || process.env.HOME || '.', '.pi', 'agent', 'auth.json'), 'utf8'));
+      return Object.keys(auth ?? {}).length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  #capture(args, { timeoutMs }) {
+    return new Promise((resolve) => {
+      const child = spawn(this.config.provider.command, args, { env: safeEnv(), shell: false });
+      let stdout = '';
+      let stderr = '';
+      const timer = setTimeout(() => {
+        void killTree(child);
+      }, timeoutMs);
+      child.stdout.on('data', (chunk) => {
+        stdout += chunk;
+      });
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk;
+      });
+      child.on('error', (error) => {
+        clearTimeout(timer);
+        resolve({ code: -1, stdout, stderr: `${stderr}${error.message}` });
+      });
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        resolve({ code: code ?? -1, stdout, stderr });
+      });
+    });
+  }
+
+  /**
+   * Run one session.
+   *
+   * @param {object} options
+   * @param {'author'|'judge'} options.kind
+   * @param {string} options.prompt
+   * @param {string[]} [options.images] absolute image paths, attached with @
+   * @param {string} options.cwd
+   * @param {string} [options.sessionId]
+   * @param {string} [options.model]
+   * @param {number} [options.timeoutMs]
+   * @param {AbortSignal} [options.signal]
+   * @returns {Promise<{text: string, sessionId: string|null, usage: object, events: object[], exitCode: number, stderr: string}>}
+   */
+  async run({ kind, prompt, images = [], cwd, sessionId, model, timeoutMs, signal, systemPrompt }) {
+    if (!this.config.provider.allowSpend) {
+      throw new ProviderError(
+        'spend_not_allowed',
+        'The provider is disabled. Set PHYGEN_ALLOW_SPEND=1 to permit real model calls.',
+        { kind },
+      );
+    }
+    for (const image of images) {
+      try {
+        await stat(image);
+      } catch {
+        throw new ProviderError('image_missing', `The judge image does not exist: ${image}`, { image });
+      }
+    }
+
+    const { providerName, thinking, authorTools } = this.config.provider;
+    const args = ['--mode', 'json', '-p', '--provider', providerName, '--model', model ?? (kind === 'author' ? this.config.provider.authorModel : this.config.provider.model)];
+    if (thinking) args.push('--thinking', thinking);
+    if (systemPrompt) args.push('--system-prompt', systemPrompt);
+    if (kind === 'author') args.push('--tools', authorTools);
+    else args.push('--no-tools');
+    args.push('--no-approve');
+    if (sessionId) args.push('--session-id', sessionId);
+    if (kind === 'judge') args.push('--no-session');
+    args.push('--', ...images.map((image) => `@${image}`), prompt);
+
+    const limit = timeoutMs ?? (kind === 'author' ? this.config.provider.sessionTimeoutMs : this.config.provider.judgeTimeoutMs);
+    const child = spawn(this.config.provider.command, args, { cwd, env: safeEnv(), shell: false });
+
+    const events = [];
+    let stdoutBuffer = '';
+    let stderr = '';
+    let cancelled = false;
+
+    const onAbort = () => {
+      cancelled = true;
+      void killTree(child);
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+
+    const timer = setTimeout(() => {
+      cancelled = true;
+      void killTree(child);
+    }, limit);
+
+    const exitCode = await new Promise((resolve) => {
+      child.stdout.on('data', (chunk) => {
+        stdoutBuffer += chunk;
+        const lines = stdoutBuffer.split('\n');
+        stdoutBuffer = lines.pop() ?? '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            events.push(JSON.parse(trimmed));
+          } catch {
+            events.push({ type: 'raw', text: truncate(trimmed, 400) });
+          }
+        }
+      });
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk;
+      });
+      child.on('error', (error) => {
+        stderr += `\n${error.message}`;
+        resolve(-1);
+      });
+      child.on('close', (code) => resolve(code ?? -1));
+    });
+
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
+
+    const header = events.find((event) => event.type === 'session');
+    let text = '';
+    let usage = { inputTokens: 0, outputTokens: 0, costUsd: 0, raw: {} };
+    for (const event of events) {
+      if (event.type === 'message_update' && event.usage) usage = normalizeUsage(event.usage);
+      if (event.type === 'message_end' && event.message?.role === 'assistant') {
+        const candidate = textFromMessage(event.message);
+        if (candidate.trim().length > 0) text = candidate;
+        const messageUsage = event.message.usage ?? event.message.meta?.usage;
+        if (messageUsage) usage = normalizeUsage(messageUsage);
+      }
+    }
+
+    if (signal?.aborted) {
+      throw new ProviderError('session_cancelled', `The ${kind} session was cancelled`, { kind });
+    }
+    if (cancelled) {
+      throw new ProviderError('session_timeout', `The ${kind} session passed its time limit of ${limit} ms`, { kind, limit, stderr: truncate(stderr, 1000) });
+    }
+    if (exitCode !== 0) {
+      throw new ProviderError('session_failed', `The ${kind} session exited with code ${exitCode}: ${truncate(stderr.trim() || 'no error text', 600)}`, {
+        kind,
+        exitCode,
+        stderr: truncate(stderr, 2000),
+      });
+    }
+
+    return {
+      text: text.trim(),
+      sessionId: header?.id ?? sessionId ?? null,
+      usage,
+      events: events.map((event) => ({ type: event.type })),
+      exitCode,
+      stderr: truncate(stderr, 2000),
+      model: model ?? (kind === 'author' ? this.config.provider.authorModel : this.config.provider.model),
+      toolNames: unique(events.filter((event) => event.type === 'tool_execution_start').map((event) => event.toolName)),
+      stub: false,
+    };
+  }
+
+  /** One author session inside a candidate workspace. It has file tools only. */
+  async author({ workspaceDir, prompt, systemPrompt, sessionId, signal, model }) {
+    return this.run({ kind: 'author', prompt, cwd: workspaceDir, sessionId, systemPrompt, signal, model });
+  }
+
+  /** One judge session. It has no tools, no source, and no version identity. */
+  async judge({ prompt, images, cwd, systemPrompt, signal, model }) {
+    return this.run({ kind: 'judge', prompt, images: images.map((image) => image.path), cwd, systemPrompt, signal, model });
+  }
+}

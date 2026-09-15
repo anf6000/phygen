@@ -1,0 +1,10 @@
+{
+  "name": "phygen-capture-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Capture worker for the isolated phygen container",
+  "dependencies": {
+    "playwright-core": "1.56.0"
+  }
+}
