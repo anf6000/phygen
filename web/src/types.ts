@@ -28,7 +28,10 @@ export interface TreeNode {
   id: string;
   parentId: string | null;
   generation: number;
-  round: number | null;
+  /** The evolution level this version belongs to, from 1. */
+  evolution: number | null;
+  /** The position of this version inside its level, from 1. */
+  variant: number | null;
   slot: string | null;
   title: string;
   status: VersionStatus;
@@ -119,6 +122,8 @@ export interface Run {
   rootVersionId: string;
   direction: string;
   evolutionsRequested: number;
+  variantsPerEvolution?: number;
+  protocol?: { variantsPerEvolution?: number; providerModel?: string; authorModel?: string };
   evolutionsDone: number;
   state: RunState;
   stopReason: string | null;
@@ -173,6 +178,7 @@ export interface Health {
 
 export interface CostEstimate {
   evolutions: number;
+  variants?: number;
   candidatesPerRound: number;
   authorCalls: number;
   judgeCalls: number;

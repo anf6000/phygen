@@ -15,15 +15,12 @@ export default function App() {
   const [tree, setTree] = useState<Tree | null>(null);
   const [run, setRun] = useState<RunDetail | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  // The version a new run starts from. Selecting a node sets it, so the tree
-  // grows under the version the person is looking at.
-  const [branchFrom, setBranchFrom] = useState<string | null>(null);
   const [follow, setFollow] = useState(true);
   const [viewerVersion, setViewerVersion] = useState<string | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
   const [direction, setDirection] = useState(DEFAULT_DIRECTION);
   const [evolutions, setEvolutions] = useState(1);
-  const [limitUsd, setLimitUsd] = useState(0.5);
+  const [variants, setVariants] = useState(3);
   const [models, setModels] = useState<ModelList | null>(null);
   const [judgeModel, setJudgeModel] = useState('');
   const [authorModel, setAuthorModel] = useState('');
@@ -91,6 +88,41 @@ export default function App() {
     if (artworkId) void loadTree(artworkId);
   }, [artworkId, loadTree]);
 
+  // Remember the selection and the run settings for this artwork, so a refresh
+  // returns to the same version.
+  useEffect(() => {
+    if (!artworkId) return;
+    try {
+      const raw = window.localStorage.getItem(`phygen.view.${artworkId}`);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as { selected?: string | null; variants?: number; evolutions?: number; direction?: string };
+      if (saved.selected) setSelected(saved.selected);
+      if (typeof saved.variants === 'number') setVariants(saved.variants);
+      if (typeof saved.evolutions === 'number') setEvolutions(saved.evolutions);
+      if (typeof saved.direction === 'string' && saved.direction.length > 0) setDirection(saved.direction);
+    } catch {
+      // a broken entry must not stop the page
+    }
+  }, [artworkId]);
+
+  useEffect(() => {
+    if (!artworkId) return;
+    try {
+      window.localStorage.setItem(
+        `phygen.view.${artworkId}`,
+        JSON.stringify({ selected, variants, evolutions, direction }),
+      );
+    } catch {
+      // storage may be unavailable; the page still works
+    }
+  }, [artworkId, selected, variants, evolutions, direction]);
+
+  // A stored id can point at a version that no longer exists.
+  useEffect(() => {
+    if (!tree || !selected) return;
+    if (!tree.nodes.some((node) => node.id === selected)) setSelected(tree.artwork.rootVersionId);
+  }, [tree, selected]);
+
   // Show the latest run of this artwork, so a reload does not lose the record.
   useEffect(() => {
     if (run || !artworkId) return undefined;
@@ -113,13 +145,10 @@ export default function App() {
 
   useEffect(() => {
     void api
-      .estimate(evolutions, judgeModel || undefined, authorModel || undefined)
-      .then((next) => {
-        setEstimate(next);
-        setLimitUsd((current) => (current >= next.boundUsd ? current : Number(next.boundUsd.toFixed(2))));
-      })
+      .estimate(evolutions, judgeModel || undefined, authorModel || undefined, variants)
+      .then(setEstimate)
       .catch(() => setEstimate(null));
-  }, [evolutions, judgeModel, authorModel]);
+  }, [evolutions, judgeModel, authorModel, variants]);
 
   // Refresh the tree while a run moves. The run summary is small; the full
   // record (jobs, usage, comparisons) is fetched only when the state changes.
@@ -149,10 +178,11 @@ export default function App() {
     try {
       const created = await api.startRun({
         artworkId,
-        branchFromVersionId: branchFrom ?? undefined,
+        // The selected version is the parent of the new variants.
+        branchFromVersionId: parentVersionId ?? undefined,
         direction,
         evolutions,
-        spendingLimitUsd: limitUsd,
+        variants,
         model: judgeModel || undefined,
         authorModel: authorModel || undefined,
       });
@@ -179,17 +209,16 @@ export default function App() {
   const running = run ? ['queued', 'running', 'paused', 'stopping'].includes(run.run.state) : false;
   const nodes = tree?.nodes ?? [];
   const selectedNode = useMemo(() => nodes.find((node) => node.id === selected) ?? null, [nodes, selected]);
-  const branchNode = useMemo(() => nodes.find((node) => node.id === branchFrom) ?? null, [nodes, branchFrom]);
+  // The selected version spawns the children. There is no second step.
+  const parentVersionId = selected ?? tree?.artwork.rootVersionId ?? null;
+  const parentNode = useMemo(() => nodes.find((node) => node.id === parentVersionId) ?? null, [nodes, parentVersionId]);
   const activeVersionIds = tree?.activeVersionIds ?? [];
   const activeKinds = tree?.activeKinds ?? {};
   const playingNode = useMemo(() => nodes.find((node) => node.id === playing) ?? null, [nodes, playing]);
   const visionModels = models?.models.filter((model) => model.acceptsImages) ?? [];
 
   /** Selecting a version also aims the next run at it. */
-  const selectNode = useCallback((id: string) => {
-    setSelected(id);
-    setBranchFrom(id);
-  }, []);
+  const selectNode = useCallback((id: string) => setSelected(id), []);
 
   return (
     <div className="app">
@@ -221,7 +250,7 @@ export default function App() {
             />
           </label>
           <label className="field">
-            <span>Evolutions</span>
+            <span>Evolutions (levels)</span>
             <input
               type="number"
               min={1}
@@ -254,13 +283,13 @@ export default function App() {
             </select>
           </label>
           <label className="field">
-            <span>Limit (USD)</span>
+            <span>Variants per evolution</span>
             <input
               type="number"
-              min={0.05}
-              step={0.05}
-              value={limitUsd}
-              onChange={(event) => setLimitUsd(Math.max(0.05, Number(event.target.value) || 0.05))}
+              min={1}
+              max={8}
+              value={variants}
+              onChange={(event) => setVariants(Math.max(1, Math.min(8, Number(event.target.value) || 1)))}
               disabled={running}
             />
           </label>
@@ -280,13 +309,8 @@ export default function App() {
           </div>
         </form>
         <p className="branch-row muted">
-          new run starts from:
-          <span className="branch-chip">{branchNode ? branchNode.title : 'the root version'}</span>
-          {branchNode ? (
-            <button type="button" onClick={() => setBranchFrom(null)} title="Start from the root version instead">
-              clear
-            </button>
-          ) : null}
+          selected version spawns the variants:
+          <span className="branch-chip">{parentNode ? parentNode.title : 'the root version'}</span>
           <label className="follow-toggle">
             <input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} /> follow the active node
           </label>
@@ -335,7 +359,7 @@ export default function App() {
             version={selectedNode}
             onOpenViewer={setViewerVersion}
             onPlay={(id) => setPlaying(id)}
-            onBranch={selectNode}
+            isParent={parentVersionId === selectedNode?.id}
             active={Boolean(running)}
           />
         </aside>
@@ -372,10 +396,10 @@ function describeEstimate(estimate: CostEstimate): string {
   const tokens = estimate.tokens
     ? `, about ${Math.round(estimate.tokens.totalInput / 1000)}k input and ${Math.round(estimate.tokens.totalOutput / 1000)}k output tokens`
     : '';
+  const perLevel = estimate.variants ?? estimate.candidatesPerRound;
   return (
-    `${estimate.evolutions} evolution(s): ${estimate.authorCalls} author and ${estimate.judgeCalls} judge calls${tokens}. ` +
-    `Estimate ${dollars}; the run reserves ${estimate.boundUsd.toFixed(3)} USD (${estimate.safetyFactor}× safety). ` +
-    `${estimate.note}`
+    `${estimate.evolutions} evolution(s) of ${perLevel} variant(s): ${estimate.authorCalls} author and ${estimate.judgeCalls} judge calls${tokens}. ` +
+    `Expected cost about ${dollars}. No cost limit is enforced; the record keeps the real cost.`
   );
 }
 
@@ -391,6 +415,7 @@ function ProgressStrip({
   health: Health | null;
 }) {
   const last = stream.slice(-1)[0];
+  const perLevel = run?.run.protocol?.variantsPerEvolution ?? null;
   const jobs = run?.jobs ?? [];
   const counts = jobs.reduce<Record<string, number>>((totals, job) => {
     totals[`${job.kind}:${job.state}`] = (totals[`${job.kind}:${job.state}`] ?? 0) + 1;
@@ -416,10 +441,11 @@ function ProgressStrip({
       {run ? (
         <>
           <span className="pill">
-            run <strong>{run.run.state}</strong> · rounds {run.run.evolutionsDone}/{run.run.evolutionsRequested}
+            run <strong>{run.run.state}</strong> · evolutions {run.run.evolutionsDone}/{run.run.evolutionsRequested}
+            {perLevel ? <> · <strong>{perLevel}</strong> variants each</> : null}
           </span>
           <span className="pill">
-            spend <strong>{run.run.spentUsd.toFixed(4)}</strong> of {run.run.limitUsd.toFixed(2)} USD
+            spent <strong>{run.run.spentUsd.toFixed(4)}</strong> USD
           </span>
           <span className="pill">calls {run.run.calls}</span>
           <span className="pill muted">

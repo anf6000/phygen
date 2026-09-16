@@ -140,8 +140,8 @@ const VersionNode = memo(
         <div className="vnode-body">
           <span className="vnode-title">{node.title}</span>
           <span className="vnode-meta">
-            gen {node.generation} · {node.status}
-            {node.round ? ` · r${node.round}` : ''}
+            gen {node.generation}
+            {node.variant ? ` · v${node.variant}` : ''} · {node.status}
           </span>
         </div>
         <div className="vnode-actions">
@@ -189,7 +189,8 @@ const VersionNode = memo(
       before.thumbnailUrl === after.thumbnailUrl &&
       before.onLineage === after.onLineage &&
       before.generation === after.generation &&
-      before.round === after.round
+      before.evolution === after.evolution &&
+      before.variant === after.variant
     );
   },
 );
@@ -268,7 +269,7 @@ export function TreeView({
         type: 'smoothstep',
         // The selected lineage is blue and solid: two cues, not colour alone.
         style: edge.onLineage
-          ? { stroke: '#0000ff', strokeWidth: 1 }
+          ? { stroke: '#000000', strokeWidth: 3 }
           : { stroke: '#000000', strokeWidth: 1, strokeDasharray: '4 4' },
         animated: false,
       })),

@@ -7,13 +7,13 @@ export function DetailPanel({
   version,
   onOpenViewer,
   onPlay,
-  onBranch,
+  isParent,
   active,
 }: {
   version: TreeNode | null;
   onOpenViewer: (id: string) => void;
   onPlay: (id: string) => void;
-  onBranch: (id: string) => void;
+  isParent: boolean;
   active: boolean;
 }) {
   const [detail, setDetail] = useState<VersionDetail | null>(null);
@@ -54,16 +54,15 @@ export function DetailPanel({
         <h2>{version.title}</h2>
         <p className="muted">
           generation {version.generation} · {version.status}
-          {version.round ? ` · round ${version.round}` : ''}
+          {version.evolution ? ` · evolution ${version.evolution}` : ''}
+          {version.variant ? ` · variant ${version.variant}` : ''}
           {version.slot ? ` · ${version.slot}` : ''}
         </p>
         <p className="hash" title={version.sourceHash}>
           source {version.sourceHash.slice(0, 16)}…
         </p>
         <div className="row">
-          <button type="button" onClick={() => onBranch(version.id)}>
-            Evolve from here
-          </button>
+          {isParent ? <span className="parent-chip">variants spawn here</span> : null}
           <button type="button" onClick={() => onOpenViewer(version.id)}>
             Open frames
           </button>
@@ -114,7 +113,7 @@ export function DetailPanel({
               {Object.entries(detail.configuration).map(([key, value]) => (
                 <div key={key}>
                   <dt>{key}</dt>
-                  <dd>{typeof value === 'number' ? round(value) : String(value)}</dd>
+                  <dd>{typeof value === 'number' ? compact(value) : String(value)}</dd>
                 </div>
               ))}
             </dl>
@@ -151,7 +150,7 @@ export function DetailPanel({
               detail.evaluations.map((comparison) => (
                 <article key={comparison.id} className="comparison">
                   <p>
-                    <strong>{comparison.kind}</strong> · round {comparison.round} · {comparison.model ?? 'unknown model'}
+                    <strong>{comparison.kind}</strong> · evolution {comparison.round} · {comparison.model ?? 'unknown model'}
                     {comparison.stub ? ' (test double — not a judgment)' : ''}
                   </p>
                   <p className="muted">
@@ -193,6 +192,6 @@ export function DetailPanel({
   );
 }
 
-function round(value: number): string {
+function compact(value: number): string {
   return Number.isInteger(value) ? String(value) : String(Math.round(value * 1000) / 1000);
 }

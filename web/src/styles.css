@@ -668,3 +668,8 @@ button.primary:focus-visible {
     animation: none;
   }
 }
+.parent-chip {
+  border: 1px solid var(--ink);
+  color: var(--ink);
+  padding: 1px 6px;
+}

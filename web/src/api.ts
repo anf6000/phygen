@@ -43,9 +43,9 @@ export const api = {
     request<{ artwork: { id: string } }>('/api/artworks/import', { method: 'POST', body: JSON.stringify({ packagePath }) }),
   tree: (artworkId: string) => request<Tree>(`/api/artworks/${artworkId}/tree`),
   version: (versionId: string) => request<VersionDetail>(`/api/versions/${versionId}`),
-  estimate: (evolutions: number, model?: string, authorModel?: string) =>
+  estimate: (evolutions: number, model?: string, authorModel?: string, variants?: number) =>
     request<CostEstimate>(
-      `/api/cost-estimate?evolutions=${evolutions}${model ? `&model=${encodeURIComponent(model)}` : ''}${authorModel ? `&authorModel=${encodeURIComponent(authorModel)}` : ''}`,
+      `/api/cost-estimate?evolutions=${evolutions}${variants ? `&variants=${variants}` : ''}${model ? `&model=${encodeURIComponent(model)}` : ''}${authorModel ? `&authorModel=${encodeURIComponent(authorModel)}` : ''}`,
     ),
   models: () => request<ModelList>('/api/models'),
   startRun: (body: Record<string, unknown>) => request<{ run: Run }>('/api/runs', { method: 'POST', body: JSON.stringify(body) }),

@@ -207,9 +207,10 @@ export function buildApp({ store, events, budget, controller, capture, provider,
     const artwork = store.getArtwork(request.params.artworkId);
     if (!artwork) return fail(reply, 'artwork_not_found', `No artwork ${request.params.artworkId}`);
     const versions = store.listVersions(artwork.id);
+    const variantOf = variantIndexMap(store, artwork.id);
     const usageByVersion = store.usageCostByArtwork(artwork.id);
     const nodes = versions.map((version) => ({
-      ...publicVersion(version),
+      ...publicVersion(version, variantOf.get(version.id) ?? null),
       liveUrl: artifacts.liveUrlFor(version.id),
       onLineage: version.onLineage,
       usageUsd: round6(usageByVersion.get(version.id) ?? 0),
@@ -283,7 +284,13 @@ export function buildApp({ store, events, budget, controller, capture, provider,
         createdAt: comparison.createdAt,
       }));
     return {
-      version: { ...publicVersion(version), liveUrl: artifacts.liveUrlFor(version.id), onLineage: version.onLineage, changes: version.changes, explanation: version.explanation },
+      version: {
+        ...publicVersion(version, variantIndexMap(store, version.artworkId).get(version.id) ?? null),
+        liveUrl: artifacts.liveUrlFor(version.id),
+        onLineage: version.onLineage,
+        changes: version.changes,
+        explanation: version.explanation,
+      },
       configuration: version.configuration,
       changes: version.changes,
       explanation: version.explanation,
@@ -342,16 +349,24 @@ export function buildApp({ store, events, budget, controller, capture, provider,
   // ─ runs ──────────────────────────────────────────────────────────────────
   app.get('/api/cost-estimate', async (request) => {
     const evolutions = Math.max(1, Math.min(50, Number(request.query?.evolutions) || 1));
+    const variants = Math.max(1, Math.min(8, Number(request.query?.variants) || config.evolution.variants));
     const judgeModel = typeof request.query?.model === 'string' && request.query.model.length > 0 ? request.query.model : config.provider.model;
     const authorModel = typeof request.query?.authorModel === 'string' && request.query.authorModel.length > 0 ? request.query.authorModel : config.provider.authorModel;
     const bound = budget.boundFor({
       evolutions,
-      candidatesPerRound: config.evolution.candidatesPerRound,
+      variants,
       protocol: { tieBreak: config.evolution.tieBreak },
       authorModel,
       judgeModel,
     });
-    return { ...bound, judgeModel: bound.judgeModel ?? { id: judgeModel }, authorModel: bound.authorModel ?? { id: authorModel } };
+    return {
+      ...bound,
+      evolutions,
+      variants,
+      judgeModel: bound.judgeModel ?? { id: judgeModel },
+      authorModel: bound.authorModel ?? { id: authorModel },
+      note: 'An estimate only. Spending is not limited: the record keeps the real cost.',
+    };
   });
 
   app.post('/api/runs', async (request, reply) => {
@@ -365,12 +380,15 @@ export function buildApp({ store, events, budget, controller, capture, provider,
     if (!Number.isInteger(evolutions) || evolutions < 1 || evolutions > 50) {
       return fail(reply, 'payload_invalid', 'evolutions must be an integer from 1 to 50');
     }
-    const limitUsd = Number(body.spendingLimitUsd ?? config.cost.defaultLimitUsd);
-    if (!Number.isFinite(limitUsd) || limitUsd <= 0) {
-      return fail(reply, 'payload_invalid', 'spendingLimitUsd must be a positive number');
+    // A variant is one child version. An evolution is one level of them.
+    const variants = Number(body.variants ?? config.evolution.variants);
+    if (!Number.isInteger(variants) || variants < 1 || variants > 8) {
+      return fail(reply, 'payload_invalid', 'variants must be an integer from 1 to 8');
     }
-    if (limitUsd > config.cost.maxRunUsd) {
-      return fail(reply, 'payload_invalid', `spendingLimitUsd may not exceed the configured maximum of ${config.cost.maxRunUsd}`);
+    // No cost guardrail. A limit is optional, and 0 means none.
+    const limitUsd = Number(body.spendingLimitUsd ?? 0);
+    if (!Number.isFinite(limitUsd) || limitUsd < 0) {
+      return fail(reply, 'payload_invalid', 'spendingLimitUsd must be zero or a positive number');
     }
 
     const branch = body.branchFromVersionId ? store.getVersion(body.branchFromVersionId) : null;
@@ -410,14 +428,11 @@ export function buildApp({ store, events, budget, controller, capture, provider,
 
     const bound = budget.boundFor({
       evolutions,
-      candidatesPerRound: config.evolution.candidatesPerRound,
+      variants,
       protocol,
       authorModel,
       judgeModel,
     });
-    if (bound.boundUsd > limitUsd) {
-      return fail(reply, 'budget_exceeded', `The maximum cost of this run is ${bound.boundUsd.toFixed(4)} USD, above the limit of ${limitUsd.toFixed(4)} USD`, bound);
-    }
 
     const run = store.createRun({
       artworkId: artwork.id,
@@ -425,7 +440,7 @@ export function buildApp({ store, events, budget, controller, capture, provider,
       direction: body.direction.trim(),
       evolutionsRequested: evolutions,
       limitUsd,
-      protocol: { ...protocol, providerDriver: detection?.driver ?? 'unknown', providerModel: judgeModel, authorModel, estimate: bound },
+      protocol: { ...protocol, variantsPerEvolution: variants, providerDriver: detection?.driver ?? 'unknown', providerModel: judgeModel, authorModel, estimate: bound },
       costBoundUsd: bound.boundUsd,
     });
     store.upsertRound({
@@ -546,12 +561,13 @@ export function buildApp({ store, events, budget, controller, capture, provider,
   return app;
 }
 
-function publicVersion(version) {
+function publicVersion(version, variant = null) {
   return {
     id: version.id,
     parentId: version.parentId,
     generation: version.generation,
-    round: version.round,
+    evolution: version.round,
+    variant,
     slot: version.slot,
     title: version.title,
     status: version.status,
@@ -561,6 +577,18 @@ function publicVersion(version) {
     sourceHash: version.sourceHash,
     createdAt: version.createdAt,
   };
+}
+
+/** The position of each version inside its level, from the round records. */
+function variantIndexMap(store, artworkId) {
+  const map = new Map();
+  for (const run of store.listRuns(200)) {
+    if (run.artworkId !== artworkId) continue;
+    for (const round of store.listRounds(run.id)) {
+      round.candidateIds.forEach((id, index) => map.set(id, index + 1));
+    }
+  }
+  return map;
 }
 
 function escapeHtml(value) {

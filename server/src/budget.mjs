@@ -37,15 +37,18 @@ export class Budget {
   }
 
   limitFor(run) {
-    return Math.min(run.limitUsd, this.config.cost.maxRunUsd);
+    // 0 means no cost guardrail: the spend is recorded, never enforced.
+    if (!Number.isFinite(run.limitUsd) || run.limitUsd <= 0) return Number.POSITIVE_INFINITY;
+    return Math.min(run.limitUsd, this.config.cost.maxRunUsd > 0 ? this.config.cost.maxRunUsd : Number.POSITIVE_INFINITY);
   }
 
   /** The highest possible cost of one run, before it starts. */
-  boundFor({ evolutions, candidatesPerRound, protocol, authorModel, judgeModel }) {
+  boundFor({ evolutions, variants, candidatesPerRound, protocol, authorModel, judgeModel }) {
+    const perLevel = variants ?? candidatesPerRound ?? this.config.evolution.variants;
     if (this.catalog) {
       const estimate = this.catalog.estimateRun({
         evolutions,
-        candidatesPerRound,
+        candidatesPerRound: perLevel,
         protocol,
         authorModel: authorModel ?? this.config.provider.authorModel,
         judgeModel: judgeModel ?? this.config.provider.model,
@@ -53,7 +56,7 @@ export class Budget {
       return { ...estimate, pricingSource: estimate.pricingSource };
     }
     const rounds = Math.max(1, evolutions);
-    const candidates = Math.max(1, candidatesPerRound);
+    const candidates = Math.max(1, perLevel);
     const judgeCallsPerRound = candidates + 1 + (protocol?.tieBreak === false ? 0 : 1);
     const authorCalls = rounds * candidates;
     const repairCalls = rounds * candidates * this.config.evolution.repairAttempts;
@@ -151,20 +154,20 @@ export class Budget {
 
   /**
    * Throw when a run has used its request count, token budget, round count, or
-   * elapsed time. The controller calls this before each round.
+   * elapsed time. A limit of 0 removes that guardrail.
    */
   assertRunLimits(run) {
     const { maxCallsPerRun, maxTokensPerRun, maxRounds, maxRunSeconds } = this.config.cost;
-    if (run.calls >= maxCallsPerRun) {
+    if (maxCallsPerRun > 0 && run.calls >= maxCallsPerRun) {
       throw new BudgetError('request_limit_reached', `The run used ${run.calls} requests; the limit is ${maxCallsPerRun}`, { runId: run.id, calls: run.calls, limit: maxCallsPerRun });
     }
-    if (run.tokens >= maxTokensPerRun) {
+    if (maxTokensPerRun > 0 && run.tokens >= maxTokensPerRun) {
       throw new BudgetError('token_limit_reached', `The run used ${run.tokens} tokens; the limit is ${maxTokensPerRun}`, { runId: run.id, tokens: run.tokens, limit: maxTokensPerRun });
     }
-    if (run.evolutionsRequested > maxRounds) {
+    if (maxRounds > 0 && run.evolutionsRequested > maxRounds) {
       throw new BudgetError('round_limit_reached', `The run asks for ${run.evolutionsRequested} rounds; the limit is ${maxRounds}`, { runId: run.id, rounds: run.evolutionsRequested, limit: maxRounds });
     }
-    if (run.startedAt) {
+    if (maxRunSeconds > 0 && run.startedAt) {
       const elapsed = (Date.now() - new Date(run.startedAt).valueOf()) / 1000;
       if (elapsed > maxRunSeconds) {
         throw new BudgetError('time_limit_reached', `The run ran for ${Math.round(elapsed)} seconds; the limit is ${maxRunSeconds}`, { runId: run.id, elapsed, limit: maxRunSeconds });

@@ -1,8 +1,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// plan.mjs — the three candidate slots of one round.
+// plan.mjs — the plans for one evolution level.
 //
-// The plan fixes the slots: a focused refinement, a structural change, and a
-// controlled experiment. The controller never increases the candidate count.
+// Vocabulary: a VARIANT is one child version that a parent spawns. An EVOLUTION
+// is one level: the level creates its variants from the parent, then the winner
+// becomes the parent of the next level.
+//
+// The templates are the same three ideas every level. A level may ask for more
+// than three variants, and the ideas then repeat with a number.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const FRAME_HINT =
@@ -31,7 +35,7 @@ const TEMPLATES = {
   experiment: {
     title: 'Controlled experiment',
     instruction:
-      'Try one idea that the other candidates will not try. Write new code for it in src/, and combine it ' +
+      'Try one idea that the other variants will not try. Write new code for it in src/, and combine it ' +
       'with the configuration the idea needs. The result may fail, and that is acceptable. ' +
       'Do not break the package contract.',
     touchesSource: true,
@@ -40,33 +44,40 @@ const TEMPLATES = {
 
 /**
  * @param {object} options
- * @param {number} options.round
+ * @param {number} options.level          the evolution number, from 1
  * @param {string} options.direction
- * @param {number} options.unchangedRounds
- * @param {number} [options.redirectAfter] rounds without a change before the
- *        experiment must change the visual structure
- * @param {number} [options.candidatesPerRound]
- * @returns {object[]} one plan per candidate slot
+ * @param {number} options.variants       children to spawn at this level
+ * @param {number} options.unchangedLevels levels without a change so far
+ * @param {number} [options.redirectAfter] levels before the experiment must
+ *        change the visual structure
+ * @returns {object[]} one plan per variant
  */
-export function planRound({ round, direction, unchangedRounds, redirectAfter = 2, candidatesPerRound = 3 }) {
-  const structuralRedirect = unchangedRounds >= redirectAfter;
-  const slots = SLOTS.slice(0, Math.max(1, Math.min(candidatesPerRound, SLOTS.length)));
-  return slots.map((slot) => {
+export function planRound({ level, direction, variants = 3, unchangedLevels = 0, redirectAfter = 2 }) {
+  const count = Math.max(1, Math.min(8, Math.round(variants)));
+  const structuralRedirect = unchangedLevels >= redirectAfter;
+  const plans = [];
+
+  for (let index = 0; index < count; index++) {
+    const slot = SLOTS[index % SLOTS.length];
     const template = TEMPLATES[slot];
+    const repeat = Math.floor(index / SLOTS.length);
     const plan = {
       slot,
-      round,
+      variantIndex: index + 1,
+      level,
       direction,
-      title: template.title,
+      title: repeat === 0 ? template.title : `${template.title} ${index + 1}`,
       instruction: template.instruction,
       touchesSource: template.touchesSource,
       structuralRedirect: structuralRedirect && slot !== 'refinement',
     };
     if (structuralRedirect && slot === 'experiment') {
       plan.instruction +=
-        ' The artwork did not change for two rounds. Change the visual structure, not the numbers: ' +
+        ' The artwork did not change for two evolutions. Change the visual structure, not the numbers: ' +
         'alter the sensing or the steering in src/physarum.js, or change the trail resolution and the palette together.';
     }
-    return plan;
-  });
+    plans.push(plan);
+  }
+
+  return plans;
 }

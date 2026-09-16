@@ -88,11 +88,12 @@ export function loadConfig(overrides = {}) {
 
     cost: {
       ...DEFAULT_COST_BOUNDS,
-      maxRunUsd: readNumber('PHYGEN_MAX_RUN_USD', 5),
-      maxRounds: readNumber('PHYGEN_MAX_ROUNDS', 20),
-      maxCallsPerRun: readNumber('PHYGEN_MAX_CALLS_PER_RUN', 400),
-      maxTokensPerRun: readNumber('PHYGEN_MAX_TOKENS_PER_RUN', 4000000),
-      maxRunSeconds: readNumber('PHYGEN_MAX_RUN_SECONDS', 21600),
+      // 0 means no cost guardrail. The spend is still recorded, never enforced.
+      maxRunUsd: readNumber('PHYGEN_MAX_RUN_USD', 0),
+      maxRounds: readNumber('PHYGEN_MAX_ROUNDS', 0),
+      maxCallsPerRun: readNumber('PHYGEN_MAX_CALLS_PER_RUN', 0),
+      maxTokensPerRun: readNumber('PHYGEN_MAX_TOKENS_PER_RUN', 0),
+      maxRunSeconds: readNumber('PHYGEN_MAX_RUN_SECONDS', 0),
       defaultLimitUsd: readNumber('PHYGEN_DEFAULT_LIMIT_USD', 2),
     },
 
@@ -122,7 +123,8 @@ export function loadConfig(overrides = {}) {
     },
 
     evolution: {
-      candidatesPerRound: readNumber('PHYGEN_CANDIDATES_PER_ROUND', 3),
+      // The number of children one version spawns at each level.
+      variants: readNumber('PHYGEN_VARIANTS', 3),
       repairAttempts: readNumber('PHYGEN_REPAIR_ATTEMPTS', 1),
       unchangedRoundsBeforeRedirect: readNumber('PHYGEN_UNCHANGED_ROUNDS', 2),
       // The plan fixes the viewport and the seed count before the schedule.

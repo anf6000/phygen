@@ -260,6 +260,40 @@ test('a run that branches from a version makes children of that version', async 
   assert.ok(rootVersion.generation === 0);
 });
 
+test('two variants over two evolutions build two levels', async (t) => {
+  const { store, controller, run, artwork, rootVersion } = await setup(t);
+  const withVariants = store.getRun(run.id);
+  store.updateRun(run.id, {});
+  store.db
+    .prepare('UPDATE runs SET evolutions_requested = ?, protocol_json = ? WHERE id = ?')
+    .run(2, JSON.stringify({ ...withVariants.protocol, variantsPerEvolution: 2 }), run.id);
+
+  await controller.start(run.id);
+
+  const finished = store.getRun(run.id);
+  assert.equal(finished.state, 'completed');
+  assert.equal(finished.evolutionsDone, 2);
+
+  const rounds = store.listRounds(run.id).filter((round) => round.round > 0);
+  assert.equal(rounds.length, 2, 'two evolution levels');
+  assert.equal(rounds[0].candidateIds.length, 2, 'level 1 spawns two variants');
+  assert.equal(rounds[1].candidateIds.length, 2, 'level 2 spawns two variants');
+
+  for (const id of rounds[0].candidateIds) {
+    const version = store.getVersion(id);
+    assert.equal(version.parentId, rootVersion.id);
+    assert.equal(version.generation, 1);
+  }
+  for (const id of rounds[1].candidateIds) {
+    const version = store.getVersion(id);
+    assert.equal(version.generation, 2, 'level 2 is one generation deeper');
+    assert.equal(version.parentId, rounds[0].winnerVersionId, 'level 2 spawns from the level 1 winner');
+  }
+
+  const tree = store.listVersions(artwork.id);
+  assert.equal(tree.length, 5, 'the root, two variants, and two grandchildren');
+});
+
 test('a run keeps the parent when nothing can be captured', async (t) => {
   const { store, controller, run, artwork, rootVersion } = await setup(t);
   controller.capture = {

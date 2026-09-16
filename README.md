@@ -1,9 +1,10 @@
 # phygen
 
-Phygen evolves a generative artwork through Pi agents. You give a direction and
-an evolution count. Agents write candidate versions. A vision model compares the
-rendered images and the controller promotes a winner or keeps the parent. A tree
-keeps every version, and any version can be played live.
+Phygen evolves a generative artwork through Pi agents. You select a version, give
+a direction, and say how many **variants** (children) each evolution produces
+and how many **evolutions** (levels) to run. The winner of each level becomes the
+parent of the next one. A vision model compares the rendered images, and the tree
+keeps every version. Any version can be played live.
 
 ![flow](docs/flow.svg)
 
@@ -51,15 +52,17 @@ cd threejs && npm run validate
 | `PHYGEN_DRIVER` | `auto` | `pi` uses the Pi sessions. `fake` uses the deterministic test double. |
 | `PHYGEN_MODEL` | `moonshotai/kimi-k3` | The judge model. |
 | `PHYGEN_AUTHOR_MODEL` | same as `PHYGEN_MODEL` | The author model. |
-| `PHYGEN_MAX_RUN_USD` | `5` | The highest spending limit a run may ask for. |
-| `PHYGEN_COST_SAFETY_FACTOR` | `1.8` | The reserve is this multiple of the estimate. |
-| `PHYGEN_REQUIRE_ISOLATION` | `0` | Set to `1` to refuse source-code candidates without a container. |
+| `PHYGEN_VARIANTS` | `3` | Default children per evolution. |
+| `PHYGEN_MAX_RUN_USD` | `0` | A cost limit. `0` enforces none. |
+| `PHYGEN_COST_SAFETY_FACTOR` | `1.8` | The estimate is multiplied by this for the record. |
+| `PHYGEN_REQUIRE_ISOLATION` | `0` | Set to `1` to refuse source-code variants without a container. |
 | `PHYGEN_CAPTURE` | `auto` | `local`, `docker`, or `auto`. |
 | `PHYGEN_PORT`, `PHYGEN_LIVE_PORT` | `8787`, `8788` | The two listeners. |
 
 Cost estimates use the live Kilo catalog prices and an estimated token count.
-Provider usage is authoritative. The run reserves the bound before each request
-and refuses to start above its limit.
+Provider usage is authoritative. No cost guardrail is enforced by default: the
+record keeps the real spend, and a run is never stopped or refused for money.
+Set `PHYGEN_MAX_RUN_USD` if you want a limit.
 
 ## Boundaries
 

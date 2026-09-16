@@ -187,7 +187,6 @@ export class RunController {
           return;
         }
 
-        this.budget.assertRunLimits(run);
         const round = run.evolutionsDone + 1;
         const parent = this.#lineageHead(run);
         this.#emit(runId, 'run.round', { round, phase: 'author', parentVersionId: parent.id });
@@ -308,12 +307,13 @@ export class RunController {
       });
     }
     const paused = () => Boolean(this.active.get(run.id)?.paused);
+    const variants = run.protocol?.variantsPerEvolution ?? this.config.evolution.variants;
     const plans = planRound({
-      round,
+      level: round,
       direction: run.direction,
-      unchangedRounds: run.unchangedRounds,
+      variants,
+      unchangedLevels: run.unchangedRounds,
       redirectAfter: this.config.evolution.unchangedRoundsBeforeRedirect,
-      candidatesPerRound: this.config.evolution.candidatesPerRound,
     });
 
     const authored = await mapLimit(plans, 1, async (plan) => {
@@ -509,7 +509,7 @@ export class RunController {
       generation: parent.generation + 1,
       round,
       slot: plan.slot,
-      title: `${plan.title} · r${round}`,
+      title: plan.title,
       status: 'queued',
       direction: run.direction,
       sourceHash: parent.sourceHash,

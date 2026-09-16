@@ -165,6 +165,7 @@ load fails.
 ```json
 {
   "evolutions": 3,
+  "variants": 2,
   "candidatesPerRound": 3,
   "authorCalls": 18,
   "judgeCalls": 18,
@@ -195,10 +196,11 @@ reserves `boundUsd` before each request. When no catalog price is available,
   "artworkId": "art_8f2c",
   "branchFromVersionId": "ver_0001",
   "evolutions": 3,
+  "variants": 2,
   "direction": "quieter, more directional, fewer crossings",
   "model": "moonshotai/kimi-k3",
   "authorModel": "moonshotai/kimi-k3",
-  "spendingLimitUsd": 2.0,
+  "spendingLimitUsd": 0,
   "evaluation": {
     "stepSchedule": [600, 1800, 3600],
     "denseStepSchedule": [600, 1200, 1800, 2700, 3600],
@@ -209,9 +211,11 @@ reserves `boundUsd` before each request. When no catalog price is available,
 }
 ```
 
-→ HTTP 201 `{ "run": Run }`. The server reserves the maximum estimate before the
-first request. A run that cannot fit the limit returns HTTP 400
-`{ "error": { "code": "budget_exceeded", … } }`.
+→ HTTP 201 `{ "run": Run }`. No cost limit is enforced by default: the record
+keeps the real spend, and a run is never refused for money. Send a positive
+`spendingLimitUsd` to add a limit. `variants` is the number of children each
+evolution spawns, from 1 to 8. `evolutions` is the number of levels, from 1 to
+50. The winner of each level becomes the parent of the next level.
 
 `Run`
 
