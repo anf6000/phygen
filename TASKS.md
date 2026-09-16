@@ -2,11 +2,25 @@
 
 ## Current state
 
-The system runs end to end with the REAL model. On 2026-09-16 the first paid
-round completed: three author sessions by `moonshotai/kimi-k3` each wrote new
-code, six captures were rendered in a real headless browser, and the vision
-judge promoted one candidate for 0.515 USD. The limit was 5.00 USD and the
-reserve was 2.06 USD.
+The system runs end to end with the REAL model. The first paid round promoted a
+candidate for 0.515 USD.
+
+Vocabulary, which the interface, the API, and the records use:
+
+- A **variant** is one child version that a parent spawns.
+- An **evolution** is one level. The level creates its variants, then the winner
+  of that level becomes the parent of the next level.
+
+So two variants over two evolutions makes two children of the selected version,
+then two grandchildren of the winner.
+
+The **selected version spawns the variants**. There is no separate step: select a
+version in the tree, press Start, and the children appear under it. The selection
+and the run settings survive a browser refresh.
+
+**No cost guardrail is enforced.** The estimate is shown, the real provider cost
+is recorded, and a run is never refused or stopped for money. Set
+`PHYGEN_MAX_RUN_USD` to a positive value only if you want a limit.
 
 To spend money you must set `PHYGEN_ALLOW_SPEND=1` and `PHYGEN_DRIVER=pi`. A run
 made with `PHYGEN_DRIVER=fake` is marked `stub: true` in every comparison, and
@@ -36,6 +50,7 @@ cd threejs && npm test      # 57 artwork tests
 cd threejs && npm run validate
 cd server && npm run capture-check -- --version <id>   # capture measurement
 node tools/live-check.mjs   # the live artwork on both routes
+node tools/ui-check.mjs     # the selection survives a reload; writes a tree image
 node tools/pages-shot.mjs   # one image of every page
 ```
 
@@ -47,7 +62,8 @@ node tools/pages-shot.mjs   # one image of every page
 | `PHYGEN_DRIVER` | `auto` | `pi`, `fake`, or `auto`. |
 | `PHYGEN_MODEL` | `moonshotai/kimi-k3` | The judge model. |
 | `PHYGEN_AUTHOR_MODEL` | as above | The author model. |
-| `PHYGEN_MAX_RUN_USD` | `5` | The highest limit a run may ask for. |
+| `PHYGEN_VARIANTS` | `3` | Default children per evolution. |
+| `PHYGEN_MAX_RUN_USD` | `0` | A cost limit. `0` enforces none. |
 | `PHYGEN_COST_SAFETY_FACTOR` | `1.8` | The reserve is this multiple of the estimate. |
 | `PHYGEN_REQUIRE_ISOLATION` | `0` | `1` refuses source candidates without a container. |
 | `PHYGEN_CAPTURE` | `auto` | `local`, `docker`, or `auto`. |
@@ -94,6 +110,8 @@ Confirm the price of `moonshotai/kimi-k3` in the account first, and set
 the Kilo catalog; provider usage is authoritative.
 
 ## Open risks
+
+- A server restart PAUSES every in-flight run on purpose, because a paid request may have been accepted. Resume it from the interface. This happened twice during development.
 
 - The Pi child process needs its standard input closed. An open pipe makes it wait forever. `server/src/providers/pi.mjs` sets this.
 - Source-code candidates run in the sandboxed artwork page, not in a container.
