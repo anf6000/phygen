@@ -393,8 +393,11 @@ export function TreeView({
     const position = positions.get(target);
     if (!position) return;
 
+    /** Where the view was last centred, so small shakes are ignored. */
+    let centredAt: { x: number; y: number } | null = null;
+
     /** Centre on the version, using the geometry React Flow measured. */
-    const centre = (duration: number) => {
+    const centre = (duration: number, force: boolean) => {
       // The internal node carries the measured size and the absolute position.
       const measured = instance.getNode(target) as
         | (ReturnType<ReactFlowInstance['getNode']> & { positionAbsolute?: { x: number; y: number }; width?: number; height?: number })
@@ -402,15 +405,18 @@ export function TreeView({
       const absolute = measured?.positionAbsolute;
       const x = absolute ? absolute.x + (measured?.width ?? NODE_WIDTH) / 2 : position.x + NODE_WIDTH / 2;
       const y = absolute ? absolute.y + (measured?.height ?? NODE_HEIGHT) / 2 : position.y + NODE_HEIGHT / 2;
+      // A node that grows as its code column fills must not drag the view on
+      // every tick, or the recording shakes. Follow a real move only.
+      if (!force && centredAt && Math.abs(centredAt.x - x) + Math.abs(centredAt.y - y) < 40) return;
+      centredAt = { x, y };
       const zoom = docMode ? MAX_ZOOM : Math.max(instance.getZoom(), FOLLOW_ZOOM);
       instance.setCenter(x, y, { zoom, duration });
     };
 
-    centre(docMode ? 180 : 300);
+    centre(docMode ? 180 : 300, true);
     if (!docMode) return undefined;
-    // Documentation mode keeps the version centred, even while its height grows
-    // as the code column fills.
-    const timer = window.setInterval(() => centre(160), 600);
+    // Documentation mode checks again, so it keeps up when the version moves.
+    const timer = window.setInterval(() => centre(160, false), 600);
     return () => window.clearInterval(timer);
   }, [activeKey, follow, docMode, selected, activeVersionIds, positions]);
 

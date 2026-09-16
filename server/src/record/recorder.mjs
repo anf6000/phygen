@@ -16,7 +16,8 @@ import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 
 const FRAME_SECONDS = 1;
-const VIEWPORT = { width: 1700, height: 1020 };
+/** 2160p by default: enough room to show the tree around the active version. */
+const DEFAULT_SIZE = { width: 3840, height: 2160 };
 
 function stamp() {
   return new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-');
@@ -46,6 +47,10 @@ export class UiRecorder {
     this.store = store;
     this.config = config;
     this.logger = logger;
+    this.size = {
+      width: config.recording?.width ?? DEFAULT_SIZE.width,
+      height: config.recording?.height ?? DEFAULT_SIZE.height,
+    };
     this.state = { active: false, runId: null, folder: null, frames: 0, video: null, error: null };
     this.browser = null;
     this.timer = null;
@@ -74,12 +79,16 @@ export class UiRecorder {
     const first = existing?.frames ?? 0;
 
     this.browser = await chromium.launch({ channel: this.config.capture.browserChannel || 'chrome', headless: true });
-    const context = await this.browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1 });
+    const context = await this.browser.newContext({ viewport: this.size, deviceScaleFactor: 1 });
     const page = await context.newPage();
     // Documentation mode: the interface rides on the working version at the
     // greatest zoom, so the recording shows the work close up.
     const view = url.includes('?') ? `${url}&doc=1` : `${url}?doc=1`;
     await page.goto(view, { waitUntil: 'load', timeout: 45000 }).catch(() => {});
+    // Let the tree load and the view settle before the first frame, so the
+    // recording does not open with nodes appearing one by one.
+    await page.waitForSelector('.vnode', { timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(this.config.recording?.settleMs ?? 5000);
 
     this.state = { active: true, runId, folder, name, frames: first, video: existing?.video ?? null, error: null };
     this.logger('info', `Recording the interface to ${folder}${first > 0 ? ` (continuing after ${first} frame(s))` : ''}`);
@@ -163,12 +172,16 @@ export class UiRecorder {
     await mkdir(this.videoDir, { recursive: true });
     const output = join(this.videoDir, `${name}.mp4`);
     // -qp 0 with yuv444p keeps every pixel: no chroma subsampling, no quantiser.
+    // A frame of a different size is fitted onto the canvas, so one video can
+    // cover a sequence whose capture size changed.
+    const canvas = `scale=${this.size.width}:${this.size.height}:force_original_aspect_ratio=decrease,pad=${this.size.width}:${this.size.height}:(ow-iw)/2:(oh-ih)/2`;
     const result = await run(this.ffmpeg, [
       '-y',
       '-hide_banner',
       '-loglevel', 'error',
       '-framerate', String(1 / FRAME_SECONDS),
       '-i', join(folder, 'frame-%05d.png'),
+      '-vf', canvas,
       '-c:v', 'libx264',
       '-qp', '0',
       '-pix_fmt', 'yuv444p',

@@ -60,6 +60,10 @@ export function loadConfig(overrides = {}) {
       // A lossless mp4 needs an encoder. ffmpeg is used when it is present.
       ffmpeg: process.env.PHYGEN_FFMPEG || 'ffmpeg',
       enabled: readBool('PHYGEN_RECORD', false),
+      // 2160p: the frame is large enough to hold the tree around the version
+      // that is being worked on, even at the greatest zoom.
+      width: readNumber('PHYGEN_RECORD_WIDTH', 3840),
+      height: readNumber('PHYGEN_RECORD_HEIGHT', 2160),
     },
 
     models: {
