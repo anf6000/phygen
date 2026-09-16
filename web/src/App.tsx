@@ -16,6 +16,7 @@ export default function App() {
   const [run, setRun] = useState<RunDetail | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [follow, setFollow] = useState(true);
+  const [hideFailed, setHideFailed] = useState(false);
   const [viewerVersion, setViewerVersion] = useState<string | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
   const [direction, setDirection] = useState(DEFAULT_DIRECTION);
@@ -95,11 +96,12 @@ export default function App() {
     try {
       const raw = window.localStorage.getItem(`phygen.view.${artworkId}`);
       if (!raw) return;
-      const saved = JSON.parse(raw) as { selected?: string | null; variants?: number; evolutions?: number; direction?: string };
+      const saved = JSON.parse(raw) as { selected?: string | null; variants?: number; evolutions?: number; direction?: string; hideFailed?: boolean };
       if (saved.selected) setSelected(saved.selected);
       if (typeof saved.variants === 'number') setVariants(saved.variants);
       if (typeof saved.evolutions === 'number') setEvolutions(saved.evolutions);
       if (typeof saved.direction === 'string' && saved.direction.length > 0) setDirection(saved.direction);
+      if (typeof saved.hideFailed === 'boolean') setHideFailed(saved.hideFailed);
     } catch {
       // a broken entry must not stop the page
     }
@@ -110,12 +112,12 @@ export default function App() {
     try {
       window.localStorage.setItem(
         `phygen.view.${artworkId}`,
-        JSON.stringify({ selected, variants, evolutions, direction }),
+        JSON.stringify({ selected, variants, evolutions, direction, hideFailed }),
       );
     } catch {
       // storage may be unavailable; the page still works
     }
-  }, [artworkId, selected, variants, evolutions, direction]);
+  }, [artworkId, selected, variants, evolutions, direction, hideFailed]);
 
   // A stored id can point at a version that no longer exists.
   useEffect(() => {
@@ -207,7 +209,15 @@ export default function App() {
   };
 
   const running = run ? ['queued', 'running', 'paused', 'stopping'].includes(run.run.state) : false;
-  const nodes = tree?.nodes ?? [];
+  const allNodes = tree?.nodes ?? [];
+  const failedCount = allNodes.filter((node) => node.status === 'failed').length;
+  const nodes = useMemo(() => (hideFailed ? allNodes.filter((node) => node.status !== 'failed') : allNodes), [allNodes, hideFailed]);
+  const visibleIds = useMemo(() => new Set(nodes.map((node) => node.id)), [nodes]);
+  // A hidden version must not leave a dangling connection behind.
+  const edges = useMemo(
+    () => (tree?.edges ?? []).filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target)),
+    [tree, visibleIds],
+  );
   const selectedNode = useMemo(() => nodes.find((node) => node.id === selected) ?? null, [nodes, selected]);
   // The selected version spawns the children. There is no second step.
   const parentVersionId = selected ?? tree?.artwork.rootVersionId ?? null;
@@ -314,6 +324,15 @@ export default function App() {
           <label className="follow-toggle">
             <input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} /> follow the active node
           </label>
+          <label className="follow-toggle">
+            <input
+              type="checkbox"
+              checked={hideFailed}
+              onChange={(event) => setHideFailed(event.target.checked)}
+              disabled={failedCount === 0}
+            />
+            hide failed{failedCount > 0 ? ` (${failedCount})` : ''}
+          </label>
         </p>
         <p className="estimate muted" aria-live="polite">
           {estimate ? describeEstimate(estimate) : 'The estimate is not available yet.'}
@@ -343,7 +362,7 @@ export default function App() {
           ) : (
             <TreeView
               nodes={nodes}
-              edges={tree?.edges ?? []}
+              edges={edges}
               selected={selected}
               activeVersionIds={activeVersionIds}
               activeKinds={activeKinds}

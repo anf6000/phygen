@@ -70,9 +70,38 @@ async function main() {
     const nodes = page.locator('.vnode');
     const count = await nodes.count();
     if (count === 0) throw new Error('the tree is empty');
-    await nodes.nth(Math.min(options.index, count - 1)).click();
+
+    // The tree is a canvas: pick a node that is fully inside the viewport, so a
+    // large tree does not fail the click.
+    const viewport = page.viewportSize() ?? { width: 1700, height: 1020 };
+    const boxes = await nodes.evaluateAll((elements) =>
+      elements.map((element) => {
+        const box = element.getBoundingClientRect();
+        return { x: box.x, y: box.y, right: box.x + box.width, bottom: box.y + box.height };
+      }),
+    );
+    const fits = (box) => box.x > 8 && box.y > 8 && box.right < viewport.width - 8 && box.bottom < viewport.height - 8;
+    let target = boxes.findIndex((box, index) => index > 0 && fits(box));
+    if (target === -1) target = boxes.findIndex(fits);
+    if (target === -1) target = 0;
+    await nodes.nth(target).click({ force: target === 0 && !fits(boxes[0] ?? { x: 0, y: 0, right: 0, bottom: 0 }) });
     await page.waitForTimeout(1500);
     const before = await readState(page);
+
+    // Hide failed nodes, when the tree holds any.
+    const hideFailed = page.getByRole('checkbox', { name: /hide failed/i });
+    const hideAvailable = (await hideFailed.count()) > 0 && (await hideFailed.isEnabled());
+    let hidden = null;
+    if (hideAvailable) {
+      await hideFailed.check();
+      await page.waitForTimeout(800);
+      hidden = await nodes.count();
+      await hideFailed.uncheck();
+      await page.waitForTimeout(800);
+      const restored = await nodes.count();
+      if (restored !== before.nodes) errors.push(`unhiding failed nodes gave ${restored} nodes, expected ${before.nodes}`);
+      if (hidden > before.nodes) errors.push('hiding failed nodes added nodes');
+    }
 
     await page.reload({ waitUntil: 'load' });
     await page.waitForSelector('.vnode', { timeout: 30000 });
@@ -87,6 +116,7 @@ async function main() {
     console.log(`parent marker  ${before.parentChips}`);
     console.log(`after reload   ${after.heading}`);
     console.log(`selection kept ${before.heading === after.heading && before.parent === after.parent}`);
+    if (hidden !== null) console.log(`hide failed    ${before.nodes} nodes -> ${hidden} nodes`);
 
     if (before.heading !== after.heading || before.parent !== after.parent) {
       errors.push('the selection did not survive a reload');
