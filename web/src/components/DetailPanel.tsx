@@ -9,6 +9,8 @@ export function DetailPanel({
   onPlay,
   isParent,
   agentRows,
+  agentFor,
+  agentActive,
   active,
 }: {
   version: TreeNode | null;
@@ -16,6 +18,9 @@ export function DetailPanel({
   onPlay: (id: string) => void;
   isParent: boolean;
   agentRows: AgentRow[];
+  /** The version the feed belongs to, when it is not the selected one. */
+  agentFor: string | null;
+  agentActive: boolean;
   active: boolean;
 }) {
   const [detail, setDetail] = useState<VersionDetail | null>(null);
@@ -138,7 +143,11 @@ export function DetailPanel({
           ) : null}
 
           <section className="agent">
-            <h3>Agent at work</h3>
+            <h3>
+              Agent at work
+              {agentActive ? <span className="active-chip">live session</span> : null}
+            </h3>
+            {agentFor ? <p className="muted">working on: {agentFor}</p> : null}
             {toolRows.length === 0 && turns.length === 0 ? (
               <p className="muted">No session activity yet for this version.</p>
             ) : (

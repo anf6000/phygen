@@ -7,6 +7,9 @@ import { GenerationList } from './components/GenerationList';
 import { DetailPanel } from './components/DetailPanel';
 import { CaptureViewer } from './components/CaptureViewer';
 
+// The build stamp shows in the strip, so a stale tab is easy to spot.
+const BUILD_STAMP = typeof __BUILD__ === 'string' ? __BUILD__ : 'dev';
+
 const DEFAULT_DIRECTION = 'quieter, more directional, fewer crossings, light background';
 
 export default function App() {
@@ -268,6 +271,15 @@ export default function App() {
   const playingNode = useMemo(() => nodes.find((node) => node.id === playing) ?? null, [nodes, playing]);
   const visionModels = models?.models.filter((model) => model.acceptsImages) ?? [];
 
+  // The feed follows the work: while a version is being made, that version's
+  // session is shown even when another version is selected.
+  const workedVersion = useMemo(() => nodes.find((node) => node.id === activeVersionIds[0]) ?? null, [nodes, activeVersionIds]);
+  const feedVersion = workedVersion ?? selectedNode;
+  const feedRows = useMemo(
+    () => agentRows.filter((row) => row.versionId === feedVersion?.id),
+    [agentRows, feedVersion],
+  );
+
   /** Selecting a version also aims the next run at it. */
   const selectNode = useCallback((id: string) => setSelected(id), []);
 
@@ -422,7 +434,9 @@ export default function App() {
             onOpenViewer={setViewerVersion}
             onPlay={(id) => setPlaying(id)}
             isParent={parentVersionId === selectedNode?.id}
-            agentRows={agentRows.filter((row) => row.versionId === selectedNode?.id)}
+            agentRows={feedRows}
+            agentFor={workedVersion && workedVersion.id !== selectedNode?.id ? workedVersion.title : null}
+            agentActive={Boolean(workedVersion)}
             active={Boolean(running)}
           />
         </aside>
@@ -516,6 +530,7 @@ function ProgressStrip({
               .map(([key, value]) => `${key} ${value}`)
               .join(' · ')}
           </span>
+          <span className="pill muted">ui {BUILD_STAMP}</span>
           {lastError ? (
             <span className="pill warn">
               {String(lastError.payload.code ?? 'error')}: {String(lastError.payload.message ?? '')}
