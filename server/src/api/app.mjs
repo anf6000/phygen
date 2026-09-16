@@ -552,7 +552,12 @@ export function buildApp({ store, events, budget, controller, capture, provider,
     if (!run) return fail(reply, 'run_not_found', `No run ${request.params.runId}`);
     const url = `http://${config.host}:${config.port}/`;
     const enabled = request.body?.enabled !== false;
-    return { recording: enabled ? await recorder.start({ runId: run.id, url }) : await recorder.stop({ reason: 'requested' }) };
+    const finished = ['stopped', 'completed', 'failed'].includes(run.state);
+    return {
+      recording: enabled
+        ? await recorder.start({ runId: run.id, url })
+        : await recorder.stop({ reason: 'requested', encodeNow: finished }),
+    };
   });
 
   // ── events ────────────────────────────────────────────────────────────────

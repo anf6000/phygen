@@ -10,7 +10,7 @@
 // subsampling (yuv444p), so the video keeps every pixel of the PNGs.
 // ─────────────────────────────────────────────────────────────────────────────
 import { spawn } from 'node:child_process';
-import { mkdir, readdir, rm } from 'node:fs/promises';
+import { mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { chromium } from 'playwright-core';
@@ -58,20 +58,31 @@ export class UiRecorder {
     return { ...this.state };
   }
 
-  /** Start recording. One PNG per second, until stop() or the run ends. */
+  /**
+   * Start recording. One PNG per second, until stop() or the run ends.
+   *
+   * A run keeps ONE sequence: if this run was recorded before, the recorder
+   * continues that folder and its frame numbering, so all evolutions of a job
+   * form a single sequence.
+   */
   async start({ runId, url }) {
     if (this.state.active) return this.status();
-    const name = `${stamp()}_${runId}`;
-    const folder = join(this.outDir, name);
+    const existing = await this.#existingSequence(runId);
+    const name = existing?.name ?? `${stamp()}_${runId}`;
+    const folder = existing?.folder ?? join(this.outDir, name);
     await mkdir(folder, { recursive: true });
+    const first = existing?.frames ?? 0;
 
     this.browser = await chromium.launch({ channel: this.config.capture.browserChannel || 'chrome', headless: true });
     const context = await this.browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1 });
     const page = await context.newPage();
-    await page.goto(url, { waitUntil: 'load', timeout: 45000 }).catch(() => {});
+    // Documentation mode: the interface rides on the working version at the
+    // greatest zoom, so the recording shows the work close up.
+    const view = url.includes('?') ? `${url}&doc=1` : `${url}?doc=1`;
+    await page.goto(view, { waitUntil: 'load', timeout: 45000 }).catch(() => {});
 
-    this.state = { active: true, runId, folder, name, frames: 0, video: null, error: null };
-    this.logger('info', `Recording the interface to ${folder}`);
+    this.state = { active: true, runId, folder, name, frames: first, video: existing?.video ?? null, error: null };
+    this.logger('info', `Recording the interface to ${folder}${first > 0 ? ` (continuing after ${first} frame(s))` : ''}`);
 
     const tick = async () => {
       if (!this.state.active) return;
@@ -94,14 +105,27 @@ export class UiRecorder {
     return this.status();
   }
 
+  /** The folder of an earlier recording of this run, if there is one. */
+  async #existingSequence(runId) {
+    const entries = await readdir(this.outDir, { withFileTypes: true }).catch(() => []);
+    const matches = entries.filter((entry) => entry.isDirectory() && entry.name.endsWith(`_${runId}`)).map((entry) => entry.name).sort();
+    const name = matches[matches.length - 1];
+    if (!name) return null;
+    const folder = join(this.outDir, name);
+    const frames = (await readdir(folder).catch(() => [])).filter((file) => file.startsWith('frame-') && file.endsWith('.png')).length;
+    const videoFile = join(this.videoDir, `${name}.mp4`);
+    const video = await stat(videoFile).then(() => videoFile).catch(() => null);
+    return { name, folder, frames, video };
+  }
+
   #runFinished(runId) {
     const run = this.store.getRun(runId);
     if (!run) return true;
     return ['stopped', 'completed', 'failed'].includes(run.state);
   }
 
-  /** Stop the recording and encode the frames. */
-  async stop({ reason = 'requested' } = {}) {
+  /** Stop the recording. The video is written when the job ends. */
+  async stop({ reason = 'requested', encodeNow = false } = {}) {
     if (!this.state.active) return this.status();
     this.state.active = false;
     clearTimeout(this.timer);
@@ -115,9 +139,14 @@ export class UiRecorder {
     const name = this.state.name;
     this.logger('info', `Recording stopped after ${frames} frame(s): ${reason}`);
 
-    if (frames >= 2) {
+    // One video per job. A stop in the middle of a run keeps the frames and
+    // waits, so the encode covers every evolution.
+    const runFinished = !this.state.runId || this.#runFinished(this.state.runId);
+    if (frames >= 2 && (runFinished || encodeNow)) {
       const video = await this.#encode({ folder, name });
       this.state.video = video;
+    } else if (frames >= 2) {
+      this.logger('info', 'The run is still going, so the video waits for the end of the job.');
     } else {
       this.logger('warn', 'Fewer than two frames were saved, so no video was written.');
     }

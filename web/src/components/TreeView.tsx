@@ -31,6 +31,8 @@ const PITCH = NODE_WIDTH + COLUMN_GAP;
 const MIN_READABLE_ZOOM = 0.35;
 /** The zoom the view keeps while it follows the work. */
 const FOLLOW_ZOOM = 0.75;
+/** The greatest zoom the canvas allows. Documentation mode holds this. */
+const MAX_ZOOM = 2;
 const ROW_PITCH = NODE_HEIGHT + ROW_GAP;
 
 /** The stages a candidate passes through, in order. */
@@ -293,6 +295,7 @@ export function TreeView({
   agentRows,
   fileRows,
   follow,
+  docMode,
   onSelect,
   onOpen,
   onPlay,
@@ -307,6 +310,8 @@ export function TreeView({
   agentRows: AgentRow[];
   fileRows: FileRow[];
   follow: boolean;
+  /** Documentation mode: ride on the working version at the greatest zoom. */
+  docMode: boolean;
   onSelect: (id: string) => void;
   onOpen: (id: string) => void;
   onPlay: (id: string) => void;
@@ -377,16 +382,37 @@ export function TreeView({
     [edges],
   );
 
-  // Keep the node that is being worked on in view.
+  // Keep the version that is being worked on in view. Documentation mode holds
+  // the greatest zoom, so the recording shows the work close up.
   useEffect(() => {
-    if (!follow || activeVersionIds.length === 0) return;
+    if (!follow) return;
+    const target = activeVersionIds[0] ?? (docMode ? selected : null);
+    if (!target) return;
     const instance = flow.current;
     if (!instance) return;
-    const first = positions.get(activeVersionIds[0]);
-    if (!first) return;
-    const zoom = Math.max(instance.getZoom(), FOLLOW_ZOOM);
-    instance.setCenter(first.x + NODE_WIDTH / 2, first.y + NODE_HEIGHT / 2, { zoom, duration: 300 });
-  }, [activeKey, follow, activeVersionIds, positions]);
+    const position = positions.get(target);
+    if (!position) return;
+
+    /** Centre on the version, using the geometry React Flow measured. */
+    const centre = (duration: number) => {
+      // The internal node carries the measured size and the absolute position.
+      const measured = instance.getNode(target) as
+        | (ReturnType<ReactFlowInstance['getNode']> & { positionAbsolute?: { x: number; y: number }; width?: number; height?: number })
+        | undefined;
+      const absolute = measured?.positionAbsolute;
+      const x = absolute ? absolute.x + (measured?.width ?? NODE_WIDTH) / 2 : position.x + NODE_WIDTH / 2;
+      const y = absolute ? absolute.y + (measured?.height ?? NODE_HEIGHT) / 2 : position.y + NODE_HEIGHT / 2;
+      const zoom = docMode ? MAX_ZOOM : Math.max(instance.getZoom(), FOLLOW_ZOOM);
+      instance.setCenter(x, y, { zoom, duration });
+    };
+
+    centre(docMode ? 180 : 300);
+    if (!docMode) return undefined;
+    // Documentation mode keeps the version centred, even while its height grows
+    // as the code column fills.
+    const timer = window.setInterval(() => centre(160), 600);
+    return () => window.clearInterval(timer);
+  }, [activeKey, follow, docMode, selected, activeVersionIds, positions]);
 
   const handleSelect = useCallback((id: string) => onSelect(id), [onSelect]);
 
@@ -403,7 +429,7 @@ export function TreeView({
       fitView
       fitViewOptions={{ padding: 0.15, maxZoom: 1, minZoom: MIN_READABLE_ZOOM }}
       minZoom={0.1}
-      maxZoom={2}
+      maxZoom={MAX_ZOOM}
       proOptions={{ hideAttribution: true }}
       nodesDraggable={false}
       nodesConnectable={false}
