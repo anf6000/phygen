@@ -117,9 +117,14 @@ const VersionNode = memo(
           {hasImage ? (
             <img src={node.thumbnailUrl} alt={`${node.title}, first captured frame`} loading="lazy" />
           ) : (
-            <div className={`vnode-placeholder ${pending ? 'is-pending' : 'is-failed'}`} role="img" aria-label={`${node.title}: ${node.status}`}>
+            <div
+              className={`vnode-placeholder ${pending ? 'is-pending' : 'is-failed'}`}
+              role="img"
+              aria-label={`${node.title}: ${placeholderLabel(node, activeKind)}`}
+              title={node.error?.message ?? placeholderLabel(node, activeKind)}
+            >
               <span className="vnode-placeholder-mark" aria-hidden="true" />
-              <span className="vnode-placeholder-text">{activeKind ? kindLabel(activeKind) : pending ? stageLabel(node.status) : 'stopped'}</span>
+              <span className="vnode-placeholder-text">{placeholderLabel(node, activeKind)}</span>
             </div>
           )}
         </div>
@@ -201,6 +206,19 @@ function stageLabel(status: TreeNode['status']): string {
   if (status === 'validating') return 'checking the package';
   if (status === 'capturing') return 'rendering frames';
   return 'judging';
+}
+
+/**
+ * What a tile without an image says. A failed version must name the failure,
+ * because "stopped" hides the reason.
+ */
+function placeholderLabel(node: TreeNode, activeKind: string | null): string {
+  if (activeKind) return kindLabel(activeKind);
+  if (node.status === 'failed') return node.error?.code ? `failed · ${node.error.code}` : 'failed';
+  if (node.status === 'paused') return 'paused';
+  if (node.status === 'rejected') return 'rejected, no frame';
+  if (node.status === 'promoted') return 'no frame captured';
+  return stageLabel(node.status);
 }
 
 function kindLabel(kind: string): string {
