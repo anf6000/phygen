@@ -16,7 +16,7 @@ import { basename, join } from 'node:path';
 
 import { ArtworkError } from '../../../runtime/contract.js';
 import { validateConfiguration } from '../../../runtime/config.js';
-import { checkPackage } from '../../../runtime/node/package-checks.js';
+import { checkPackage, walkPackage } from '../../../runtime/node/package-checks.js';
 
 import { mapLimit, newId, nowIso, sha256Hex, sleep, stableStringify, truncate, unique } from '../util.mjs';
 import { canTransition, isTerminal, transition } from '../state.mjs';
@@ -34,6 +34,7 @@ import {
 } from '../judge/protocol.mjs';
 import { AUTHOR_SYSTEM_PROMPT, buildAuthorPrompt, buildRepairPrompt } from './prompts.mjs';
 import { feedRows } from './agent-events.mjs';
+import { WorkspaceReader } from './workspace-reader.mjs';
 import { planRound } from './plan.mjs';
 
 const CAPTURE_TIMESTEP = 8;
@@ -499,6 +500,61 @@ export class RunController {
 
   // ── authoring ─────────────────────────────────────────────────────────────
 
+  /**
+   * A reporter that reads the real files as well as the events. It replaces the
+   * estimates with the true line count of every file, the true width of every
+   * line, and the true size of each change.
+   */
+  #fileReporter(runId, versionId, workspaceDir) {
+    const reader = new WorkspaceReader(workspaceDir);
+    /** toolCallId -> the file that call touched. */
+    const pending = new Map();
+    /** The last path seen for each tool, for a call that carries no id. */
+    const lastPathForTool = new Map();
+    // A bound emitter: these methods are not called on the controller itself.
+    const announceFile = (file) => this.#emit(runId, 'file', { versionId, ...file });
+
+    return {
+      /** Announce the package once, so the column shows the real file. */
+      async announce() {
+        const files = await walkPackage(workspaceDir);
+        const described = await reader.inventory(files);
+        for (const file of described) {
+          announceFile({ kind: 'inventory', ...file });
+        }
+      },
+
+      /** Read a file the session just wrote, and report the real change. */
+      onEvent(event) {
+        // The start event carries the arguments, the end event carries the
+        // result, so the path is remembered in between.
+        if (event?.type === 'tool_execution_start') {
+          const path = event.args?.path ?? event.args?.file_path ?? null;
+          if (typeof path === 'string' && path.length > 0) {
+            pending.set(event.toolCallId ?? `${event.toolName}:${path}`, { tool: event.toolName, path });
+            lastPathForTool.set(event.toolName, path);
+          }
+          return;
+        }
+        if (event?.type !== 'tool_execution_end' || event.isError === true) return;
+        if (event.toolName !== 'edit' && event.toolName !== 'write') return;
+        const remembered = pending.get(event.toolCallId ?? '') ?? null;
+        pending.delete(event.toolCallId ?? '');
+        const path = remembered?.path ?? lastPathForTool.get(event.toolName) ?? null;
+        if (!path) return;
+        // The session may still be flushing the write, so read on the next tick.
+        setTimeout(() => {
+          void reader
+            .touched(path)
+            .then((change) => {
+              if (change) announceFile({ kind: 'change', ...change });
+            })
+            .catch(() => {});
+        }, 80);
+      },
+    };
+  }
+
   /** Map the session events of one version to feed rows on the run stream. */
   #agentReporter(runId, versionId) {
     let lastTextAt = 0;
@@ -543,6 +599,10 @@ export class RunController {
       await copyPackage(context.packageDir, workspaceDir);
       await this.#withJob({ run, round, slot: plan.slot, kind: 'author', versionId }, async (job) => {
         this.#setVersionState(versionId, 'authoring');
+        // Read the package before the session changes it, then follow the writes.
+        const files = this.#fileReporter(run.id, versionId, workspaceDir);
+        const agent = this.#agentReporter(run.id, versionId);
+        await files.announce();
         const prompt = buildAuthorPrompt({
           direction: run.direction,
           plan,
@@ -562,7 +622,10 @@ export class RunController {
               prompt,
               systemPrompt: AUTHOR_SYSTEM_PROMPT,
               model: run.protocol?.authorModel,
-              onEvent: this.#agentReporter(run.id, versionId),
+              onEvent: (event) => {
+                agent(event);
+                files.onEvent(event);
+              },
               sessionId,
               signal,
               plan,

@@ -17,6 +17,7 @@ import { Budget } from './budget.mjs';
 import { createArtifacts } from './artifacts.mjs';
 import { createCapture, captureStatus } from './capture/index.mjs';
 import { ModelCatalog } from './models.mjs';
+import { UiRecorder } from './record/recorder.mjs';
 import { RunController } from './controller/run.mjs';
 import { createProvider } from './providers/index.mjs';
 import { buildApp } from './api/app.mjs';
@@ -42,12 +43,13 @@ export async function startServer(overrides = {}) {
   const status = await captureStatus({ config });
   const artifacts = createArtifacts({ store, config });
 
+  const recorder = new UiRecorder({ store, config, logger });
   const controller = new RunController({ store, events, budget, capture, provider, config, artifacts, logger });
 
   const live = createLiveServer({ store, config });
   const liveBaseUrl = await live.listen();
 
-  const app = buildApp({ store, events, budget, controller, capture, provider, config, artifacts, detection, captureStatus: status, catalog });
+  const app = buildApp({ store, events, budget, controller, capture, provider, config, artifacts, detection, captureStatus: status, catalog, recorder });
   await app.listen({ host: config.host, port: config.port });
 
   const recovered = await controller.recover();

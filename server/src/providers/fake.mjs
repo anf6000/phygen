@@ -62,10 +62,12 @@ export class FakeProvider {
   async author({ workspaceDir, plan, direction, round, slot, parentConfig, seedKey, onEvent = null }) {
     // The test double reports the same event shape as the real driver, so the
     // interface feed works without a paid session.
+    let callSeq = 0;
     const report = (toolName, args) => {
       if (!onEvent) return;
-      onEvent({ type: 'tool_execution_start', toolName, args });
-      onEvent({ type: 'tool_execution_end', toolName, isError: false, result: { content: [{ type: 'text', text: 'ok' }] } });
+      const toolCallId = `${toolName}_${callSeq++}`;
+      onEvent({ type: 'tool_execution_start', toolCallId, toolName, args });
+      onEvent({ type: 'tool_execution_end', toolCallId, toolName, isError: false, result: { content: [{ type: 'text', text: 'ok' }] } });
     };
     const random = rngFrom(`${seedKey}|${round}|${slot}|${direction}|${plan?.kind ?? 'refinement'}`);
     const configPath = join(workspaceDir, 'config.json');

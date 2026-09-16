@@ -9,3 +9,6 @@ web/dist/
 *.jfif
 .DS_Store
 Thumbs.db
+docs/recordings/
+docs/videos/
+*.mp4

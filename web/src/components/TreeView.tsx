@@ -19,7 +19,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import type { AgentRow, Decision, TreeEdge, TreeNode } from '../types';
+import type { AgentRow, Decision, FileRow, TreeEdge, TreeNode } from '../types';
 import { CodeStream } from './CodeStream';
 
 const NODE_WIDTH = 260;
@@ -40,6 +40,7 @@ interface NodeData extends Record<string, unknown> {
   liveFrame: { url: string; stage: string; step: number } | null;
   decision: Decision | null;
   rows: AgentRow[];
+  files: FileRow[];
   onSelect: (id: string) => void;
   onOpen: (id: string) => void;
   onPlay: (id: string) => void;
@@ -97,7 +98,7 @@ function stageProgress(status: TreeNode['status']): { index: number; working: bo
 
 const VersionNode = memo(
   function VersionNode({ data, selected }: NodeProps) {
-    const { node, active, activeKind, liveFrame, decision, rows, onSelect, onOpen, onPlay } = data as unknown as NodeData;
+    const { node, active, activeKind, liveFrame, decision, rows, files, onSelect, onOpen, onPlay } = data as unknown as NodeData;
     const { index, working } = stageProgress(node.status);
     const pending = working;
     const hasImage = !pending && node.status !== 'failed';
@@ -153,7 +154,7 @@ const VersionNode = memo(
               aria-label={`${node.title}: ${placeholderLabel(node, activeKind)}`}
               title={node.error?.message ?? placeholderLabel(node, activeKind)}
             >
-              <CodeStream rows={rows} active={pending} />
+              <CodeStream rows={rows} files={files} active={pending} />
               <span className="vnode-placeholder-text">{placeholderLabel(node, activeKind)}</span>
             </div>
           )}
@@ -232,7 +233,8 @@ const VersionNode = memo(
       before.generation === after.generation &&
       before.evolution === after.evolution &&
       before.variant === after.variant &&
-      beforeData.rows.length === afterData.rows.length
+      beforeData.rows.length === afterData.rows.length &&
+      beforeData.files.length === afterData.files.length
     );
   },
 );
@@ -285,6 +287,7 @@ export function TreeView({
   liveFrames,
   decisions,
   agentRows,
+  fileRows,
   follow,
   onSelect,
   onOpen,
@@ -298,6 +301,7 @@ export function TreeView({
   liveFrames: Record<string, { url: string; stage: string; step: number }>;
   decisions: Record<string, Decision>;
   agentRows: AgentRow[];
+  fileRows: FileRow[];
   follow: boolean;
   onSelect: (id: string) => void;
   onOpen: (id: string) => void;
@@ -317,6 +321,15 @@ export function TreeView({
     return grouped;
   }, [agentRows]);
   const rowsOf = useCallback((id: string) => rowsByVersion[id] ?? [], [rowsByVersion]);
+  const filesByVersion = useMemo(() => {
+    const grouped: Record<string, FileRow[]> = {};
+    for (const row of fileRows) {
+      grouped[row.versionId] = grouped[row.versionId] ?? [];
+      grouped[row.versionId].push(row);
+    }
+    return grouped;
+  }, [fileRows]);
+  const filesOf = useCallback((id: string) => filesByVersion[id] ?? [], [filesByVersion]);
 
   const flowNodes = useMemo<Node[]>(
     () =>
@@ -331,6 +344,7 @@ export function TreeView({
           liveFrame: liveFrames[node.id] ?? null,
           decision: decisions[node.id] ?? null,
           rows: rowsOf(node.id),
+          files: filesOf(node.id),
           onSelect,
           onOpen,
           onPlay,
@@ -338,7 +352,7 @@ export function TreeView({
         selected: node.id === selected,
         style: { width: NODE_WIDTH },
       })),
-    [nodes, positions, selected, activeSet, activeKinds, liveFrames, decisions, rowsOf, onSelect, onOpen, onPlay],
+    [nodes, positions, selected, activeSet, activeKinds, liveFrames, decisions, rowsOf, filesOf, onSelect, onOpen, onPlay],
   );
 
   const flowEdges = useMemo<Edge[]>(

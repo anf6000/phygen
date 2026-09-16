@@ -12,9 +12,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useRef } from 'react';
 
-import type { AgentRow } from '../types';
+import type { AgentRow, FileRow } from '../types';
 
 const BASELINE_LINES = 260;
+/** Widths of the lines the session adds, until the next real read. */
+const DEFAULT_WIDTH = 0.55;
 const EAT_MS = 300;
 const SETTLE_MS = 560;
 const HEAD_SPEED = 0.00030;
@@ -32,11 +34,14 @@ function widthFactor(index: number): number {
   return 0.22 + (mixed - Math.floor(mixed)) * 0.72;
 }
 
-export function CodeStream({ rows, active }: { rows: AgentRow[]; active: boolean }) {
+export function CodeStream({ rows, files, active }: { rows: AgentRow[]; files: FileRow[]; active: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const linesRef = useRef<LineState[]>(
     Array.from({ length: BASELINE_LINES }, () => ({ age: 1, eatenAt: null })),
   );
+  /** The real width of every line of the file the session works on. */
+  const widthsRef = useRef<number[] | null>(null);
+  const fileRef = useRef<string | null>(null);
   const headRef = useRef(0.2);
   const handledRef = useRef(0);
 
@@ -48,12 +53,64 @@ export function CodeStream({ rows, active }: { rows: AgentRow[]; active: boolean
     [rows],
   );
 
-  // Start a fresh column for a different version.
+  // The real files of this version: an inventory names the file, a change
+  // reports its true line count after an edit.
+  const inventory = useMemo(() => files.filter((file) => file.kind === 'inventory' && (file.widths?.length ?? 0) > 0), [files]);
+  const changes = useMemo(() => files.filter((file) => file.kind === 'change'), [files]);
+  const target = useMemo(() => {
+    if (inventory.length === 0) return null;
+    const counts = new Map<string, number>();
+    for (const change of changes) counts.set(change.path, (counts.get(change.path) ?? 0) + 1);
+    // The file the session works on. With no change yet, prefer the artwork
+    // sources over the protected runtime files.
+    const preferred = (path: string) => (/physarum|renderer/.test(path) ? 0 : path.startsWith('src/') ? 1 : 2);
+    return [...inventory].sort(
+      (a, b) =>
+        (counts.get(b.path) ?? 0) - (counts.get(a.path) ?? 0) ||
+        preferred(a.path) - preferred(b.path) ||
+        b.lines - a.lines,
+    )[0];
+  }, [inventory, changes]);
+
+  // Start from the real file: its real line count and the real width of each line.
   useEffect(() => {
     handledRef.current = 0;
     headRef.current = 0.2;
-    linesRef.current = Array.from({ length: BASELINE_LINES }, () => ({ age: 1, eatenAt: null }));
-  }, [rows[0]?.versionId]);
+    fileRef.current = target?.path ?? null;
+    widthsRef.current = target?.widths ? [...target.widths] : null;
+    const count = target ? target.lines : BASELINE_LINES;
+    linesRef.current = Array.from({ length: Math.max(1, count) }, () => ({ age: 1, eatenAt: null }));
+  }, [target]);
+
+  // A real change: the file grew or shrank by the counts the reader measured.
+  useEffect(() => {
+    const latest = changes.slice(-1)[0];
+    if (!latest || latest.path !== fileRef.current) return;
+    const state = linesRef.current;
+    const want = Math.max(1, latest.lines);
+    if (want === state.length) return;
+    if (want > state.length) {
+      const added = want - state.length;
+      const grown = [...state];
+      const widths = widthsRef.current ?? [];
+      for (let count = 0; count < added; count++) {
+        grown.push({ age: 0, eatenAt: null });
+        widths.push(DEFAULT_WIDTH);
+      }
+      widthsRef.current = widths;
+      linesRef.current = grown;
+      return;
+    }
+    const removed = state.length - want;
+    const kept = state.slice(0, want);
+    const now = performance.now();
+    for (let count = 0; count < removed && count < state.length; count++) {
+      const index = state.length - 1 - count;
+      if (index >= want) state[index] = { ...state[index], eatenAt: now };
+    }
+    linesRef.current = [...kept, ...state.slice(want)];
+    if (widthsRef.current) widthsRef.current = widthsRef.current.slice(0, want);
+  }, [changes]);
 
   // Apply each new edit at the head: new lines appear, the last ones are eaten.
   useEffect(() => {
@@ -117,10 +174,13 @@ export function CodeStream({ rows, active }: { rows: AgentRow[]; active: boolean
       const step = height / count;
       const thickness = Math.max(1, Math.min(3, step * 0.72));
 
+      const widths = widthsRef.current;
       for (let index = 0; index < lines.length; index++) {
+        void widths;
         const line = lines[index];
         const y = index * step;
-        const factor = widthFactor(index);
+        const real = widthsRef.current?.[index];
+        const factor = real === undefined ? widthFactor(index) : real;
         const lineWidth = Math.max(4, width * 0.06 + width * 0.9 * factor);
 
         if (line.eatenAt !== null) context.fillStyle = '#d00000';

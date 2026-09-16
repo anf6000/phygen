@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { RequestError, api, useRunEvents } from './api';
-import type { AgentRow, CostEstimate, Decision, Health, ModelList, RunDetail, Tree } from './types';
+import type { AgentRow, CostEstimate, Decision, FileRow, Health, ModelList, RecordingStatus, RunDetail, Tree } from './types';
 import { TreeView } from './components/TreeView';
 import { GenerationList } from './components/GenerationList';
 import { DetailPanel } from './components/DetailPanel';
@@ -20,6 +20,8 @@ export default function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [follow, setFollow] = useState(true);
   const [hideFailed, setHideFailed] = useState(false);
+  const [record, setRecord] = useState(false);
+  const [recording, setRecording] = useState<RecordingStatus | null>(null);
   const [viewerVersion, setViewerVersion] = useState<string | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
   const [direction, setDirection] = useState(DEFAULT_DIRECTION);
@@ -40,6 +42,10 @@ export default function App() {
   // derived from the event stream so one source drives every animation.
   const agentRows = useMemo(
     () => stream.events.filter((event) => event.type === 'agent').map((event) => ({ seq: event.seq, ...(event.payload as unknown as Omit<AgentRow, 'seq'>) })),
+    [stream.events],
+  );
+  const fileRows = useMemo(
+    () => stream.events.filter((event) => event.type === 'file').map((event) => ({ seq: event.seq, ...(event.payload as unknown as Omit<FileRow, 'seq'>) })),
     [stream.events],
   );
   const liveFrames = useMemo(() => {
@@ -140,12 +146,13 @@ export default function App() {
     try {
       const raw = window.localStorage.getItem(`phygen.view.${artworkId}`);
       if (!raw) return;
-      const saved = JSON.parse(raw) as { selected?: string | null; variants?: number; evolutions?: number; direction?: string; hideFailed?: boolean };
+      const saved = JSON.parse(raw) as { selected?: string | null; variants?: number; evolutions?: number; direction?: string; hideFailed?: boolean; record?: boolean };
       if (saved.selected) setSelected(saved.selected);
       if (typeof saved.variants === 'number') setVariants(saved.variants);
       if (typeof saved.evolutions === 'number') setEvolutions(saved.evolutions);
       if (typeof saved.direction === 'string' && saved.direction.length > 0) setDirection(saved.direction);
       if (typeof saved.hideFailed === 'boolean') setHideFailed(saved.hideFailed);
+      if (typeof saved.record === 'boolean') setRecord(saved.record);
     } catch {
       // a broken entry must not stop the page
     }
@@ -156,12 +163,12 @@ export default function App() {
     try {
       window.localStorage.setItem(
         `phygen.view.${artworkId}`,
-        JSON.stringify({ selected, variants, evolutions, direction, hideFailed }),
+        JSON.stringify({ selected, variants, evolutions, direction, hideFailed, record }),
       );
     } catch {
       // storage may be unavailable; the page still works
     }
-  }, [artworkId, selected, variants, evolutions, direction, hideFailed]);
+  }, [artworkId, selected, variants, evolutions, direction, hideFailed, record]);
 
   // A stored id can point at a version that no longer exists.
   useEffect(() => {
@@ -231,6 +238,7 @@ export default function App() {
         variants,
         model: judgeModel || undefined,
         authorModel: authorModel || undefined,
+        record,
       });
       setRun(await api.run(created.run.id));
       if (artworkId) await loadTree(artworkId);
@@ -238,6 +246,17 @@ export default function App() {
       setError(describe(cause));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const toggleRecording = async (enabled: boolean) => {
+    setRecord(enabled);
+    if (!runId) return;
+    try {
+      const result = await api.setRecording(runId, enabled);
+      setRecording(result.recording);
+    } catch (cause) {
+      setError(describe(cause));
     }
   };
 
@@ -282,6 +301,22 @@ export default function App() {
 
   /** Selecting a version also aims the next run at it. */
   const selectNode = useCallback((id: string) => setSelected(id), []);
+
+  // The recording status, while a documentation run is going.
+  useEffect(() => {
+    if (!running && !recording?.active) return undefined;
+    const load = () => {
+      void api
+        .recording()
+        .then(setRecording)
+        .catch(() => {});
+    };
+    load();
+    const timer = window.setInterval(load, 3000);
+    return () => window.clearInterval(timer);
+  }, [running, recording?.active]);
+
+
 
   return (
     <div className="app">
@@ -377,6 +412,9 @@ export default function App() {
           <label className="follow-toggle">
             <input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} /> follow the active node
           </label>
+          <label className="follow-toggle" title="Save one PNG per second of the whole interface, then encode a lossless video">
+            <input type="checkbox" checked={record} onChange={(event) => void toggleRecording(event.target.checked)} /> document this run
+          </label>
           <label className="follow-toggle">
             <input
               type="checkbox"
@@ -422,6 +460,7 @@ export default function App() {
               liveFrames={liveFrames}
               decisions={freshDecisions}
               agentRows={agentRows}
+              fileRows={fileRows}
               follow={follow}
               onSelect={selectNode}
               onOpen={setViewerVersion}
@@ -443,7 +482,7 @@ export default function App() {
         </aside>
       </main>
 
-      <ProgressStrip run={run} stream={stream.events} connected={stream.connected} health={health} />
+      <ProgressStrip run={run} stream={stream.events} connected={stream.connected} health={health} recording={recording} />
 
       {viewerVersion ? <CaptureViewer version={viewerVersion} onClose={() => setViewerVersion(null)} /> : null}
 
@@ -486,11 +525,13 @@ function ProgressStrip({
   stream,
   connected,
   health,
+  recording,
 }: {
   run: RunDetail | null;
   stream: { type: string; seq: number; payload: Record<string, unknown> }[];
   connected: boolean;
   health: Health | null;
+  recording: RecordingStatus | null;
 }) {
   const last = stream.slice(-1)[0];
   const perLevel = run?.run.protocol?.variantsPerEvolution ?? null;
@@ -531,6 +572,15 @@ function ProgressStrip({
               .map(([key, value]) => `${key} ${value}`)
               .join(' · ')}
           </span>
+          {recording?.active ? (
+            <span className="pill warn">
+              recording <strong>{recording.frames}</strong> frame(s)
+            </span>
+          ) : null}
+          {recording && !recording.active && recording.video ? (
+            <span className="pill muted">video {recording.video.split(/[\\/]/).pop()}</span>
+          ) : null}
+          {recording?.error ? <span className="pill warn">{recording.error}</span> : null}
           <span className="pill muted">ui {BUILD_STAMP}</span>
           {lastError ? (
             <span className="pill warn">

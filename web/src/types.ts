@@ -181,7 +181,30 @@ export interface AgentRow {
   costUsd?: number;
 }
 
+/** A real file of the package, read from the workspace. */
+export interface FileRow {
+  seq: number;
+  versionId: string;
+  kind: 'inventory' | 'change';
+  path: string;
+  lines: number;
+  bytes: number;
+  widths?: number[];
+  added?: number;
+  removed?: number;
+}
+
 export type Decision = { versionId: string; outcome: 'winner' | 'yeeted'; reason?: string };
+
+export interface RecordingStatus {
+  active: boolean;
+  runId?: string | null;
+  folder?: string | null;
+  name?: string | null;
+  frames: number;
+  video?: string | null;
+  error?: string | null;
+}
 
 export interface ProgressEvent {
   seq: number;

@@ -56,6 +56,12 @@ export function loadConfig(overrides = {}) {
     artifactsDir: process.env.PHYGEN_SNAPSHOTS ? resolve(process.env.PHYGEN_SNAPSHOTS) : join(REPO_ROOT, 'snapshots'),
     repoRoot: REPO_ROOT,
 
+    recording: {
+      // A lossless mp4 needs an encoder. ffmpeg is used when it is present.
+      ffmpeg: process.env.PHYGEN_FFMPEG || 'ffmpeg',
+      enabled: readBool('PHYGEN_RECORD', false),
+    },
+
     models: {
       // The Kilo gateway catalog. It gives the model list and the real prices.
       baseUrl: process.env.PHYGEN_KILO_API || 'https://api.kilo.ai',

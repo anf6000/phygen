@@ -1,7 +1,7 @@
 // Thin API client and the event stream hook.
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { AgentRow, ApiError, CostEstimate, Health, ModelList, ProgressEvent, Run, RunDetail, Tree, VersionDetail } from './types';
+import type { AgentRow, ApiError, CostEstimate, Health, ModelList, ProgressEvent, RecordingStatus, Run, RunDetail, Tree, VersionDetail } from './types';
 
 export class RequestError extends Error {
   readonly code: string;
@@ -49,6 +49,9 @@ export const api = {
       `/api/cost-estimate?evolutions=${evolutions}${variants ? `&variants=${variants}` : ''}${model ? `&model=${encodeURIComponent(model)}` : ''}${authorModel ? `&authorModel=${encodeURIComponent(authorModel)}` : ''}`,
     ),
   models: () => request<ModelList>('/api/models'),
+  recording: () => request<RecordingStatus>('/api/recording'),
+  setRecording: (runId: string, enabled: boolean) =>
+    request<{ recording: RecordingStatus }>(`/api/runs/${runId}/recording`, { method: 'POST', body: JSON.stringify({ enabled }) }),
   startRun: (body: Record<string, unknown>) => request<{ run: Run }>('/api/runs', { method: 'POST', body: JSON.stringify(body) }),
   run: (runId: string) => request<RunDetail>(`/api/runs/${runId}`),
   runSummary: (runId: string) => request<{ run: Run; active: boolean }>(`/api/runs/${runId}/summary`),

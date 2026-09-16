@@ -72,7 +72,7 @@ function validateProtocol(protocol) {
   return null;
 }
 
-export function buildApp({ store, events, budget, controller, capture, provider, config, artifacts, detection, captureStatus, catalog }) {
+export function buildApp({ store, events, budget, controller, capture, provider, config, artifacts, detection, captureStatus, catalog, recorder = null }) {
   const app = Fastify({ logger: false, bodyLimit: config.server.requestBodyLimit });
 
   app.setErrorHandler((error, request, reply) => {
@@ -310,13 +310,20 @@ export function buildApp({ store, events, budget, controller, capture, provider,
     if (!version) return fail(reply, 'version_not_found', `No version ${request.params.versionId}`);
     const runs = version.runId ? [version.runId] : store.listRuns(200).filter((run) => run.artworkId === version.artworkId).map((run) => run.id);
     const rows = [];
+    const files = [];
     for (const runId of runs) {
       for (const event of store.listEventsByType(runId, 'agent')) {
         if (event.payload?.versionId !== version.id) continue;
         rows.push({ seq: event.seq, at: event.at, ...event.payload });
       }
+      // The real file data of the session, so a finished version still shows the
+      // true line counts of its files.
+      for (const event of store.listEventsByType(runId, 'file')) {
+        if (event.payload?.versionId !== version.id) continue;
+        files.push({ seq: event.seq, at: event.at, ...event.payload });
+      }
     }
-    return { rows: rows.slice(-200) };
+    return { rows: rows.slice(-200), files: files.slice(-400) };
   });
 
   app.get('/api/versions/:versionId/artifacts/:name', async (request, reply) => {    const version = store.getVersion(request.params.versionId);
@@ -474,6 +481,15 @@ export function buildApp({ store, events, budget, controller, capture, provider,
     // request. The per-request reservations take over from the first call.
     budget.reserve(run, bound.boundUsd, 'run-estimate', { emit: false });
 
+    // The tickbox can ask for a recording as the run starts.
+    if (recorder && body.record === true) {
+      void recorder
+        .start({ runId: run.id, url: `http://${config.host}:${config.port}/` })
+        .catch((error) => {
+          events.emit(run.id, 'error', { code: 'recording_failed', message: String(error.message ?? error) });
+        });
+    }
+
     void controller.start(run.id).catch((error) => {
       events.emit(run.id, 'error', { code: error.code ?? 'run_failed', message: error.message });
     });
@@ -523,6 +539,20 @@ export function buildApp({ store, events, budget, controller, capture, provider,
   app.post('/api/runs/:runId/stop', async (request, reply) => {
     if (!store.getRun(request.params.runId)) return fail(reply, 'run_not_found', 'No such run');
     return { run: await controller.stop(request.params.runId) };
+  });
+
+  // ── documentation recording ───────────────────────────────────────────────
+  // The tickbox writes one PNG per second of the whole interface, then encodes a
+  // lossless video when the run ends.
+  app.get('/api/recording', async () => (recorder ? recorder.status() : { active: false, frames: 0 }));
+
+  app.post('/api/runs/:runId/recording', async (request, reply) => {
+    if (!recorder) return fail(reply, 'payload_invalid', 'Recording is not available in this server');
+    const run = store.getRun(request.params.runId);
+    if (!run) return fail(reply, 'run_not_found', `No run ${request.params.runId}`);
+    const url = `http://${config.host}:${config.port}/`;
+    const enabled = request.body?.enabled !== false;
+    return { recording: enabled ? await recorder.start({ runId: run.id, url }) : await recorder.stop({ reason: 'requested' }) };
   });
 
   // ── events ────────────────────────────────────────────────────────────────
