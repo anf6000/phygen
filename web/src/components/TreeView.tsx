@@ -17,10 +17,10 @@ import '@xyflow/react/dist/style.css';
 
 import type { TreeEdge, TreeNode } from '../types';
 
-const NODE_WIDTH = 208;
-const NODE_HEIGHT = 196;
-const COLUMN_GAP = 28;
-const ROW_GAP = 84;
+const NODE_WIDTH = 260;
+const NODE_HEIGHT = 300;
+const COLUMN_GAP = 32;
+const ROW_GAP = 96;
 
 /** Work that has not produced an image yet. */
 const PENDING: TreeNode['status'][] = ['queued', 'authoring', 'validating', 'capturing', 'judging'];
@@ -168,8 +168,8 @@ export function TreeView({
         type: 'smoothstep',
         // The selected lineage is thicker and solid: two cues, not colour alone.
         style: edge.onLineage
-          ? { stroke: '#2f2a24', strokeWidth: 2.5 }
-          : { stroke: '#c0b4a2', strokeWidth: 1, strokeDasharray: '5 4' },
+          ? { stroke: '#0000ff', strokeWidth: 1 }
+          : { stroke: '#000000', strokeWidth: 1, strokeDasharray: '4 4' },
         animated: false,
       })),
     [edges],
@@ -191,7 +191,7 @@ export function TreeView({
       nodesConnectable={false}
       elementsSelectable
     >
-      <Background color="#e2d8c8" gap={24} />
+      <Background color="#d0d0d0" gap={24} />
       <Controls showInteractive={false} />
     </ReactFlow>
   );

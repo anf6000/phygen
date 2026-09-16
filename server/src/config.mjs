@@ -70,13 +70,19 @@ export function loadConfig(overrides = {}) {
       // 'auto' uses the pi driver when the command is present, otherwise the fake driver.
       driver: process.env.PHYGEN_DRIVER || 'auto',
       command: process.env.PHYGEN_PI_CMD || 'pi',
+      // The Pi shim is a .cmd file on Windows, which a child process cannot
+      // start directly. Point this at the bundled CLI to run it with node.
+      entry: process.env.PHYGEN_PI_ENTRY || '',
       providerName: process.env.PHYGEN_PROVIDER || 'kilo',
       model: process.env.PHYGEN_MODEL || 'moonshotai/kimi-k3',
       authorModel: process.env.PHYGEN_AUTHOR_MODEL || process.env.PHYGEN_MODEL || 'moonshotai/kimi-k3',
       thinking: process.env.PHYGEN_THINKING || 'medium',
+      // Author sessions write code and read files, so they get a lower effort
+      // and a longer limit than the judge.
+      authorThinking: process.env.PHYGEN_AUTHOR_THINKING || process.env.PHYGEN_THINKING || 'low',
       authorTools: process.env.PHYGEN_AUTHOR_TOOLS || 'read,write,edit,ls',
       allowSpend: readBool('PHYGEN_ALLOW_SPEND', false),
-      sessionTimeoutMs: readNumber('PHYGEN_SESSION_TIMEOUT_MS', 900000),
+      sessionTimeoutMs: readNumber('PHYGEN_SESSION_TIMEOUT_MS', 1800000),
       judgeTimeoutMs: readNumber('PHYGEN_JUDGE_TIMEOUT_MS', 600000),
     },
 

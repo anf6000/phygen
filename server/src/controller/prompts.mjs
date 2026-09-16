@@ -52,6 +52,8 @@ export function buildAuthorPrompt({ direction, plan, manifest, parentConfigurati
   lines.push('3. Keep the seeded random stream reproducible. The same seed and the same step count must give the same image.');
   lines.push('4. Change config.json when the new code needs different values.');
   lines.push('');
+  lines.push('Work efficiently. Read only src/physarum.js, src/renderer.js, and config.json. Do not read the tests or the other package files. Do not write long code: one focused change is enough.');
+  lines.push('');
   lines.push('The current configuration of the parent:');
   lines.push('```json');
   lines.push(JSON.stringify(parentConfiguration, null, 2));

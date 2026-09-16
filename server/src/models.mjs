@@ -136,10 +136,12 @@ export class ModelCatalog {
     protocol,
     authorModel,
     judgeModel,
-    authorPromptTokens = 1800,
-    judgePromptTokens = 1500,
-    authorOutputTokens = 4000,
-    judgeOutputTokens = 900,
+    // Measured: the base system prompt alone costs about 4500 input tokens, and
+    // an author session reads files across several turns.
+    authorPromptTokens = 12000,
+    judgePromptTokens = 6000,
+    authorOutputTokens = 6000,
+    judgeOutputTokens = 1200,
     imagesPerJudgeCall = 12,
   }) {
     const rounds = Math.max(1, evolutions);

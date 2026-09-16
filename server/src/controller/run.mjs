@@ -883,7 +883,42 @@ export class RunController {
     try {
       result = await call(this.active.get(run.id)?.abort.signal);
     } catch (error) {
-      this.budget.release(run.id, label);
+      // A session that timed out or failed still costs money. Charge what the
+      // provider reported, and keep the record honest.
+      const spent = error?.details?.usage;
+      if (spent && (spent.inputTokens > 0 || spent.outputTokens > 0 || spent.costUsd > 0)) {
+        const committed = this.budget.commit(run.id, label, {
+          reportedUsd: spent.costUsd ?? 0,
+          boundUsd: bound,
+          costKnown: spent.costKnown === true,
+          inputTokens: spent.inputTokens ?? 0,
+          outputTokens: spent.outputTokens ?? 0,
+        });
+        this.store.createUsage({
+          runId: run.id,
+          jobId,
+          versionId,
+          kind,
+          model: this.config.provider.authorModel,
+          sessionId: null,
+          inputTokens: spent.inputTokens ?? 0,
+          outputTokens: spent.outputTokens ?? 0,
+          costUsd: committed.charged,
+          raw: { ...(spent.raw ?? {}), costSource: committed.costSource, label, outcome: error.code ?? 'failed' },
+        });
+        this.#emit(run.id, 'usage', {
+          model: this.config.provider.model,
+          inputTokens: spent.inputTokens ?? 0,
+          outputTokens: spent.outputTokens ?? 0,
+          costUsd: committed.charged,
+          costSource: committed.costSource,
+          spentUsd: committed.run.spentUsd,
+          limitUsd: this.budget.limitFor(committed.run),
+          detail: `the ${kind} session did not finish (${error.code ?? 'failed'})`,
+        });
+      } else {
+        this.budget.release(run.id, label);
+      }
       throw error;
     }
 

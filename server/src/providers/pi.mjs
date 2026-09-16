@@ -26,7 +26,10 @@ export class ProviderError extends ArtworkError {
   }
 }
 
-const WORKSPACE_ENV_ALLOWLIST = ['PATH', 'Path', 'SystemRoot', 'windir', 'TEMP', 'TMP', 'HOME', 'USERPROFILE', 'LANG', 'LC_ALL', 'ComSpec', 'PATHEXT'];
+const WORKSPACE_ENV_ALLOWLIST = [
+  'PATH', 'Path', 'SystemRoot', 'windir', 'TEMP', 'TMP', 'HOME', 'USERPROFILE',
+  'HOMEDRIVE', 'HOMEPATH', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMDATA', 'LANG', 'LC_ALL', 'ComSpec', 'PATHEXT',
+];
 
 /** A child process with no credentials, and no server secrets, in its environment. */
 function safeEnv() {
@@ -82,6 +85,16 @@ export class PiProvider {
     this.detected = null;
   }
 
+  /**
+   * How to start Pi. A Windows shim is a .cmd file, which a child process
+   * cannot start without a shell, so run the CLI entry with the same node.
+   */
+  #spawnSpec() {
+    const entry = this.config.provider.entry;
+    if (entry) return { command: process.execPath, prefix: [entry] };
+    return { command: this.config.provider.command, prefix: [] };
+  }
+
   /** Check the command without spending anything. */
   async detect() {
     if (this.detected) return this.detected;
@@ -110,7 +123,8 @@ export class PiProvider {
 
   #capture(args, { timeoutMs }) {
     return new Promise((resolve) => {
-      const child = spawn(this.config.provider.command, args, { env: safeEnv(), shell: false });
+      const spec = this.#spawnSpec();
+      const child = spawn(spec.command, [...spec.prefix, ...args], { env: safeEnv(), shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
       let stdout = '';
       let stderr = '';
       const timer = setTimeout(() => {
@@ -163,9 +177,10 @@ export class PiProvider {
       }
     }
 
-    const { providerName, thinking, authorTools } = this.config.provider;
+    const { providerName, thinking, authorThinking, authorTools } = this.config.provider;
     const args = ['--mode', 'json', '-p', '--provider', providerName, '--model', model ?? (kind === 'author' ? this.config.provider.authorModel : this.config.provider.model)];
-    if (thinking) args.push('--thinking', thinking);
+    const effort = kind === 'author' ? authorThinking : thinking;
+    if (effort) args.push('--thinking', effort);
     if (systemPrompt) args.push('--system-prompt', systemPrompt);
     if (kind === 'author') args.push('--tools', authorTools);
     else args.push('--no-tools');
@@ -175,7 +190,9 @@ export class PiProvider {
     args.push('--', ...images.map((image) => `@${image}`), prompt);
 
     const limit = timeoutMs ?? (kind === 'author' ? this.config.provider.sessionTimeoutMs : this.config.provider.judgeTimeoutMs);
-    const child = spawn(this.config.provider.command, args, { cwd, env: safeEnv(), shell: false });
+    const spec = this.#spawnSpec();
+    // stdin is closed at once: Pi must not wait for input that will never come.
+    const child = spawn(spec.command, [...spec.prefix, ...args], { cwd, env: safeEnv(), shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
 
     const events = [];
     let stdoutBuffer = '';
@@ -208,8 +225,17 @@ export class PiProvider {
           }
         }
       });
+      let stderrLines = 0;
       child.stderr.on('data', (chunk) => {
-        stderr += chunk;
+        const text = chunk.toString();
+        stderr += text;
+        // Pi reports retries and provider problems on stderr. Keep them visible.
+        for (const line of text.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          stderrLines++;
+          if (stderrLines <= 40) this.logger('warn', `pi ${kind} ${sessionId ?? ''}: ${truncate(trimmed, 200)}`);
+        }
       });
       child.on('error', (error) => {
         stderr += `\n${error.message}`;
@@ -235,15 +261,16 @@ export class PiProvider {
     }
 
     if (signal?.aborted) {
-      throw new ProviderError('session_cancelled', `The ${kind} session was cancelled`, { kind });
+      throw new ProviderError('session_cancelled', `The ${kind} session was cancelled`, { kind, usage });
     }
     if (cancelled) {
-      throw new ProviderError('session_timeout', `The ${kind} session passed its time limit of ${limit} ms`, { kind, limit, stderr: truncate(stderr, 1000) });
+      throw new ProviderError('session_timeout', `The ${kind} session passed its time limit of ${limit} ms`, { kind, limit, usage, stderr: truncate(stderr, 1000) });
     }
     if (exitCode !== 0) {
       throw new ProviderError('session_failed', `The ${kind} session exited with code ${exitCode}: ${truncate(stderr.trim() || 'no error text', 600)}`, {
         kind,
         exitCode,
+        usage,
         stderr: truncate(stderr, 2000),
       });
     }

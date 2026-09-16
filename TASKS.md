@@ -2,14 +2,15 @@
 
 ## Current state
 
-The system runs end to end on this machine. One evolution round authors three
-candidates, each writes new code, the controller validates and snapshots them,
-captures the parent and the candidates in a real headless browser, compares the
-images, and promotes a winner or keeps the parent.
+The system runs end to end with the REAL model. On 2026-09-16 the first paid
+round completed: three author sessions by `moonshotai/kimi-k3` each wrote new
+code, six captures were rendered in a real headless browser, and the vision
+judge promoted one candidate for 0.515 USD. The limit was 5.00 USD and the
+reserve was 2.06 USD.
 
-The judgments in `data/` come from the deterministic TEST DOUBLE, not from a
-model. No paid call has been made. Treat those selections as a demonstration of
-the machinery, not as aesthetic evidence.
+To spend money you must set `PHYGEN_ALLOW_SPEND=1` and `PHYGEN_DRIVER=pi`. A run
+made with `PHYGEN_DRIVER=fake` is marked `stub: true` in every comparison, and
+its verdicts are not evidence.
 
 ## Commands
 
@@ -51,6 +52,9 @@ node tools/pages-shot.mjs   # one image of every page
 | `PHYGEN_REQUIRE_ISOLATION` | `0` | `1` refuses source candidates without a container. |
 | `PHYGEN_CAPTURE` | `auto` | `local`, `docker`, or `auto`. |
 | `PHYGEN_BROWSER_EXECUTABLE` | unset | The Chromium path on a server. |
+| `PHYGEN_PI_ENTRY` | unset | The Pi CLI entry. Required on Windows, where the `pi` command is a .cmd shim. |
+| `PHYGEN_AUTHOR_THINKING` | `low` | Author effort. `minimal` is much faster. |
+| `PHYGEN_SESSION_TIMEOUT_MS` | `1800000` | Limit for one author session. |
 | `PHYGEN_CLEANUP_WORKSPACES` | `1` | Remove candidate workspaces when a run ends. |
 
 ## Layout
@@ -91,7 +95,7 @@ the Kilo catalog; provider usage is authoritative.
 
 ## Open risks
 
-- No model judged anything yet. Every verdict in `data/` is marked `stub: true`.
+- The Pi child process needs its standard input closed. An open pipe makes it wait forever. `server/src/providers/pi.mjs` sets this.
 - Source-code candidates run in the sandboxed artwork page, not in a container.
   Set `PHYGEN_REQUIRE_ISOLATION=1` on a server, and build the capture image
   (`server/docker/Dockerfile`) for the stronger boundary. The image is untested.
