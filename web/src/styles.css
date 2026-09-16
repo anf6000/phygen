@@ -833,9 +833,10 @@ button.primary:focus-visible {
   background: var(--panel);
 }
 
-.code-lines {
-  position: absolute;
-  inset: 0;
+.code-stream canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .code-line {
@@ -908,11 +909,13 @@ button.primary:focus-visible {
 /* ── A border that travels around the node being worked on ───────────────── */
 .node-runner {
   position: absolute;
-  inset: -1px;
-  width: calc(100% + 2px);
-  height: calc(100% + 2px);
+  /* 4px outside the node border: 1px border, 4px gap, and the stroke itself. */
+  inset: -6px;
+  width: auto;
+  height: auto;
   pointer-events: none;
   z-index: 2;
+  overflow: visible;
 }
 
 .node-runner rect {
@@ -978,10 +981,9 @@ button.primary:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .code-head,
-  .code-line,
+  /* The runner keeps moving: without it nothing shows what is being worked on.
+     The flashing effects stay off. */
   .judge-scan,
-  .node-runner rect,
   .edge-lineage,
   .edge-dashed {
     animation: none;
