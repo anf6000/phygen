@@ -421,6 +421,7 @@ export default function App() {
               activeKinds={activeKinds}
               liveFrames={liveFrames}
               decisions={freshDecisions}
+              agentRows={agentRows}
               follow={follow}
               onSelect={selectNode}
               onOpen={setViewerVersion}

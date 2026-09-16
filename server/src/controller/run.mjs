@@ -317,7 +317,8 @@ export class RunController {
       redirectAfter: this.config.evolution.unchangedRoundsBeforeRedirect,
     });
 
-    const authored = await mapLimit(plans, 1, async (plan) => {
+    // Several sessions at once: faster, and the tree shows them together.
+    const authored = await mapLimit(plans, Math.max(1, this.config.evolution.authorConcurrency), async (plan) => {
       // A pause must stop new paid work, not only new rounds.
       if (paused()) return { version: null, ok: false, paused: true };
       return this.#authorCandidate({ run, round, parent, plan });

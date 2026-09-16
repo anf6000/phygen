@@ -109,7 +109,7 @@ export function loadConfig(overrides = {}) {
       containerCpus: process.env.PHYGEN_CONTAINER_CPUS || '2',
       containerTimeoutMs: readNumber('PHYGEN_CONTAINER_TIMEOUT_MS', 900000),
       captureTimeoutMs: readNumber('PHYGEN_CAPTURE_TIMEOUT_MS', 300000),
-      captureConcurrency: readNumber('PHYGEN_CAPTURE_CONCURRENCY', 1),
+      captureConcurrency: readNumber('PHYGEN_CAPTURE_CONCURRENCY', 2),
     },
 
     safety: {
@@ -125,6 +125,8 @@ export function loadConfig(overrides = {}) {
     evolution: {
       // The number of children one version spawns at each level.
       variants: readNumber('PHYGEN_VARIANTS', 3),
+      // Several author sessions at once. More is faster, and the tree shows them.
+      authorConcurrency: readNumber('PHYGEN_AUTHOR_CONCURRENCY', 3),
       repairAttempts: readNumber('PHYGEN_REPAIR_ATTEMPTS', 1),
       unchangedRoundsBeforeRedirect: readNumber('PHYGEN_UNCHANGED_ROUNDS', 2),
       // The plan fixes the viewport and the seed count before the schedule.

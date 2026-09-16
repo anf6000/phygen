@@ -8,7 +8,10 @@ import {
   Handle,
   Position,
   ReactFlow,
+  getSmoothStepPath,
   type Edge,
+  type EdgeProps,
+  type EdgeTypes,
   type Node,
   type NodeProps,
   type NodeTypes,
@@ -16,7 +19,8 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import type { Decision, TreeEdge, TreeNode } from '../types';
+import type { AgentRow, Decision, TreeEdge, TreeNode } from '../types';
+import { CodeStream } from './CodeStream';
 
 const NODE_WIDTH = 260;
 const NODE_HEIGHT = 300;
@@ -35,6 +39,7 @@ interface NodeData extends Record<string, unknown> {
   activeKind: string | null;
   liveFrame: { url: string; stage: string; step: number } | null;
   decision: Decision | null;
+  rows: AgentRow[];
   onSelect: (id: string) => void;
   onOpen: (id: string) => void;
   onPlay: (id: string) => void;
@@ -92,7 +97,7 @@ function stageProgress(status: TreeNode['status']): { index: number; working: bo
 
 const VersionNode = memo(
   function VersionNode({ data, selected }: NodeProps) {
-    const { node, active, activeKind, liveFrame, decision, onSelect, onOpen, onPlay } = data as unknown as NodeData;
+    const { node, active, activeKind, liveFrame, decision, rows, onSelect, onOpen, onPlay } = data as unknown as NodeData;
     const { index, working } = stageProgress(node.status);
     const pending = working;
     const hasImage = !pending && node.status !== 'failed';
@@ -128,6 +133,11 @@ const VersionNode = memo(
         onClick={() => onSelect(node.id)}
       >
         <Handle type="target" position={Position.Top} />
+        {active ? (
+          <svg className="node-runner" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+            <rect x="1" y="1" width="98" height="98" pathLength={1} vectorEffect="non-scaling-stroke" />
+          </svg>
+        ) : null}
         <div className="vnode-media">
           {frame ? (
             <>
@@ -143,10 +153,11 @@ const VersionNode = memo(
               aria-label={`${node.title}: ${placeholderLabel(node, activeKind)}`}
               title={node.error?.message ?? placeholderLabel(node, activeKind)}
             >
-              <span className="vnode-placeholder-mark" aria-hidden="true" />
+              <CodeStream rows={rows} active={pending} />
               <span className="vnode-placeholder-text">{placeholderLabel(node, activeKind)}</span>
             </div>
           )}
+          {node.status === 'judging' && frame ? <span className="judge-scan" /> : null}
           {decision ? (
             <div className={`decision decision-${decision.outcome}`} role="status" title={decision.reason ?? ''}>
               {decision.outcome === 'winner' ? 'WINNER!' : 'YEETED!'}
@@ -220,7 +231,8 @@ const VersionNode = memo(
       before.onLineage === after.onLineage &&
       before.generation === after.generation &&
       before.evolution === after.evolution &&
-      before.variant === after.variant
+      before.variant === after.variant &&
+      beforeData.rows.length === afterData.rows.length
     );
   },
 );
@@ -254,7 +266,15 @@ function kindLabel(kind: string): string {
   return kind;
 }
 
+/** An edge that draws itself in: pathLength makes one dash value fit any path. */
+function GrowEdge({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, style, data }: EdgeProps) {
+  const [path] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+  const className = (data as { className?: string } | undefined)?.className ?? '';
+  return <path d={path} pathLength={1} className={className} style={style} fill="none" />;
+}
+
 const nodeTypes = { version: VersionNode } as unknown as NodeTypes;
+const edgeTypes = { grow: GrowEdge } as unknown as EdgeTypes;
 
 export function TreeView({
   nodes,
@@ -264,6 +284,7 @@ export function TreeView({
   activeKinds,
   liveFrames,
   decisions,
+  agentRows,
   follow,
   onSelect,
   onOpen,
@@ -276,6 +297,7 @@ export function TreeView({
   activeKinds: Record<string, string>;
   liveFrames: Record<string, { url: string; stage: string; step: number }>;
   decisions: Record<string, Decision>;
+  agentRows: AgentRow[];
   follow: boolean;
   onSelect: (id: string) => void;
   onOpen: (id: string) => void;
@@ -286,6 +308,15 @@ export function TreeView({
 
   const positions = useMemo(() => layoutTree(nodes), [nodes]);
   const activeSet = useMemo(() => new Set(activeVersionIds), [activeVersionIds]);
+  const rowsByVersion = useMemo(() => {
+    const grouped: Record<string, AgentRow[]> = {};
+    for (const row of agentRows) {
+      grouped[row.versionId] = grouped[row.versionId] ?? [];
+      grouped[row.versionId].push(row);
+    }
+    return grouped;
+  }, [agentRows]);
+  const rowsOf = useCallback((id: string) => rowsByVersion[id] ?? [], [rowsByVersion]);
 
   const flowNodes = useMemo<Node[]>(
     () =>
@@ -299,6 +330,7 @@ export function TreeView({
           activeKind: activeKinds[node.id] ?? null,
           liveFrame: liveFrames[node.id] ?? null,
           decision: decisions[node.id] ?? null,
+          rows: rowsOf(node.id),
           onSelect,
           onOpen,
           onPlay,
@@ -306,7 +338,7 @@ export function TreeView({
         selected: node.id === selected,
         style: { width: NODE_WIDTH },
       })),
-    [nodes, positions, selected, activeSet, activeKinds, liveFrames, decisions, onSelect, onOpen, onPlay],
+    [nodes, positions, selected, activeSet, activeKinds, liveFrames, decisions, rowsOf, onSelect, onOpen, onPlay],
   );
 
   const flowEdges = useMemo<Edge[]>(
@@ -315,11 +347,13 @@ export function TreeView({
         id: edge.id,
         source: edge.source,
         target: edge.target,
-        type: 'smoothstep',
+        type: 'grow',
         // The selected lineage is blue and solid: two cues, not colour alone.
+        // pathLength normalises the path, so one dash value draws any edge.
+        data: { className: edge.onLineage ? 'edge-lineage' : 'edge-dashed' },
         style: edge.onLineage
-          ? { stroke: '#000000', strokeWidth: 3 }
-          : { stroke: '#000000', strokeWidth: 1, strokeDasharray: '4 4' },
+          ? { stroke: '#000000', strokeWidth: 3, strokeDasharray: '1 0', strokeDashoffset: 1 }
+          : { stroke: '#000000', strokeWidth: 1, strokeDasharray: '0.012 0.012', strokeDashoffset: 1 },
         animated: false,
       })),
     [edges],
@@ -345,6 +379,7 @@ export function TreeView({
       nodes={flowNodes}
       edges={flowEdges}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
       onInit={(instance) => {
         flow.current = instance;
       }}
