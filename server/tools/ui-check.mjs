@@ -67,6 +67,20 @@ async function main() {
     await page.waitForSelector('.vnode', { timeout: 30000 });
     await page.waitForTimeout(4000);
 
+    // Every finished version must show its frame. A blank tile is a regression.
+    const images = await page.evaluate(() => {
+      const list = [...document.querySelectorAll('.vnode img')];
+      return {
+        total: list.length,
+        loaded: list.filter((image) => image.naturalWidth > 0).length,
+        broken: list.filter((image) => image.complete && image.naturalWidth === 0).length,
+        finished: [...document.querySelectorAll('.vnode.status-promoted, .vnode.status-rejected')].length,
+      };
+    });
+    console.log(`frames         ${images.loaded} loaded of ${images.total} image(s) for ${images.finished} finished node(s)`);
+    if (images.broken > 0) errors.push(`${images.broken} node image(s) did not load`);
+    if (images.finished > 0 && images.loaded === 0) errors.push('no finished node shows its frame');
+
     const nodes = page.locator('.vnode');
     const count = await nodes.count();
     if (count === 0) throw new Error('the tree is empty');

@@ -98,8 +98,18 @@ const VersionNode = memo(
     const hasImage = !pending && node.status !== 'failed';
     const done = TERMINAL.includes(node.status);
     // While a capture runs, the newest frame stands in for the thumbnail.
-    const frameUrl = liveFrame?.url ?? (pending ? node.latestCaptureUrl : null) ?? null;
-    const frame = frameUrl ? { url: frameUrl, stage: liveFrame?.stage ?? node.latestCaptureStage ?? '', step: liveFrame?.step ?? node.latestCaptureStep ?? 0 } : null;
+    // While the node works, the newest frame stands in for the thumbnail. A
+    // finished node keeps its stored thumbnail.
+    const liveUrl = liveFrame?.url ?? (pending ? node.latestCaptureUrl : null);
+    const imageUrl = liveUrl ?? (hasImage ? node.thumbnailUrl : null);
+    const frame = imageUrl
+      ? {
+          url: imageUrl,
+          stage: liveFrame?.stage ?? node.latestCaptureStage ?? '',
+          step: liveFrame?.step ?? node.latestCaptureStep ?? 0,
+          live: liveUrl !== null,
+        }
+      : null;
 
     return (
       <div
@@ -122,7 +132,9 @@ const VersionNode = memo(
           {frame ? (
             <>
               <img src={frame.url} alt={`${node.title}, frame ${frame.stage} at step ${frame.step}`} loading="lazy" />
-              <span className="live-chip">{pending ? `live · ${frame.stage} ${frame.step}` : `${frame.stage} ${frame.step}`}</span>
+              <span className="live-chip">
+                {frame.live ? `live · ${frame.stage} ${frame.step}` : `${frame.stage}${frame.step ? ` ${frame.step}` : ''}`}
+              </span>
             </>
           ) : (
             <div
