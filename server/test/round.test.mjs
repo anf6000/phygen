@@ -224,6 +224,42 @@ test('one round authors three candidates, captures, judges, and records the outc
   assert.equal(store.listUsage(run.id).length, 6);
 });
 
+test('a run that branches from a version makes children of that version', async (t) => {
+  const { store, controller, run, artwork, rootVersion } = await setup(t);
+  await controller.start(run.id);
+
+  const firstRound = store.listRounds(run.id).filter((round) => round.round === 1)[0];
+  assert.equal(firstRound.promoted, true, 'the first round must promote a candidate for this test');
+  const parent = store.getVersion(firstRound.winnerVersionId);
+  assert.equal(parent.generation, 1);
+
+  // a second run that starts from the promoted version
+  const branched = store.createRun({
+    artworkId: artwork.id,
+    rootVersionId: parent.id,
+    direction: 'evolve the winner further',
+    evolutionsRequested: 1,
+    limitUsd: 100,
+    protocol: {},
+    costBoundUsd: 100,
+  });
+  await controller.start(branched.id);
+
+  const secondRound = store.listRounds(branched.id).filter((round) => round.round === 1)[0];
+  assert.equal(secondRound.candidateIds.length, 3);
+  for (const candidateId of secondRound.candidateIds) {
+    const candidate = store.getVersion(candidateId);
+    assert.equal(candidate.parentId, parent.id, 'the child points at the branched version');
+    assert.equal(candidate.generation, parent.generation + 1, 'the child is one generation deeper');
+  }
+
+  const tree = store.listVersions(artwork.id);
+  const grandchildren = tree.filter((version) => version.parentId === parent.id);
+  assert.equal(grandchildren.length, 3);
+  assert.ok(grandchildren.every((version) => version.runId === branched.id));
+  assert.ok(rootVersion.generation === 0);
+});
+
 test('a run keeps the parent when nothing can be captured', async (t) => {
   const { store, controller, run, artwork, rootVersion } = await setup(t);
   controller.capture = {

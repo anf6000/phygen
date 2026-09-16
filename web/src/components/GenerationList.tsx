@@ -4,12 +4,15 @@ import type { TreeNode } from '../types';
 export function GenerationList({
   nodes,
   selected,
+  activeVersionIds,
   onSelect,
 }: {
   nodes: TreeNode[];
   selected: string | null;
+  activeVersionIds: string[];
   onSelect: (id: string) => void;
 }) {
+  const active = new Set(activeVersionIds);
   const ordered = [...nodes].sort((a, b) => b.generation - a.generation || a.createdAt.localeCompare(b.createdAt));
   return (
     <ol className="genlist">
@@ -23,6 +26,7 @@ export function GenerationList({
                 gen {node.generation} · {node.status}
                 {node.onLineage ? ' · lineage' : ''}
               </span>
+              {active.has(node.id) ? <span className="active-chip">working now</span> : null}
             </span>
           </button>
         </li>

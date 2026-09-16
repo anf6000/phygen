@@ -218,7 +218,29 @@ export function buildApp({ store, events, budget, controller, capture, provider,
     const edges = versions
       .filter((version) => version.parentId)
       .map((version) => ({ id: `e_${version.id}`, source: version.parentId, target: version.id, onLineage: version.onLineage }));
-    return { artwork, nodes, edges };
+
+    // The interface needs to know which versions a worker holds right now, so it
+    // can show a progress bar and a leader on the active nodes.
+    const runs = store.listRuns(20).filter((run) => run.artworkId === artwork.id);
+    const activeRun = runs.find((run) => ['queued', 'running', 'paused', 'stopping'].includes(run.state)) ?? null;
+    const activeVersionIds = [];
+    const activeKinds = {};
+    for (const run of runs) {
+      for (const job of store.listJobs(run.id)) {
+        if (job.state !== 'running' || !job.versionId) continue;
+        activeVersionIds.push(job.versionId);
+        activeKinds[job.versionId] = job.kind;
+      }
+    }
+
+    return {
+      artwork,
+      nodes,
+      edges,
+      activeRunId: activeRun?.id ?? null,
+      activeVersionIds: [...new Set(activeVersionIds)],
+      activeKinds,
+    };
   });
 
   // ── versions ──────────────────────────────────────────────────────────────

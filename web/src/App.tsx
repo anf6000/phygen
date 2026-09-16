@@ -15,6 +15,10 @@ export default function App() {
   const [tree, setTree] = useState<Tree | null>(null);
   const [run, setRun] = useState<RunDetail | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  // The version a new run starts from. Selecting a node sets it, so the tree
+  // grows under the version the person is looking at.
+  const [branchFrom, setBranchFrom] = useState<string | null>(null);
+  const [follow, setFollow] = useState(true);
   const [viewerVersion, setViewerVersion] = useState<string | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
   const [direction, setDirection] = useState(DEFAULT_DIRECTION);
@@ -145,6 +149,7 @@ export default function App() {
     try {
       const created = await api.startRun({
         artworkId,
+        branchFromVersionId: branchFrom ?? undefined,
         direction,
         evolutions,
         spendingLimitUsd: limitUsd,
@@ -174,8 +179,17 @@ export default function App() {
   const running = run ? ['queued', 'running', 'paused', 'stopping'].includes(run.run.state) : false;
   const nodes = tree?.nodes ?? [];
   const selectedNode = useMemo(() => nodes.find((node) => node.id === selected) ?? null, [nodes, selected]);
+  const branchNode = useMemo(() => nodes.find((node) => node.id === branchFrom) ?? null, [nodes, branchFrom]);
+  const activeVersionIds = tree?.activeVersionIds ?? [];
+  const activeKinds = tree?.activeKinds ?? {};
   const playingNode = useMemo(() => nodes.find((node) => node.id === playing) ?? null, [nodes, playing]);
   const visionModels = models?.models.filter((model) => model.acceptsImages) ?? [];
+
+  /** Selecting a version also aims the next run at it. */
+  const selectNode = useCallback((id: string) => {
+    setSelected(id);
+    setBranchFrom(id);
+  }, []);
 
   return (
     <div className="app">
@@ -265,6 +279,18 @@ export default function App() {
             </button>
           </div>
         </form>
+        <p className="branch-row muted">
+          new run starts from:
+          <span className="branch-chip">{branchNode ? branchNode.title : 'the root version'}</span>
+          {branchNode ? (
+            <button type="button" onClick={() => setBranchFrom(null)} title="Start from the root version instead">
+              clear
+            </button>
+          ) : null}
+          <label className="follow-toggle">
+            <input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} /> follow the active node
+          </label>
+        </p>
         <p className="estimate muted" aria-live="polite">
           {estimate ? describeEstimate(estimate) : 'The estimate is not available yet.'}
         </p>
@@ -289,13 +315,29 @@ export default function App() {
       <main className="main">
         <section className="tree" aria-label="Version tree">
           {narrow ? (
-            <GenerationList nodes={nodes} selected={selected} onSelect={setSelected} />
+            <GenerationList nodes={nodes} selected={selected} activeVersionIds={activeVersionIds} onSelect={selectNode} />
           ) : (
-            <TreeView nodes={nodes} edges={tree?.edges ?? []} selected={selected} onSelect={setSelected} onOpen={setViewerVersion} onPlay={setPlaying} />
+            <TreeView
+              nodes={nodes}
+              edges={tree?.edges ?? []}
+              selected={selected}
+              activeVersionIds={activeVersionIds}
+              activeKinds={activeKinds}
+              follow={follow}
+              onSelect={selectNode}
+              onOpen={setViewerVersion}
+              onPlay={setPlaying}
+            />
           )}
         </section>
         <aside className="panel" aria-label="Version detail">
-          <DetailPanel version={selectedNode} onOpenViewer={setViewerVersion} onPlay={(id) => setPlaying(id)} active={Boolean(running)} />
+          <DetailPanel
+            version={selectedNode}
+            onOpenViewer={setViewerVersion}
+            onPlay={(id) => setPlaying(id)}
+            onBranch={selectNode}
+            active={Boolean(running)}
+          />
         </aside>
       </main>
 

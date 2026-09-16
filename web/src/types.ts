@@ -54,6 +54,9 @@ export interface Tree {
   artwork: Artwork;
   nodes: TreeNode[];
   edges: TreeEdge[];
+  activeRunId: string | null;
+  activeVersionIds: string[];
+  activeKinds: Record<string, string>;
 }
 
 export interface Capture {

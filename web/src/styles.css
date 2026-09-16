@@ -601,3 +601,70 @@ button.primary:focus-visible {
     animation: none;
   }
 }
+
+/* ── Progress leader and branch target ───────────────────────────────────── */
+.branch-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 8px 0 0;
+}
+
+.branch-chip {
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: 1px 6px;
+}
+
+.follow-toggle {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-left: auto;
+}
+
+.vnode-steps {
+  display: flex;
+  gap: 2px;
+}
+
+.vnode-step {
+  flex: 1;
+  height: 4px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.vnode-step.is-passed {
+  background: var(--ink);
+}
+
+.vnode-step.is-current {
+  background: var(--accent);
+  border-color: var(--accent);
+  animation: blink 900ms steps(2, end) infinite;
+}
+
+.vnode-step.is-done {
+  background: var(--ink);
+}
+
+.vnode.is-active {
+  border-color: var(--accent);
+  outline: 1px solid var(--accent);
+}
+
+.active-chip {
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: 1px 6px;
+  animation: blink 900ms steps(2, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vnode-step.is-current,
+  .active-chip {
+    animation: none;
+  }
+}

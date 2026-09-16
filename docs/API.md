@@ -74,7 +74,23 @@ server.
 The server validates the package first. A rejected package returns HTTP 400 with
 `{ "error": { "code": "package_invalid", "message": "…", "problems": ["…"] } }`.
 
-`GET /api/artworks/:artworkId/tree` → `{ "artwork": Artwork, "nodes": [Node], "edges": [Edge] }`
+`GET /api/artworks/:artworkId/tree` →
+
+```json
+{
+  "artwork": Artwork,
+  "nodes": [Node],
+  "edges": [Edge],
+  "activeRunId": "run_9c1a",
+  "activeVersionIds": ["ver_0004"],
+  "activeKinds": { "ver_0004": "capture" }
+}
+```
+
+`activeRunId` names the run that is queued, running, paused, or stopping.
+`activeVersionIds` lists the versions a worker holds at this moment, and
+`activeKinds` gives the job kind for each. The interface uses them for the
+progress bar and the active-node leader. Both are empty when nothing runs.
 
 `Node` — one artwork version. The tree is laid out left to right by generation.
 

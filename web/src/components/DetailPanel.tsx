@@ -7,11 +7,13 @@ export function DetailPanel({
   version,
   onOpenViewer,
   onPlay,
+  onBranch,
   active,
 }: {
   version: TreeNode | null;
   onOpenViewer: (id: string) => void;
   onPlay: (id: string) => void;
+  onBranch: (id: string) => void;
   active: boolean;
 }) {
   const [detail, setDetail] = useState<VersionDetail | null>(null);
@@ -59,6 +61,9 @@ export function DetailPanel({
           source {version.sourceHash.slice(0, 16)}…
         </p>
         <div className="row">
+          <button type="button" onClick={() => onBranch(version.id)}>
+            Evolve from here
+          </button>
           <button type="button" onClick={() => onOpenViewer(version.id)}>
             Open frames
           </button>
