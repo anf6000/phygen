@@ -27,6 +27,10 @@ const NODE_HEIGHT = 300;
 const COLUMN_GAP = 32;
 const ROW_GAP = 110;
 const PITCH = NODE_WIDTH + COLUMN_GAP;
+/** Never show the tree smaller than this: below it a node is a speck. */
+const MIN_READABLE_ZOOM = 0.35;
+/** The zoom the view keeps while it follows the work. */
+const FOLLOW_ZOOM = 0.75;
 const ROW_PITCH = NODE_HEIGHT + ROW_GAP;
 
 /** The stages a candidate passes through, in order. */
@@ -380,10 +384,8 @@ export function TreeView({
     if (!instance) return;
     const first = positions.get(activeVersionIds[0]);
     if (!first) return;
-    instance.setCenter(first.x + NODE_WIDTH / 2, first.y + NODE_HEIGHT / 2, {
-      zoom: instance.getZoom(),
-      duration: 300,
-    });
+    const zoom = Math.max(instance.getZoom(), FOLLOW_ZOOM);
+    instance.setCenter(first.x + NODE_WIDTH / 2, first.y + NODE_HEIGHT / 2, { zoom, duration: 300 });
   }, [activeKey, follow, activeVersionIds, positions]);
 
   const handleSelect = useCallback((id: string) => onSelect(id), [onSelect]);
@@ -399,7 +401,7 @@ export function TreeView({
       }}
       onNodeClick={(_, node) => handleSelect(node.id)}
       fitView
-      fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
+      fitViewOptions={{ padding: 0.15, maxZoom: 1, minZoom: MIN_READABLE_ZOOM }}
       minZoom={0.1}
       maxZoom={2}
       proOptions={{ hideAttribution: true }}
