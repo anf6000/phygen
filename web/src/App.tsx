@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { RequestError, api, useRunEvents } from './api';
-import type { CostEstimate, Health, ModelList, RunDetail, Tree } from './types';
+import type { AgentRow, CostEstimate, Decision, Health, ModelList, RunDetail, Tree } from './types';
 import { TreeView } from './components/TreeView';
 import { GenerationList } from './components/GenerationList';
 import { DetailPanel } from './components/DetailPanel';
@@ -32,6 +32,47 @@ export default function App() {
   const runId = run?.run.id ?? null;
 
   const stream = useRunEvents(runId);
+
+  // The agent feed, the newest frame of each version, and the decisions, all
+  // derived from the event stream so one source drives every animation.
+  const agentRows = useMemo(
+    () => stream.events.filter((event) => event.type === 'agent').map((event) => ({ seq: event.seq, ...(event.payload as unknown as Omit<AgentRow, 'seq'>) })),
+    [stream.events],
+  );
+  const liveFrames = useMemo(() => {
+    const frames: Record<string, { url: string; stage: string; step: number }> = {};
+    for (const event of stream.events) {
+      if (event.type !== 'capture.ready') continue;
+      const payload = event.payload as { versionId?: string; url?: string; stage?: string; step?: number };
+      if (!payload.versionId || !payload.url) continue;
+      frames[payload.versionId] = { url: payload.url, stage: payload.stage ?? '', step: payload.step ?? 0 };
+    }
+    return frames;
+  }, [stream.events]);
+  const decisions = useMemo(() => {
+    const found: Record<string, Decision & { at: number }> = {};
+    for (const event of stream.events) {
+      if (event.type !== 'version.decision') continue;
+      const payload = event.payload as unknown as Decision;
+      if (!payload.versionId) continue;
+      found[payload.versionId] = { ...payload, at: Date.parse(event.at) || Date.now() };
+    }
+    return found;
+  }, [stream.events]);
+
+  const [clock, setClock] = useState(Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 400);
+    return () => window.clearInterval(timer);
+  }, []);
+  // A decision shows for a few seconds, then the tree goes quiet again.
+  const freshDecisions = useMemo(() => {
+    const shown: Record<string, Decision> = {};
+    for (const [versionId, decision] of Object.entries(decisions)) {
+      if (clock - decision.at < 6000) shown[versionId] = decision;
+    }
+    return shown;
+  }, [decisions, clock]);
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 760px)');
@@ -366,6 +407,8 @@ export default function App() {
               selected={selected}
               activeVersionIds={activeVersionIds}
               activeKinds={activeKinds}
+              liveFrames={liveFrames}
+              decisions={freshDecisions}
               follow={follow}
               onSelect={selectNode}
               onOpen={setViewerVersion}
@@ -379,6 +422,7 @@ export default function App() {
             onOpenViewer={setViewerVersion}
             onPlay={(id) => setPlaying(id)}
             isParent={parentVersionId === selectedNode?.id}
+            agentRows={agentRows.filter((row) => row.versionId === selectedNode?.id)}
             active={Boolean(running)}
           />
         </aside>

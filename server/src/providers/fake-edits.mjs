@@ -87,6 +87,6 @@ export async function applySourceRecipe({ workspaceDir, slot }) {
   const next = recipe.apply(source);
   if (!next || next === source) return null;
   await writeFile(path, next, 'utf8');
-  return { file: recipe.file, note: recipe.note };
+  return { file: recipe.file, note: recipe.note, before: source, after: next };
 }
 

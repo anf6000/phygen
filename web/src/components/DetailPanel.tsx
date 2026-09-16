@@ -1,23 +1,47 @@
 import { useEffect, useState } from 'react';
 
 import { RequestError, api } from '../api';
-import type { TreeNode, VersionDetail } from '../types';
+import type { AgentRow, TreeNode, VersionDetail } from '../types';
 
 export function DetailPanel({
   version,
   onOpenViewer,
   onPlay,
   isParent,
+  agentRows,
   active,
 }: {
   version: TreeNode | null;
   onOpenViewer: (id: string) => void;
   onPlay: (id: string) => void;
   isParent: boolean;
+  agentRows: AgentRow[];
   active: boolean;
 }) {
   const [detail, setDetail] = useState<VersionDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<AgentRow[]>([]);
+
+  // The stored feed of the selected version, so an older version still shows
+  // how it was made.
+  useEffect(() => {
+    if (!version) {
+      setHistory([]);
+      return undefined;
+    }
+    let cancelled = false;
+    api
+      .agentFeed(version.id)
+      .then((result) => {
+        if (!cancelled) setHistory(result.rows);
+      })
+      .catch(() => {
+        if (!cancelled) setHistory([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [version]);
 
   useEffect(() => {
     if (!version) {
@@ -47,6 +71,30 @@ export function DetailPanel({
   }, [version, active]);
 
   if (!version) return <p className="muted">Select a version in the tree.</p>;
+
+  // The stored rows and the live rows together: the newest sequence wins.
+  const feed = (() => {
+    const bySeq = new Map<number, AgentRow>();
+    for (const row of history) bySeq.set(row.seq, row);
+    for (const row of agentRows) bySeq.set(row.seq, row);
+    return [...bySeq.values()].sort((a, b) => a.seq - b.seq);
+  })();
+
+  // The feed: one row per tool call, and a running total of the change.
+  const toolRows = feed.filter((row) => row.kind === 'tool' && row.state === 'start');
+  const turns = feed.filter((row) => row.kind === 'turn');
+  const totals = toolRows.reduce(
+    (sum, row) => ({
+      added: sum.added + (row.added ?? 0),
+      removed: sum.removed + (row.removed ?? 0),
+      edits: sum.edits + (row.edits ?? 0),
+      writes: sum.writes + (row.writes ?? 0),
+    }),
+    { added: 0, removed: 0, edits: 0, writes: 0 },
+  );
+  const tokens = turns.reduce((sum, row) => sum + (row.tokens ?? 0), 0);
+  const lastText = feed.filter((row) => row.kind === 'text').slice(-1)[0]?.text ?? '';
+  const peak = Math.max(1, ...toolRows.slice(-24).map((row) => (row.added ?? 0) + (row.removed ?? 0)));
 
   return (
     <div className="detail">
@@ -88,6 +136,50 @@ export function DetailPanel({
               <p className="explanation">{detail.explanation}</p>
             </section>
           ) : null}
+
+          <section className="agent">
+            <h3>Agent at work</h3>
+            {toolRows.length === 0 && turns.length === 0 ? (
+              <p className="muted">No session activity yet for this version.</p>
+            ) : (
+              <>
+                <p className="agent-totals">
+                  <span className="diff-add">+{totals.added}</span> <span className="diff-del">−{totals.removed}</span>
+                  <span className="muted">
+                    {' '}
+                    · {totals.edits} edit(s) · {totals.writes} write(s) · {turns.length} turn(s)
+                    {tokens > 0 ? ` · ${tokens} tokens` : ''}
+                  </span>
+                </p>
+                {/* One bar per tool call: the size of the change it made. */}
+                <div className="agent-bars" aria-hidden="true">
+                  {toolRows.slice(-24).map((row) => (
+                    <span
+                      key={`bar-${row.seq}`}
+                      className={`agent-bar ${row.tool === 'write' ? 'is-write' : ''}`}
+                      style={{ height: `${Math.max(6, Math.round((((row.added ?? 0) + (row.removed ?? 0)) / peak) * 48))}px` }}
+                    />
+                  ))}
+                </div>
+                <ol className="agent-feed">
+                  {toolRows
+                    .slice(-40)
+                    .reverse()
+                    .map((row) => (
+                      <li key={`row-${row.seq}`}>
+                        <code>{row.tool}</code> <span className="agent-path">{row.path ?? ''}</span>
+                        {(row.added ?? 0) > 0 || (row.removed ?? 0) > 0 ? (
+                          <span className="agent-delta">
+                            <span className="diff-add">+{row.added ?? 0}</span> <span className="diff-del">−{row.removed ?? 0}</span>
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                </ol>
+                {lastText ? <p className="agent-text">{lastText}</p> : null}
+              </>
+            )}
+          </section>
 
           <section>
             <h3>Source changes</h3>

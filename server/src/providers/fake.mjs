@@ -11,6 +11,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { minimalEdit } from '../controller/agent-events.mjs';
 import { applySourceRecipe } from './fake-edits.mjs';
 
 export const FAKE_MARKER = 'stub-test-double';
@@ -58,7 +59,14 @@ export class FakeProvider {
    * Edit the candidate workspace the way an author session would.
    * The controller reads the result from the files, never from this text.
    */
-  async author({ workspaceDir, plan, direction, round, slot, parentConfig, seedKey }) {
+  async author({ workspaceDir, plan, direction, round, slot, parentConfig, seedKey, onEvent = null }) {
+    // The test double reports the same event shape as the real driver, so the
+    // interface feed works without a paid session.
+    const report = (toolName, args) => {
+      if (!onEvent) return;
+      onEvent({ type: 'tool_execution_start', toolName, args });
+      onEvent({ type: 'tool_execution_end', toolName, isError: false, result: { content: [{ type: 'text', text: 'ok' }] } });
+    };
     const random = rngFrom(`${seedKey}|${round}|${slot}|${direction}|${plan?.kind ?? 'refinement'}`);
     const configPath = join(workspaceDir, 'config.json');
     const configuration = JSON.parse(await readFile(configPath, 'utf8'));
@@ -93,7 +101,10 @@ export class FakeProvider {
     configuration.gamma = Math.max(0.05, Math.min(8, configuration.gamma));
     configuration.dpr = 1;
 
-    await writeFile(configPath, `${JSON.stringify(configuration, null, 2)}\n`, 'utf8');
+    const configBefore = await readFile(configPath, 'utf8');
+    const configAfter = `${JSON.stringify(configuration, null, 2)}\n`;
+    await writeFile(configPath, configAfter, 'utf8');
+    report('edit', { path: configPath, edits: [minimalEdit(configBefore, configAfter)] });
 
     let sourceNote = '';
     const wantsSource = plan?.touchesSource !== false;
@@ -101,6 +112,7 @@ export class FakeProvider {
       const applied = await applySourceRecipe({ workspaceDir, slot: kind });
       if (applied) {
         sourceNote = `\nChanged ${applied.file}: ${applied.note}`;
+        report('edit', { path: join(workspaceDir, applied.file), edits: [minimalEdit(applied.before, applied.after)] });
       } else {
         sourceNote = '\nNo source recipe matched, so this candidate changes parameters only.';
       }

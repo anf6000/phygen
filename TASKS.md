@@ -73,6 +73,22 @@ node tools/pages-shot.mjs   # one image of every page
 | `PHYGEN_SESSION_TIMEOUT_MS` | `1800000` | Limit for one author session. |
 | `PHYGEN_CLEANUP_WORKSPACES` | `1` | Remove candidate workspaces when a run ends. |
 
+## Live work visualisation
+
+The interface shows what a session does while it works. The source is the Pi
+JSON event stream: `tool_execution_start` carries the tool name and its
+arguments, so an `edit` gives the changed text and a `write` gives the
+content, `tool_execution_end` says whether it failed, `message_update` gives
+the assistant text as it arrives, and `turn_end` gives the tokens and cost.
+
+The controller maps those events to `agent` rows on the run stream, and stores
+them in the `events` table. `GET /api/versions/:versionId/agent` returns the
+stored feed of one version, so a finished version still shows how it was made.
+A version created before this feature has no feed history.
+
+The node shows the newest captured frame while a capture runs, and a decision
+badge (WINNER! or YEETED!) appears over the nodes when the round ends.
+
 ## Layout
 
 - `runtime/` — the shared artwork contract, the schema validator, the strict

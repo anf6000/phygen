@@ -37,6 +37,10 @@ export interface TreeNode {
   status: VersionStatus;
   direction: string | null;
   thumbnailUrl: string;
+  /** The frame the capture wrote last, while the node is still working. */
+  latestCaptureUrl: string | null;
+  latestCaptureStage: string | null;
+  latestCaptureStep: number | null;
   livePath: string;
   liveUrl: string;
   sourceHash: string;
@@ -158,6 +162,26 @@ export interface RunDetail {
   comparisons: Comparison[];
   active: boolean;
 }
+
+/** One row of the agent feed. */
+export interface AgentRow {
+  seq: number;
+  versionId: string;
+  kind: 'tool' | 'text' | 'turn';
+  state?: 'start' | 'end';
+  tool?: string | null;
+  path?: string | null;
+  added?: number;
+  removed?: number;
+  edits?: number;
+  writes?: number;
+  ok?: boolean;
+  text?: string;
+  tokens?: number;
+  costUsd?: number;
+}
+
+export type Decision = { versionId: string; outcome: 'winner' | 'yeeted'; reason?: string };
 
 export interface ProgressEvent {
   seq: number;

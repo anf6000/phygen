@@ -33,6 +33,7 @@ import {
   JudgeError,
 } from '../judge/protocol.mjs';
 import { AUTHOR_SYSTEM_PROMPT, buildAuthorPrompt, buildRepairPrompt } from './prompts.mjs';
+import { feedRows } from './agent-events.mjs';
 import { planRound } from './plan.mjs';
 
 const CAPTURE_TIMESTEP = 8;
@@ -497,6 +498,22 @@ export class RunController {
 
   // ── authoring ─────────────────────────────────────────────────────────────
 
+  /** Map the session events of one version to feed rows on the run stream. */
+  #agentReporter(runId, versionId) {
+    let lastTextAt = 0;
+    return (event) => {
+      for (const row of feedRows(event, versionId)) {
+        if (row.kind === 'text') {
+          // The text arrives token by token. Keep the ticker readable.
+          const now = Date.now();
+          if (now - lastTextAt < 500) continue;
+          lastTextAt = now;
+        }
+        this.#emit(runId, 'agent', row);
+      }
+    };
+  }
+
   async #authorCandidate({ run, round, parent, plan }) {
     const context = this.#artworkContext(run.artworkId);
     const versionId = newId('ver');
@@ -544,6 +561,7 @@ export class RunController {
               prompt,
               systemPrompt: AUTHOR_SYSTEM_PROMPT,
               model: run.protocol?.authorModel,
+              onEvent: this.#agentReporter(run.id, versionId),
               sessionId,
               signal,
               plan,
@@ -646,6 +664,7 @@ export class RunController {
               workspaceDir,
               prompt: buildRepairPrompt({ failure }),
               model: run.protocol?.authorModel,
+              onEvent: this.#agentReporter(run.id, versionId),
               systemPrompt: AUTHOR_SYSTEM_PROMPT,
               sessionId: `phygen-${versionId}`,
               signal,
@@ -716,7 +735,15 @@ export class RunController {
             consoleErrors: result.consoleErrors,
           },
         });
-        this.#emit(run.id, 'capture.ready', { versionId: version.id, captureId: record.id, stage: record.stage, url: `/api/captures/${record.id}.png` });
+        // The node shows the newest frame while the capture continues.
+        this.#emit(run.id, 'capture.ready', {
+          versionId: version.id,
+          captureId: record.id,
+          stage: record.stage,
+          step: record.step,
+          seed: record.seed,
+          url: `/api/captures/${record.id}.png`,
+        });
       }
       return results;
     });
@@ -1059,6 +1086,8 @@ export class RunController {
     const status = transition('version', version.status, 'promoted');
     const updated = this.store.updateVersion(versionId, { status, onLineage: true });
     this.#emit(version.runId, 'version.state', { versionId, status, detail: reason, onLineage: true });
+    // The interface announces the decision over the node.
+    this.#emit(version.runId, 'version.decision', { versionId, outcome: 'winner', reason });
     return updated;
   }
 
@@ -1068,6 +1097,7 @@ export class RunController {
     const status = transition('version', version.status, 'rejected');
     const updated = this.store.updateVersion(versionId, { status, onLineage: false });
     this.#emit(version.runId, 'version.state', { versionId, status, detail: reason, onLineage: false });
+    this.#emit(version.runId, 'version.decision', { versionId, outcome: 'yeeted', reason });
     return updated;
   }
 

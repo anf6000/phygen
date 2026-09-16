@@ -161,7 +161,7 @@ export class PiProvider {
    * @param {AbortSignal} [options.signal]
    * @returns {Promise<{text: string, sessionId: string|null, usage: object, events: object[], exitCode: number, stderr: string}>}
    */
-  async run({ kind, prompt, images = [], cwd, sessionId, model, timeoutMs, signal, systemPrompt }) {
+  async run({ kind, prompt, images = [], cwd, sessionId, model, timeoutMs, signal, systemPrompt, onEvent = null }) {
     if (!this.config.provider.allowSpend) {
       throw new ProviderError(
         'spend_not_allowed',
@@ -218,10 +218,19 @@ export class PiProvider {
         for (const line of lines) {
           const trimmed = line.trim();
           if (!trimmed) continue;
+          let parsedLine = null;
           try {
-            events.push(JSON.parse(trimmed));
+            parsedLine = JSON.parse(trimmed);
           } catch {
-            events.push({ type: 'raw', text: truncate(trimmed, 400) });
+            parsedLine = { type: 'raw', text: truncate(trimmed, 400) };
+          }
+          events.push(parsedLine);
+          if (onEvent) {
+            try {
+              onEvent(parsedLine);
+            } catch {
+              // a broken listener must not stop the session
+            }
           }
         }
       });
@@ -289,8 +298,8 @@ export class PiProvider {
   }
 
   /** One author session inside a candidate workspace. It has file tools only. */
-  async author({ workspaceDir, prompt, systemPrompt, sessionId, signal, model }) {
-    return this.run({ kind: 'author', prompt, cwd: workspaceDir, sessionId, systemPrompt, signal, model });
+  async author({ workspaceDir, prompt, systemPrompt, sessionId, signal, model, onEvent }) {
+    return this.run({ kind: 'author', prompt, cwd: workspaceDir, sessionId, systemPrompt, signal, model, onEvent });
   }
 
   /** One judge session. It has no tools, no source, and no version identity. */

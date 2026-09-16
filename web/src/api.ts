@@ -1,7 +1,7 @@
 // Thin API client and the event stream hook.
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { ApiError, CostEstimate, Health, ModelList, ProgressEvent, Run, RunDetail, Tree, VersionDetail } from './types';
+import type { AgentRow, ApiError, CostEstimate, Health, ModelList, ProgressEvent, Run, RunDetail, Tree, VersionDetail } from './types';
 
 export class RequestError extends Error {
   readonly code: string;
@@ -43,6 +43,7 @@ export const api = {
     request<{ artwork: { id: string } }>('/api/artworks/import', { method: 'POST', body: JSON.stringify({ packagePath }) }),
   tree: (artworkId: string) => request<Tree>(`/api/artworks/${artworkId}/tree`),
   version: (versionId: string) => request<VersionDetail>(`/api/versions/${versionId}`),
+  agentFeed: (versionId: string) => request<{ rows: AgentRow[] }>(`/api/versions/${versionId}/agent`),
   estimate: (evolutions: number, model?: string, authorModel?: string, variants?: number) =>
     request<CostEstimate>(
       `/api/cost-estimate?evolutions=${evolutions}${variants ? `&variants=${variants}` : ''}${model ? `&model=${encodeURIComponent(model)}` : ''}${authorModel ? `&authorModel=${encodeURIComponent(authorModel)}` : ''}`,

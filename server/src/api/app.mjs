@@ -208,9 +208,10 @@ export function buildApp({ store, events, budget, controller, capture, provider,
     if (!artwork) return fail(reply, 'artwork_not_found', `No artwork ${request.params.artworkId}`);
     const versions = store.listVersions(artwork.id);
     const variantOf = variantIndexMap(store, artwork.id);
+    const latestCapture = store.latestCaptureByArtwork(artwork.id);
     const usageByVersion = store.usageCostByArtwork(artwork.id);
     const nodes = versions.map((version) => ({
-      ...publicVersion(version, variantOf.get(version.id) ?? null),
+      ...publicVersion(version, variantOf.get(version.id) ?? null, latestCapture.get(version.id) ?? null),
       liveUrl: artifacts.liveUrlFor(version.id),
       onLineage: version.onLineage,
       usageUsd: round6(usageByVersion.get(version.id) ?? 0),
@@ -302,8 +303,23 @@ export function buildApp({ store, events, budget, controller, capture, provider,
     };
   });
 
-  app.get('/api/versions/:versionId/artifacts/:name', async (request, reply) => {
+  // The agent feed of one version, read from the stored events, so it survives a
+  // reload and works for a version whose run has long finished.
+  app.get('/api/versions/:versionId/agent', async (request, reply) => {
     const version = store.getVersion(request.params.versionId);
+    if (!version) return fail(reply, 'version_not_found', `No version ${request.params.versionId}`);
+    const runs = version.runId ? [version.runId] : store.listRuns(200).filter((run) => run.artworkId === version.artworkId).map((run) => run.id);
+    const rows = [];
+    for (const runId of runs) {
+      for (const event of store.listEventsByType(runId, 'agent')) {
+        if (event.payload?.versionId !== version.id) continue;
+        rows.push({ seq: event.seq, at: event.at, ...event.payload });
+      }
+    }
+    return { rows: rows.slice(-200) };
+  });
+
+  app.get('/api/versions/:versionId/artifacts/:name', async (request, reply) => {    const version = store.getVersion(request.params.versionId);
     if (!version) return fail(reply, 'version_not_found', `No version ${request.params.versionId}`);
     const captures = store.listCaptures(version.id);
     if (captures.length === 0) return fail(reply, 'capture_not_found', 'This version has no capture yet');
@@ -561,7 +577,7 @@ export function buildApp({ store, events, budget, controller, capture, provider,
   return app;
 }
 
-function publicVersion(version, variant = null) {
+function publicVersion(version, variant = null, newestCapture = null) {
   return {
     id: version.id,
     parentId: version.parentId,
@@ -573,6 +589,10 @@ function publicVersion(version, variant = null) {
     status: version.status,
     direction: version.direction,
     thumbnailUrl: `/api/versions/${version.id}/artifacts/thumb`,
+    // The frame the capture wrote last, so a node can show work in progress.
+    latestCaptureUrl: newestCapture ? `/api/captures/${newestCapture.id}.png` : null,
+    latestCaptureStage: newestCapture ? newestCapture.stage : null,
+    latestCaptureStep: newestCapture ? newestCapture.step : null,
     livePath: `/live/${version.id}`,
     sourceHash: version.sourceHash,
     createdAt: version.createdAt,

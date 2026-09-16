@@ -617,6 +617,22 @@ export class Store {
     return row ? captureFromRow(row) : null;
   }
 
+  /** The newest capture of every version of an artwork. One query. */
+  latestCaptureByArtwork(artworkId) {
+    const rows = this.db
+      .prepare(
+        `SELECT c.id, c.version_id, c.stage, c.step, c.seed, c.created_at
+         FROM captures c
+         JOIN versions v ON v.id = c.version_id
+         WHERE v.artwork_id = ?
+         ORDER BY c.created_at`,
+      )
+      .all(artworkId);
+    const newest = new Map();
+    for (const row of rows) newest.set(row.version_id, row);
+    return newest;
+  }
+
   // ── comparisons and evaluations ───────────────────────────────────────────
   createComparison(comparison) {
     const record = {
@@ -771,6 +787,20 @@ export class Store {
       .prepare('INSERT INTO events (run_id, seq, type, at, payload_json) VALUES (?, ?, ?, ?, ?)')
       .run(runId, seq, type, at, json(payload));
     return { seq, type, at, runId, payload };
+  }
+
+  /** Stored events of one type, oldest first. */
+  listEventsByType(runId, type, limit = 2000) {
+    return this.db
+      .prepare('SELECT * FROM events WHERE run_id = ? AND type = ? ORDER BY seq LIMIT ?')
+      .all(runId, type, limit)
+      .map((row) => ({
+        seq: row.seq,
+        type: row.type,
+        at: row.at,
+        runId: row.run_id,
+        payload: parseJson(row.payload_json, {}),
+      }));
   }
 
   listEvents(runId, sinceSeq = 0, limit = 500) {

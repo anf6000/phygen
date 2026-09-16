@@ -673,3 +673,154 @@ button.primary:focus-visible {
   color: var(--ink);
   padding: 1px 6px;
 }
+
+/* ── The agent at work, the live frame, and the decision ─────────────────── */
+.vnode-media {
+  position: relative;
+}
+
+.live-chip {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--accent);
+  padding: 0 4px;
+  animation: blink 700ms steps(2, end) infinite;
+}
+
+.decision {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid var(--ink);
+  background: var(--panel);
+  animation: slam 120ms steps(3, end) 1 both;
+  letter-spacing: 0.06em;
+}
+
+.decision-winner {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-size: 44px;
+}
+
+.decision-yeeted {
+  font-size: 22px;
+}
+
+@keyframes slam {
+  from {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.agent-totals {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  margin: 0 0 6px;
+}
+
+.diff-add {
+  color: var(--ink);
+}
+
+.diff-del {
+  color: var(--muted);
+}
+
+.agent-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 48px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 6px;
+}
+
+.agent-bar {
+  flex: 1;
+  min-width: 3px;
+  background: var(--ink);
+  animation: bar-in 140ms steps(2, end) 1 both;
+}
+
+.agent-bar.is-write {
+  background: var(--accent);
+}
+
+@keyframes bar-in {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+.agent-feed {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+
+.agent-feed li {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  border-bottom: 1px solid var(--line);
+  padding: 2px 0;
+  animation: row-in 120ms steps(2, end) 1 both;
+}
+
+.agent-feed code {
+  color: var(--accent);
+}
+
+.agent-path {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-delta {
+  margin-left: auto;
+}
+
+.agent-text {
+  margin: 6px 0 0;
+  color: var(--muted);
+  max-height: 4.4em;
+  overflow: hidden;
+}
+
+@keyframes row-in {
+  from {
+    transform: translateX(-6px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .decision,
+  .agent-bar,
+  .agent-feed li,
+  .live-chip {
+    animation: none;
+  }
+}

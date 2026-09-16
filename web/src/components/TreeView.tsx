@@ -16,7 +16,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import type { TreeEdge, TreeNode } from '../types';
+import type { Decision, TreeEdge, TreeNode } from '../types';
 
 const NODE_WIDTH = 260;
 const NODE_HEIGHT = 300;
@@ -33,6 +33,8 @@ interface NodeData extends Record<string, unknown> {
   node: TreeNode;
   active: boolean;
   activeKind: string | null;
+  liveFrame: { url: string; stage: string; step: number } | null;
+  decision: Decision | null;
   onSelect: (id: string) => void;
   onOpen: (id: string) => void;
   onPlay: (id: string) => void;
@@ -90,11 +92,14 @@ function stageProgress(status: TreeNode['status']): { index: number; working: bo
 
 const VersionNode = memo(
   function VersionNode({ data, selected }: NodeProps) {
-    const { node, active, activeKind, onSelect, onOpen, onPlay } = data as unknown as NodeData;
+    const { node, active, activeKind, liveFrame, decision, onSelect, onOpen, onPlay } = data as unknown as NodeData;
     const { index, working } = stageProgress(node.status);
     const pending = working;
     const hasImage = !pending && node.status !== 'failed';
     const done = TERMINAL.includes(node.status);
+    // While a capture runs, the newest frame stands in for the thumbnail.
+    const frameUrl = liveFrame?.url ?? (pending ? node.latestCaptureUrl : null) ?? null;
+    const frame = frameUrl ? { url: frameUrl, stage: liveFrame?.stage ?? node.latestCaptureStage ?? '', step: liveFrame?.step ?? node.latestCaptureStep ?? 0 } : null;
 
     return (
       <div
@@ -114,8 +119,11 @@ const VersionNode = memo(
       >
         <Handle type="target" position={Position.Top} />
         <div className="vnode-media">
-          {hasImage ? (
-            <img src={node.thumbnailUrl} alt={`${node.title}, first captured frame`} loading="lazy" />
+          {frame ? (
+            <>
+              <img src={frame.url} alt={`${node.title}, frame ${frame.stage} at step ${frame.step}`} loading="lazy" />
+              <span className="live-chip">{pending ? `live · ${frame.stage} ${frame.step}` : `${frame.stage} ${frame.step}`}</span>
+            </>
           ) : (
             <div
               className={`vnode-placeholder ${pending ? 'is-pending' : 'is-failed'}`}
@@ -127,6 +135,11 @@ const VersionNode = memo(
               <span className="vnode-placeholder-text">{placeholderLabel(node, activeKind)}</span>
             </div>
           )}
+          {decision ? (
+            <div className={`decision decision-${decision.outcome}`} role="status" title={decision.reason ?? ''}>
+              {decision.outcome === 'winner' ? 'WINNER!' : 'YEETED!'}
+            </div>
+          ) : null}
         </div>
 
         {/* A five-step leader: one cell per stage of the pipeline. */}
@@ -237,6 +250,8 @@ export function TreeView({
   selected,
   activeVersionIds,
   activeKinds,
+  liveFrames,
+  decisions,
   follow,
   onSelect,
   onOpen,
@@ -247,6 +262,8 @@ export function TreeView({
   selected: string | null;
   activeVersionIds: string[];
   activeKinds: Record<string, string>;
+  liveFrames: Record<string, { url: string; stage: string; step: number }>;
+  decisions: Record<string, Decision>;
   follow: boolean;
   onSelect: (id: string) => void;
   onOpen: (id: string) => void;
@@ -268,6 +285,8 @@ export function TreeView({
           node,
           active: activeSet.has(node.id),
           activeKind: activeKinds[node.id] ?? null,
+          liveFrame: liveFrames[node.id] ?? null,
+          decision: decisions[node.id] ?? null,
           onSelect,
           onOpen,
           onPlay,
@@ -275,7 +294,7 @@ export function TreeView({
         selected: node.id === selected,
         style: { width: NODE_WIDTH },
       })),
-    [nodes, positions, selected, activeSet, activeKinds, onSelect, onOpen, onPlay],
+    [nodes, positions, selected, activeSet, activeKinds, liveFrames, decisions, onSelect, onOpen, onPlay],
   );
 
   const flowEdges = useMemo<Edge[]>(
