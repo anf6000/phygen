@@ -43,6 +43,11 @@ export class FakeProvider {
     this.logger = logger;
   }
 
+  /** The test double needs no provider, so its catalog always answers. */
+  async probe() {
+    return { ok: true, status: 200, detail: 'the deterministic test double' };
+  }
+
   async detect() {
     return {
       driver: 'fake',

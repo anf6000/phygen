@@ -78,6 +78,12 @@ function textFromMessage(message) {
     .join('');
 }
 
+function sleepMs(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 export class PiProvider {
   constructor({ config, logger = () => {} }) {
     this.config = config;
@@ -93,6 +99,29 @@ export class PiProvider {
     const entry = this.config.provider.entry;
     if (entry) return { command: process.execPath, prefix: [entry] };
     return { command: this.config.provider.command, prefix: [] };
+  }
+
+  /**
+   * Check that the provider catalog answers. The extension fetches its model
+   * list as the session starts and keeps it in memory only, so a failed fetch
+   * there leaves no provider at all. This check costs nothing.
+   */
+  async probe({ attempts = 3, timeoutMs = 30000 } = {}) {
+    const url = `${String(this.config.models?.baseUrl ?? 'https://api.kilo.ai').replace(/\/$/, '')}/api/gateway/models`;
+    let last = { ok: false, status: 0, detail: 'not tried' };
+    // The gateway stalls now and then: a request can hang with no answer while
+    // the next one is immediate. Try again before calling it unavailable.
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        const response = await fetch(url, { headers: { 'user-agent': 'phygen' }, signal: AbortSignal.timeout(timeoutMs) });
+        if (response.ok) return { ok: true, status: response.status, detail: `${response.status} from ${url}`, attempt };
+        last = { ok: false, status: response.status, detail: `${response.status} from ${url}`, attempt };
+      } catch (error) {
+        last = { ok: false, status: 0, detail: String(error?.message ?? error), attempt };
+      }
+      if (attempt < attempts) await sleepMs(1500 * attempt);
+    }
+    return last;
   }
 
   /** Check the command without spending anything. */

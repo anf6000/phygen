@@ -239,6 +239,22 @@ export class RunController {
         }
         return;
       }
+      // A provider that is unavailable is not the fault of the work. Pause the
+      // run so a person can resume it when the provider answers again, instead
+      // of failing the job and losing the remaining evolutions.
+      if (error?.code === 'provider_unavailable') {
+        const current = this.store.getRun(runId);
+        if (!['stopped', 'completed', 'failed'].includes(current.state)) {
+          const paused = this.#setRunState(runId, 'paused', { stopReason: 'provider_unavailable' });
+          this.#emit(runId, 'log', {
+            level: 'warn',
+            message: `The run paused because the provider did not answer: ${error.message} Resume it when the provider is back.`,
+          });
+          this.logger('warn', `Run ${runId} paused: ${error.message}`);
+          void paused;
+        }
+        return;
+      }
       await this.#failRun(runId, error);
     }
   }
@@ -310,6 +326,16 @@ export class RunController {
       });
     }
     const paused = () => Boolean(this.active.get(run.id)?.paused);
+
+    // The provider extension fetches its model list as a session starts and
+    // keeps it in memory only: a failed fetch there leaves no provider at all.
+    // Check the catalog before a level spends anything.
+    if (typeof this.provider.probe === 'function') {
+      const health = await this.provider.probe();
+      if (!health.ok) {
+        throw new ArtworkError('provider_unavailable', `The provider catalog did not answer: ${health.detail}`, { probe: health });
+      }
+    }
     const variants = run.protocol?.variantsPerEvolution ?? this.config.evolution.variants;
     const plans = planRound({
       level: round,
@@ -662,7 +688,19 @@ export class RunController {
             message: `The author session failed before it started (${error.code}): ${truncate(error.message, 200)}. One more try in 20 seconds.`,
           });
           await sleep(20000);
-          result = await attemptCall(2);
+          try {
+            result = await attemptCall(2);
+          } catch (retry) {
+            if (!isTransientProviderError(retry)) throw retry;
+            // The extension keeps its model list in memory only, so a slow
+            // gateway needs patience rather than another dead candidate.
+            this.#emit(run.id, 'log', {
+              level: 'warn',
+              message: 'The provider failed a second time. One last try in 60 seconds.',
+            });
+            await sleep(60000);
+            result = await attemptCall(3);
+          }
         }
         this.store.updateVersion(versionId, { explanation: truncate(result.text, 4000) });
         this.#emit(run.id, 'version.state', { versionId, status: 'authoring', detail: `author session ${result.sessionId ?? 'unknown'} finished` });

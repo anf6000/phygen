@@ -326,6 +326,31 @@ test('a run keeps the parent when nothing can be captured', async (t) => {
   );
 });
 
+test('a provider that cannot answer pauses the run instead of failing it', async (t) => {
+  const { store, controller, run } = await setup(t);
+  // A provider whose catalog does not answer, like a gateway error at startup.
+  controller.provider = {
+    async probe() {
+      return { ok: false, status: 503, detail: '503 from the catalog' };
+    },
+    async author() {
+      throw new Error('the author session must not start');
+    },
+    async judge() {
+      throw new Error('the judge session must not start');
+    },
+  };
+
+  await controller.start(run.id);
+
+  const paused = store.getRun(run.id);
+  assert.equal(paused.state, 'paused', 'the run waits for the provider');
+  assert.equal(paused.stopReason, 'provider_unavailable');
+  assert.equal(paused.evolutionsDone, 0, 'no evolution was spent');
+  const jobs = store.listJobs(run.id);
+  assert.equal(jobs.filter((job) => job.kind === 'author').length, 0, 'no author session started');
+});
+
 test('a stop request ends the run without new rounds', async (t) => {
   const { store, controller, run } = await setup(t, { evolutions: 3 });
   const loop = controller.start(run.id);
