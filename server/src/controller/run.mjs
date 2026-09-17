@@ -22,6 +22,7 @@ import { mapLimit, newId, nowIso, sha256Hex, sleep, stableStringify, truncate, u
 import { canTransition, isTerminal, transition } from '../state.mjs';
 import { copyPackage, publishSnapshot, reviewEdits } from '../artwork/workspace.mjs';
 import { assertSourceMode, decideSourceMode, isLocalHost } from '../capture/index.mjs';
+import { isTransientProviderError } from '../providers/index.mjs';
 import { extractJson } from '../providers/json.mjs';
 import {
   JUDGE_SYSTEM_PROMPT,
@@ -333,6 +334,16 @@ export class RunController {
     }
 
     if (candidates.length === 0) {
+      const failures = authored.map((entry) => entry.error).filter(Boolean);
+      // A provider that is down fails every session. Stop the run instead of
+      // spending the remaining evolutions on the same fault.
+      if (failures.length > 0 && failures.every((error) => isTransientProviderError(error))) {
+        throw new ArtworkError(
+          'provider_unavailable',
+          `Every variant failed before it started: ${truncate(failures[0].message, 300)}`,
+          { failures: failures.length, round },
+        );
+      }
       this.#emit(run.id, 'run.round', { round, phase: 'author', detail: 'no candidate survived authoring' });
       return { promoted: false, winnerVersionId: parent.id, candidateIds, note: 'All candidates failed a technical check. The parent stays.' };
     }
@@ -610,32 +621,49 @@ export class RunController {
           parentConfiguration: parent.configuration,
         });
         const sessionId = `phygen-${versionId}`;
-        const result = await this.#providerCall({
-          run,
-          kind: 'author',
-          label: `author:${versionId}`,
-          versionId,
-          jobId: job.id,
-          call: (signal) =>
-            this.provider.author({
-              workspaceDir,
-              prompt,
-              systemPrompt: AUTHOR_SYSTEM_PROMPT,
-              model: run.protocol?.authorModel,
-              onEvent: (event) => {
-                agent(event);
-                files.onEvent(event);
-              },
-              sessionId,
-              signal,
-              plan,
-              direction: run.direction,
-              round,
-              slot: plan.slot,
-              parentConfig: parent.configuration,
-              seedKey: run.id,
-            }),
-        });
+        const attemptCall = (attempt) =>
+          this.#providerCall({
+            run,
+            kind: 'author',
+            label: attempt === 1 ? `author:${versionId}` : `author-retry:${versionId}`,
+            versionId,
+            jobId: job.id,
+            call: (signal) =>
+              this.provider.author({
+                workspaceDir,
+                prompt,
+                systemPrompt: AUTHOR_SYSTEM_PROMPT,
+                model: run.protocol?.authorModel,
+                onEvent: (event) => {
+                  agent(event);
+                  files.onEvent(event);
+                },
+                sessionId,
+                signal,
+                plan,
+                direction: run.direction,
+                round,
+                slot: plan.slot,
+                parentConfig: parent.configuration,
+                seedKey: run.id,
+              }),
+          });
+
+        // A gateway error while the session starts is worth one more try: the
+        // provider extension fetches its catalog as the process starts, and a
+        // 500 there fails the session before any work happens.
+        let result;
+        try {
+          result = await attemptCall(1);
+        } catch (error) {
+          if (!isTransientProviderError(error)) throw error;
+          this.#emit(run.id, 'log', {
+            level: 'warn',
+            message: `The author session failed before it started (${error.code}): ${truncate(error.message, 200)}. One more try in 20 seconds.`,
+          });
+          await sleep(20000);
+          result = await attemptCall(2);
+        }
         this.store.updateVersion(versionId, { explanation: truncate(result.text, 4000) });
         this.#emit(run.id, 'version.state', { versionId, status: 'authoring', detail: `author session ${result.sessionId ?? 'unknown'} finished` });
       });
@@ -669,7 +697,7 @@ export class RunController {
       return { version: this.store.getVersion(versionId), ok: true };
     } catch (error) {
       this.#failVersion(versionId, error);
-      return { version: this.store.getVersion(versionId), ok: false };
+      return { version: this.store.getVersion(versionId), ok: false, error };
     }
   }
 

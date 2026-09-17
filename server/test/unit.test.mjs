@@ -9,6 +9,7 @@ import { Store } from '../src/db.mjs';
 import { EventBus } from '../src/events.mjs';
 import { Budget, BudgetError } from '../src/budget.mjs';
 import { canTransition, transition } from '../src/state.mjs';
+import { isTransientProviderError } from '../src/providers/index.mjs';
 import { extractJson } from '../src/providers/json.mjs';
 import { lineStats, reviewEdits } from '../src/artwork/workspace.mjs';
 import { assignLabels, decideWinner, validateVerdict } from '../src/judge/protocol.mjs';
@@ -191,6 +192,23 @@ test('a json object is found inside prose and a code fence', () => {
   assert.deepEqual(extractJson('{"a":"}"}'), { a: '}' });
   assert.equal(extractJson('no object here'), null);
   assert.equal(extractJson(''), null);
+});
+
+test('a fault that a second try can clear is recognised', () => {
+  const transient = [
+    new Error('[kilo] Failed to fetch models at startup: 500 Internal Server Error'),
+    new Error('Error: Unknown provider "kilo"'),
+    new Error('connect ECONNRESET 127.0.0.1:443'),
+    new Error('socket hang up'),
+  ];
+  for (const error of transient) assert.equal(isTransientProviderError(error), true, error.message);
+  const permanent = [
+    new Error('The workspace has no src directory'),
+    new Error('exit code 2: the model refused the task'),
+    new Error('ENOENT: no such file or directory, open package.json'),
+  ];
+  for (const error of permanent) assert.equal(isTransientProviderError(error), false, error.message);
+  assert.equal(isTransientProviderError({ code: 'session_timeout' }), true);
 });
 
 test('records survive a store reopen', async (t) => {

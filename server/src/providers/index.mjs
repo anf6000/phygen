@@ -49,3 +49,15 @@ function describeReason(detection) {
   if (!detection.allowSpend) return 'spending is not allowed';
   return 'unknown';
 }
+
+/** A provider fault that a second try can clear: a gateway error, a dropped
+ *  connection, or a catalog fetch that failed while the session started. */
+export function isTransientProviderError(error) {
+  const text = `${error?.message ?? ''} ${error?.details?.stderr ?? ''}`;
+  if (/Failed to fetch models/i.test(text)) return true;
+  if (/Unknown provider/i.test(text)) return true;
+  if (/\b5\d\d\b/.test(text)) return true;
+  if (/ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up/i.test(text)) return true;
+  if (error?.code === 'session_timeout') return true;
+  return false;
+}
