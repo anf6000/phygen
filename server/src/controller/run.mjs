@@ -20,6 +20,7 @@ import { checkPackage, walkPackage } from '../../../runtime/node/package-checks.
 
 import { mapLimit, newId, nowIso, sha256Hex, sleep, stableStringify, truncate, unique } from '../util.mjs';
 import { canTransition, isTerminal, transition } from '../state.mjs';
+import { BudgetError } from '../budget.mjs';
 import { copyPackage, publishSnapshot, reviewEdits } from '../artwork/workspace.mjs';
 import { assertSourceMode, decideSourceMode, isLocalHost } from '../capture/index.mjs';
 import { isTransientProviderError } from '../providers/index.mjs';
@@ -41,6 +42,44 @@ import { planRound } from './plan.mjs';
 const CAPTURE_TIMESTEP = 8;
 const LEASE_MS = 120000;
 
+/** A limit that stops admission. These end the run; they do not fail a candidate. */
+const BUDGET_STOP_CODES = new Set(['budget_exceeded', 'request_limit_reached', 'token_limit_reached', 'round_limit_reached', 'time_limit_reached']);
+
+/**
+ * A failure that happened before the provider accepted a request. It cannot
+ * have been billed, so the round may keep the parent and continue.
+ */
+const PRE_REQUEST_CODES = new Set(['spend_not_allowed', 'image_missing', 'cancelled', 'session_cancelled', 'aborted', 'provider_disabled']);
+
+export function isBudgetStop(error) {
+  return error instanceof BudgetError || (error?.code !== undefined && BUDGET_STOP_CODES.has(error.code));
+}
+
+/** A stored capture, in the shape the capture backend returns. */
+function asCaptureResult(capture) {
+  return {
+    id: capture.id,
+    stage: capture.stage,
+    seed: capture.seed,
+    step: capture.step,
+    width: capture.width,
+    height: capture.height,
+    dpr: capture.dpr,
+    rendererBackend: capture.rendererBackend,
+    sourceHash: capture.sourceHash,
+    configurationHash: capture.configurationHash,
+    timestep: capture.meta?.timestep ?? CAPTURE_TIMESTEP,
+    path: capture.path,
+    url: capture.meta?.url ?? `/api/captures/${capture.id}.png`,
+    fps: capture.meta?.fps ?? null,
+    iteration: capture.meta?.iteration ?? capture.step,
+    trailChecksum: capture.meta?.trailChecksum ?? null,
+    agentChecksum: capture.meta?.agentChecksum ?? null,
+    consoleErrors: capture.meta?.consoleErrors ?? [],
+    reused: true,
+  };
+}
+
 export class RunController {
   constructor({ store, events, budget, capture, provider, config, artifacts, logger = () => {} }) {
     this.store = store;
@@ -58,6 +97,33 @@ export class RunController {
 
   isActive(runId) {
     return this.active.has(runId);
+  }
+
+  /** True when the run is stopping or has been aborted. */
+  #stopping(runId) {
+    const context = this.active.get(runId);
+    return Boolean(context && (context.stopping || context.abort.signal.aborted));
+  }
+
+  /**
+   * A delay that Stop interrupts at once. A Stop during a retry delay must
+   * never be followed by another paid session.
+   */
+  async #abortableDelay(runId, ms) {
+    if (this.#stopping(runId)) throw new ArtworkError('cancelled', 'The run stopped during a retry delay');
+    const signal = this.active.get(runId)?.abort.signal;
+    if (!signal) return sleep(ms);
+    await new Promise((resolve, reject) => {
+      const onAbort = () => {
+        clearTimeout(timer);
+        reject(new ArtworkError('cancelled', 'The run stopped during a retry delay'));
+      };
+      const timer = setTimeout(() => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
   }
 
   // ── lifecycle ─────────────────────────────────────────────────────────────
@@ -190,12 +256,34 @@ export class RunController {
           return;
         }
 
+        // A configured limit stops admission. It must not consume an evolution
+        // and it must not look like a candidate fault.
+        this.budget.assertRunLimits(run);
+
         const round = run.evolutionsDone + 1;
         const parent = this.#lineageHead(run);
         this.#emit(runId, 'run.round', { round, phase: 'author', parentVersionId: parent.id });
         this.logger('info', `Run ${runId} round ${round}: parent ${parent.id}`);
 
         const outcome = await this.#runRound({ run, round, parent });
+
+        // An interrupted round is recorded, but it does not consume an
+        // evolution: Resume continues the same round from what is durable.
+        if (outcome.interrupted) {
+          this.store.upsertRound({
+            runId,
+            round,
+            parentVersionId: parent.id,
+            candidateIds: outcome.candidateIds ?? [],
+            winnerVersionId: null,
+            promoted: false,
+            note: outcome.note,
+          });
+          this.#emit(runId, 'run.round', { round, phase: 'interrupted', note: outcome.note, candidateIds: outcome.candidateIds ?? [] });
+          this.logger('info', `Run ${runId} round ${round} was interrupted: ${outcome.note}`);
+          continue;
+        }
+
         const state = this.store.getRun(runId);
         const next = this.store.updateRun(runId, {
           evolutionsDone: state.evolutionsDone + 1,
@@ -239,6 +327,25 @@ export class RunController {
         }
         return;
       }
+      // A configured limit stopped admission. Stop the run with the exact
+      // reason and keep the remaining evolutions unused.
+      if (isBudgetStop(error)) {
+        const current = this.store.getRun(runId);
+        if (!['stopped', 'completed', 'failed'].includes(current.state)) {
+          const stopped = this.#setRunState(runId, 'stopped', { stopReason: error.code, finishedAt: nowIso() });
+          this.#emit(runId, 'error', { code: error.code, message: error.message, detail: { ...(error.details ?? {}), budgetStop: true } });
+          this.#emit(runId, 'run.completed', {
+            state: stopped.state,
+            stopReason: error.code,
+            evolutionsDone: stopped.evolutionsDone,
+            detail: error.message,
+          });
+          this.#terminateVersions(runId, `The run stopped at a configured limit: ${error.message}`);
+          await this.#cleanupRun(runId);
+        }
+        this.logger('warn', `Run ${runId} stopped at a configured limit (${error.code}): ${error.message}`);
+        return;
+      }
       // A provider that is unavailable is not the fault of the work. Pause the
       // run so a person can resume it when the provider answers again, instead
       // of failing the job and losing the remaining evolutions.
@@ -277,8 +384,7 @@ export class RunController {
   }
 
   /** A finished run keeps its records, but not its temporary directories. */
-  async #cleanupRun(runId) {
-    if (!this.config.evolution.cleanupWorkspaces) return;
+  async #cleanupRun(runId) {    if (!this.config.evolution.cleanupWorkspaces) return;
     for (const dir of [join(this.config.dataDir, 'workspaces', runId), join(this.config.dataDir, 'judge', runId)]) {
       await rm(dir, { recursive: true, force: true }).catch(() => {});
     }
@@ -305,6 +411,16 @@ export class RunController {
     const rounds = this.store.listRounds(run.id).filter((round) => round.promoted && round.winnerVersionId);
     if (rounds.length === 0) return this.store.getVersion(run.rootVersionId);
     return this.store.getVersion(rounds[rounds.length - 1].winnerVersionId);
+  }
+
+  /** The versions of one run whose snapshot publish job completed. */
+  #publishedVersionIds(runId) {
+    return new Set(
+      this.store
+        .listJobs(runId)
+        .filter((job) => job.kind === 'publish' && job.state === 'done' && job.versionId)
+        .map((job) => job.versionId),
+    );
   }
 
   // ── one round ─────────────────────────────────────────────────────────────
@@ -345,18 +461,60 @@ export class RunController {
       redirectAfter: this.config.evolution.unchangedRoundsBeforeRedirect,
     });
 
+    // A resumed round reuses the candidates an interrupted attempt already
+    // published. A published snapshot is immutable, so capture and judging
+    // continue from it without repeating a paid author session.
+    const publishedBefore = this.#publishedVersionIds(run.id);
+    const prior = this.store
+      .listVersions(run.artworkId)
+      .filter(
+        (version) =>
+          version.runId === run.id &&
+          version.round === round &&
+          publishedBefore.has(version.id) &&
+          !['failed', 'rejected'].includes(version.status),
+      );
+    const coveredSlots = new Set(prior.map((version) => version.slot));
+    const pendingPlans = plans.filter((plan) => !coveredSlots.has(plan.slot));
+    if (prior.length > 0) {
+      this.#emit(run.id, 'run.round', {
+        round,
+        phase: 'author',
+        detail: `reusing ${prior.length} candidate(s) that this run already published`,
+      });
+    }
+
     // Several sessions at once: faster, and the tree shows them together.
-    const authored = await mapLimit(plans, Math.max(1, this.config.evolution.authorConcurrency), async (plan) => {
+    const authored = await mapLimit(pendingPlans, Math.max(1, this.config.evolution.authorConcurrency), async (plan) => {
       // A pause must stop new paid work, not only new rounds.
       if (paused()) return { version: null, ok: false, paused: true };
       return this.#authorCandidate({ run, round, parent, plan });
     });
-    const candidates = authored.filter((entry) => entry.version && entry.ok);
-    const candidateIds = authored.map((entry) => entry.version?.id).filter(Boolean);
+    const reused = prior.map((version) => ({ version, ok: true }));
+    const attempts = [...reused, ...authored];
+    const candidates = attempts.filter((entry) => entry.version && entry.ok);
+    const candidateIds = attempts.map((entry) => entry.version?.id).filter(Boolean);
+
+    // An interrupt must not reject work that a resume will reuse. A candidate
+    // without a published snapshot is parked, so it cannot linger in a running
+    // state; Resume authors that slot again. The publish jobs are read again
+    // here, because the authoring above just created them.
+    const parkUnpublished = () => {
+      const published = this.#publishedVersionIds(run.id);
+      for (const id of candidateIds) {
+        if (published.has(id)) continue;
+        const version = this.store.getVersion(id);
+        if (!version || ['failed', 'rejected', 'promoted'].includes(version.status)) continue;
+        this.#failVersion(
+          id,
+          new ArtworkError('interrupted_by_pause', 'The run was paused before this variant was published. Resume authors it again.'),
+        );
+      }
+    };
 
     if (paused()) {
-      this.#rejectOtherCandidates(candidates.map((entry) => entry.version), null, 'The run was paused during authoring.');
-      return { promoted: false, winnerVersionId: parent.id, candidateIds, note: 'The run was paused during authoring, so the parent stays.' };
+      parkUnpublished();
+      return { interrupted: true, promoted: false, winnerVersionId: parent.id, candidateIds, note: 'The run was paused during authoring, so the parent stays.' };
     }
 
     if (candidates.length === 0) {
@@ -419,7 +577,17 @@ export class RunController {
       kind: 'round',
     });
     if (roundVerdict === null) {
+      // The comparison failed, so the work stops here. Close the candidate
+      // states instead of leaving them marked as judging.
+      this.#rejectOtherCandidates(candidates.map((entry) => entry.version), null, 'The round comparison failed.');
       return { promoted: false, winnerVersionId: parent.id, candidateIds, note: 'The round comparison failed, so the parent stays.' };
+    }
+
+    // Pause stops admission here: the round comparison is durable, so a resume
+    // reuses it instead of paying for it again.
+    if (paused()) {
+      parkUnpublished();
+      return { interrupted: true, promoted: false, winnerVersionId: parent.id, candidateIds, note: 'The run was paused after the round comparison, so the parent stays.' };
     }
 
     const finalistVersionId = roundVerdict.winnerVersionId;
@@ -471,11 +639,12 @@ export class RunController {
       referenceVersionId: parent.id,
     });
     if (primary === null) {
+      this.#rejectOtherCandidates(candidates.map((entry) => entry.version), null, 'The finalist comparison failed.');
       return { promoted: false, winnerVersionId: parent.id, candidateIds, note: 'The finalist comparison failed, so the parent stays.' };
     }
     if (paused()) {
-      this.#rejectOtherCandidates(candidates.map((entry) => entry.version), null, 'The run was paused during judging.');
-      return { promoted: false, winnerVersionId: parent.id, candidateIds, note: 'The run was paused during judging, so the parent stays.' };
+      parkUnpublished();
+      return { interrupted: true, promoted: false, winnerVersionId: parent.id, candidateIds, note: 'The run was paused during judging, so the parent stays.' };
     }
 
     const reversedComparison = await this.#judgeOrRetain({
@@ -489,12 +658,13 @@ export class RunController {
       referenceVersionId: parent.id,
       reversed: true,
     });
+    // A required reversed comparison that did not complete is not agreement.
+    // Never accept the primary judgment alone, and never spend a tie-break on it.
+    const reversedFailed = reversedComparison === null;
 
     let tieBreak = null;
-    const first = primary.winnerVersionId;
-    const second = reversedComparison?.winnerVersionId ?? null;
     const tieBreakEnabled = this.#protocol(run).tieBreak;
-    if (tieBreakEnabled && !verdictsAgree(primary, reversedComparison)) {
+    if (tieBreakEnabled && !reversedFailed && !verdictsAgree(primary, reversedComparison)) {
       this.#emit(run.id, 'run.round', { round, phase: 'judge', detail: 'the two comparisons disagree, so one tie-break runs' });
       tieBreak = await this.#judgeOrRetain({
         run,
@@ -508,16 +678,17 @@ export class RunController {
         tieBreak: true,
       });
     }
-    void first;
-    void second;
 
-    const decision = decideWinner({
+    const decided = decideWinner({
       primary,
       reversed: reversedComparison,
       tieBreak,
       parentVersionId: parent.id,
       promoteMargin: this.config.evolution.promoteMargin,
     });
+    const decision = reversedFailed
+      ? { winnerVersionId: parent.id, promoted: false, usedTieBreak: false, reason: 'The reversed comparison did not complete, so the parent stays.' }
+      : decided;
 
     if (!decision.promoted) {
       this.#rejectVersion(finalist.id, decision.reason);
@@ -690,23 +861,23 @@ export class RunController {
         try {
           result = await attemptCall(1);
         } catch (error) {
-          if (!isTransientProviderError(error)) throw error;
+          if (isBudgetStop(error) || !isTransientProviderError(error)) throw error;
           this.#emit(run.id, 'log', {
             level: 'warn',
             message: `The author session failed before it started (${error.code}): ${truncate(error.message, 200)}. One more try in 20 seconds.`,
           });
-          await sleep(20000);
+          await this.#abortableDelay(run.id, 20000);
           try {
             result = await attemptCall(2);
           } catch (retry) {
-            if (!isTransientProviderError(retry)) throw retry;
+            if (isBudgetStop(retry) || !isTransientProviderError(retry)) throw retry;
             // The extension keeps its model list in memory only, so a slow
             // gateway needs patience rather than another dead candidate.
             this.#emit(run.id, 'log', {
               level: 'warn',
               message: 'The provider failed a second time. One last try in 60 seconds.',
             });
-            await sleep(60000);
+            await this.#abortableDelay(run.id, 60000);
             result = await attemptCall(3);
           }
         }
@@ -742,6 +913,12 @@ export class RunController {
       });
       return { version: this.store.getVersion(versionId), ok: true };
     } catch (error) {
+      // A configured limit ends the RUN; it must not burn the remaining
+      // evolutions as a run of technical candidate failures.
+      if (isBudgetStop(error)) throw error;
+      // A Stop cancels the session. The run ends; this must not be recorded as
+      // a candidate fault or as a consumed evolution.
+      if (this.#stopping(run.id)) throw error;
       this.#failVersion(versionId, error);
       return { version: this.store.getVersion(versionId), ok: false, error };
     }
@@ -821,6 +998,7 @@ export class RunController {
   async #captureVersion({ run, version, stages, steps, seeds, dense }) {
     const context = this.#artworkContext(run.artworkId);
     const outDir = join(this.config.dataDir, 'captures', version.id, dense ? 'dense' : 'round');
+    const configurationHash = sha256Hex(stableStringify(version.configuration));
     const samples = [];
     for (const seed of seeds) {
       stages.forEach((stage, index) => {
@@ -828,18 +1006,35 @@ export class RunController {
       });
     }
 
+    // A resumed round must not duplicate or overwrite frame evidence. A frame
+    // this version already captured for the same seed, stage, step and inputs
+    // is reused as it is.
+    const existing = new Map(
+      this.store
+        .listCaptures(version.id)
+        .filter((capture) => capture.sourceHash === version.sourceHash && capture.configurationHash === configurationHash)
+        .map((capture) => [`${capture.stage}|${capture.seed}|${capture.step}`, capture]),
+    );
+    const reused = [];
+    const missing = [];
+    for (const sample of samples) {
+      const found = existing.get(`${sample.stage}|${sample.seed}|${sample.step}`);
+      if (found) reused.push(asCaptureResult(found));
+      else missing.push(sample);
+    }
+
     return this.#withJob({ run, round: version.round, slot: version.slot, kind: 'capture', versionId: version.id }, async (job) => {
       // Read the current record: the caller may hold a snapshot from an earlier
       // stage, and a stale status must not drive a transition.
       const current = this.store.getVersion(version.id) ?? version;
       if (canTransition('version', current.status, 'capturing')) this.#setVersionState(version.id, 'capturing');
-      const configurationHash = sha256Hex(stableStringify(version.configuration));
+      if (missing.length === 0) return reused;
       const results = await this.capture.capture({
         liveBaseUrl: this.artifacts.liveUrlFor(version.id),
         snapshotDir: this.artifacts.snapshotDirFor(version),
         runtimeDir: this.artifacts.runtimeDir,
         nodeModulesDir: this.artifacts.nodeModulesDir(context.packageDir),
-        samples,
+        samples: missing,
         viewport: this.#protocol(run).viewport,
         timestep: CAPTURE_TIMESTEP,
         outDir,
@@ -883,7 +1078,7 @@ export class RunController {
           url: `/api/captures/${record.id}.png`,
         });
       }
-      return results;
+      return [...reused, ...results];
     });
   }
 
@@ -894,18 +1089,85 @@ export class RunController {
    * COMPARISON, not the run: the round then keeps the parent.
    * @returns {Promise<object|null>} null when the comparison failed
    */
+  /**
+   * A comparison this run already made for the same round and kind, over
+   * exactly the same versions. A resumed round reuses it instead of repeating
+   * a paid judge session.
+   */
+  #reuseComparison({ run, round, kind, entries }) {
+    const wanted = entries.map((entry) => entry.versionId).sort().join('|');
+    for (const comparison of this.store.listComparisons(run.id)) {
+      if (comparison.round !== round || comparison.kind !== kind) continue;
+      const compared = Object.values(comparison.labels ?? {}).sort().join('|');
+      if (compared !== wanted) continue;
+      const verdict = comparison.verdict ?? {};
+      const preference = verdict.preference ?? 'none';
+      if (preference !== 'none' && !comparison.winnerVersionId) continue;
+      const labelToVersion = {};
+      for (const [versionId, label] of Object.entries(comparison.labels)) labelToVersion[label] = versionId;
+      return {
+        comparisonId: comparison.id,
+        winnerVersionId: comparison.winnerVersionId ?? null,
+        labels: comparison.labels,
+        labelToVersion,
+        verdict: {
+          ...verdict,
+          preference,
+          confidence: comparison.confidence ?? verdict.confidence ?? 0,
+          uncertainty: comparison.uncertainty ?? verdict.uncertainty ?? 'high',
+        },
+        reused: true,
+      };
+    }
+    return null;
+  }
+
   async #judgeOrRetain(options) {
+    // Resume must not repeat a comparison that already completed. The stored
+    // verdict is the record; the paid session is not run again.
+    const reused = this.#reuseComparison(options);
+    if (reused) {
+      this.#emit(options.run.id, 'log', {
+        level: 'info',
+        message: `Reusing the completed ${options.kind} comparison of round ${options.round} instead of repeating it.`,
+      });
+      return reused;
+    }
     try {
       return await this.#judge(options);
     } catch (error) {
-      if (!(error instanceof JudgeError)) throw error;
-      this.#emit(options.run.id, 'error', {
-        code: error.code,
-        message: error.message,
-        detail: { round: options.round, kind: options.kind, ...(error.details ?? {}) },
-      });
-      this.logger('warn', `Round ${options.round} ${options.kind} comparison failed: ${error.code}`);
-      return null;
+      // A limit stops the run; it is not a failed comparison.
+      if (isBudgetStop(error)) throw error;
+      if (error instanceof JudgeError) {
+        this.#emit(options.run.id, 'error', {
+          code: error.code,
+          message: error.message,
+          detail: { round: options.round, kind: options.kind, ...(error.details ?? {}) },
+        });
+        this.logger('warn', `Round ${options.round} ${options.kind} comparison failed: ${error.code}`);
+        return null;
+      }
+      // A failure the provider reported before it accepted the request cannot
+      // have been billed. The round keeps the parent and continues.
+      if (PRE_REQUEST_CODES.has(error?.code)) {
+        this.#emit(options.run.id, 'error', {
+          code: error.code,
+          message: error.message,
+          detail: { round: options.round, kind: options.kind, ...(error.details ?? {}), outcome: 'pre_request_failure' },
+        });
+        this.logger('warn', `Round ${options.round} ${options.kind} did not reach the provider: ${error.code}`);
+        return null;
+      }
+      // An accepted or uncertain paid request must not be repeated. Pause the
+      // run and keep every completed result instead of failing it.
+      if (isTransientProviderError(error)) {
+        throw new ArtworkError('provider_unavailable', `The ${options.kind} comparison did not answer: ${truncate(error?.message ?? String(error), 300)}`, {
+          round: options.round,
+          kind: options.kind,
+          cause: error?.code ?? 'unknown',
+        });
+      }
+      throw error;
     }
   }
 
@@ -1037,6 +1299,14 @@ export class RunController {
           ? this.config.cost.tieBreakCallUsd
           : this.config.cost.judgeCallUsd;
 
+    // Never start a request for a run that is stopping, and never start one
+    // that a configured limit already refuses.
+    if (this.#stopping(run.id)) throw new ArtworkError('cancelled', 'The run stopped before the provider request');
+    this.budget.assertRunLimits(this.store.getRun(run.id));
+
+    const requestId = newId('req');
+    const model = kind === 'author' ? run.protocol?.authorModel ?? this.config.provider.authorModel : run.protocol?.providerModel ?? this.config.provider.model;
+
     const fresh = this.store.getRun(run.id);
     // The run holds one overall reservation until the first request replaces it
     // with per-request reservations.
@@ -1046,10 +1316,11 @@ export class RunController {
     this.budget.reserve(fresh, bound, label);
     let result;
     try {
+      if (this.#stopping(run.id)) throw new ArtworkError('cancelled', 'The run stopped before the provider request');
       result = await call(this.active.get(run.id)?.abort.signal);
     } catch (error) {
-      // A session that timed out or failed still costs money. Charge what the
-      // provider reported, and keep the record honest.
+      // A session that timed out or failed may still cost money. Charge what
+      // the provider reported, and record which request it was.
       const spent = error?.details?.usage;
       if (spent && (spent.inputTokens > 0 || spent.outputTokens > 0 || spent.costUsd > 0)) {
         const committed = this.budget.commit(run.id, label, {
@@ -1064,15 +1335,23 @@ export class RunController {
           jobId,
           versionId,
           kind,
-          model: this.config.provider.authorModel,
+          model,
           sessionId: null,
           inputTokens: spent.inputTokens ?? 0,
           outputTokens: spent.outputTokens ?? 0,
           costUsd: committed.charged,
-          raw: { ...(spent.raw ?? {}), costSource: committed.costSource, label, outcome: error.code ?? 'failed' },
+          raw: {
+            ...(spent.raw ?? {}),
+            costSource: committed.costSource,
+            label,
+            requestId,
+            attempt: label,
+            outcome: error.code ?? 'failed',
+            certainty: 'uncertain',
+          },
         });
         this.#emit(run.id, 'usage', {
-          model: this.config.provider.model,
+          model,
           inputTokens: spent.inputTokens ?? 0,
           outputTokens: spent.outputTokens ?? 0,
           costUsd: committed.charged,
@@ -1100,15 +1379,15 @@ export class RunController {
       jobId,
       versionId,
       kind,
-      model: result.model ?? this.config.provider.model,
+      model: result.model ?? model,
       sessionId: result.sessionId ?? null,
       inputTokens: usage.inputTokens ?? 0,
       outputTokens: usage.outputTokens ?? 0,
       costUsd: committed.charged,
-      raw: { ...usage.raw, costSource: committed.costSource, stub: result.stub ?? false, label },
+      raw: { ...usage.raw, costSource: committed.costSource, stub: result.stub ?? false, label, requestId, attempt: label, certainty: 'known' },
     });
     this.#emit(run.id, 'usage', {
-      model: result.model ?? this.config.provider.model,
+      model: result.model ?? model,
       inputTokens: usage.inputTokens ?? 0,
       outputTokens: usage.outputTokens ?? 0,
       costUsd: committed.charged,

@@ -69,7 +69,7 @@ function stubCapture() {
   };
 }
 
-async function setup(t, configOverrides = {}) {
+async function setup(t, configOverrides = {}, hooks = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'phygen-round-'));
   t.after(async () => {
     await rm(dir, { recursive: true, force: true, maxRetries: 3 }).catch(() => {});
@@ -87,7 +87,7 @@ async function setup(t, configOverrides = {}) {
   t.after(() => store.close());
   const events = new EventBus(store);
   const budget = new Budget({ store, events, config });
-  const provider = new FakeProvider({ config });
+  const provider = hooks.provider ?? new FakeProvider({ config });
 
   const check = await checkPackage({ packageDir: PACKAGE_DIR });
   assert.equal(check.ok, true, check.problems.join('; '));
@@ -149,9 +149,9 @@ async function setup(t, configOverrides = {}) {
     rootVersionId: rootVersion.id,
     direction: 'quieter, more directional, fewer crossings',
     evolutionsRequested: configOverrides.evolutions ?? 1,
-    limitUsd: 100,
+    limitUsd: hooks.runLimitUsd ?? 100,
     protocol: PROTOCOL,
-    costBoundUsd: 100,
+    costBoundUsd: hooks.runLimitUsd ?? 100,
   });
 
   return { config, store, events, budget, controller, run, artwork, rootVersion, dir };
@@ -359,4 +359,123 @@ test('a stop request ends the run without new rounds', async (t) => {
   const finished = store.getRun(run.id);
   assert.equal(finished.state, 'stopped');
   assert.equal(finished.stopReason, 'human_stop');
+});
+
+/** Poll a condition, so a test waits for a record rather than for a delay. */
+async function until(condition, { timeoutMs = 30000, stepMs = 50 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (condition()) return true;
+    await new Promise((resolve) => setTimeout(resolve, stepMs));
+  }
+  throw new Error('the condition never became true');
+}
+
+/** A provider whose author sessions always fail the way a gateway does. */
+function flakyProvider(inner) {
+  const calls = { author: 0, judge: 0 };
+  return {
+    calls,
+    detect: (...args) => inner.detect(...args),
+    author() {
+      calls.author += 1;
+      const error = new Error('[kilo] Failed to fetch models at startup: 500 Internal Server Error');
+      error.code = 'provider_start_failed';
+      throw error;
+    },
+    judge(options) {
+      calls.judge += 1;
+      return inner.judge(options);
+    },
+  };
+}
+
+test('a pause does not consume an evolution, and a resume does not repeat paid authoring', async (t) => {
+  const { store, events, controller, run, artwork } = await setup(t);
+  const loop = controller.start(run.id);
+
+  // Pause as the first variant appears: the author sessions that already
+  // started finish, and no new round begins.
+  const paused = new Promise((resolve) => {
+    const unsubscribe = events.subscribe(run.id, (event) => {
+      if (event.type !== 'version.created') return;
+      unsubscribe();
+      void controller.pause(run.id).then(resolve);
+    });
+  });
+  await paused;
+  await until(() => store.listRounds(run.id).some((round) => round.round === 1 && /paused/i.test(round.note ?? '')));
+
+  const pausedRun = store.getRun(run.id);
+  assert.equal(pausedRun.state, 'paused');
+  assert.equal(pausedRun.evolutionsDone, 0, 'the interrupted round did not consume an evolution');
+  const interrupted = store.listRounds(run.id).filter((round) => round.round === 1);
+  assert.equal(interrupted.length, 1);
+  assert.equal(interrupted[0].promoted, false);
+
+  // Which candidates were durable before the pause: those are the ones Resume
+  // must reuse.
+  const publishDone = new Set(
+    store.listJobs(run.id).filter((job) => job.kind === 'publish' && job.state === 'done' && job.versionId).map((job) => job.versionId),
+  );
+  assert.ok(publishDone.size >= 1, 'at least one candidate was published before the pause');
+
+  await controller.resume(run.id);
+  await loop;
+
+  const finished = store.getRun(run.id);
+  assert.equal(finished.state, 'completed');
+  assert.equal(finished.evolutionsDone, 1, 'the round completed once');
+  const round = store.listRounds(run.id).filter((entry) => entry.round === 1)[0];
+  assert.equal(round.candidateIds.length, 3, 'the round holds one candidate per variant');
+  for (const versionId of publishDone) {
+    assert.ok(round.candidateIds.includes(versionId), 'a published candidate is reused, not replaced');
+    const authorJobs = store.listJobs(run.id).filter((job) => job.kind === 'author' && job.versionId === versionId);
+    assert.equal(authorJobs.length, 1, 'a published candidate was not authored a second time');
+  }
+  const candidates = store.listVersions(artwork.id).filter((version) => round.candidateIds.includes(version.id));
+  assert.equal(candidates.length, round.candidateIds.length);
+  assert.ok(
+    candidates.every((version) => ['promoted', 'rejected', 'failed'].includes(version.status)),
+    'no candidate is left in a running state',
+  );
+  const promoted = store.listVersions(artwork.id).filter((version) => version.status === 'promoted');
+  assert.ok(promoted.length >= 1, 'the round names a parent or a winner');
+});
+
+test('a configured limit stops the run without consuming an evolution', async (t) => {
+  const { store, events, controller, run } = await setup(t, {}, { runLimitUsd: 0.05 });
+
+  await controller.start(run.id);
+
+  const finished = store.getRun(run.id);
+  assert.equal(finished.state, 'stopped', 'the run stops at the limit');
+  assert.equal(finished.stopReason, 'budget_exceeded');
+  assert.equal(finished.evolutionsDone, 0, 'no evolution is spent on a refused request');
+  const stops = events.since(run.id, 0).filter((event) => event.type === 'error' && event.payload?.detail?.budgetStop === true);
+  assert.equal(stops.length, 1, 'the exact limit reason is recorded');
+  assert.match(stops[0].payload.message, /0\.0500 USD/);
+});
+
+test('a stop during a retry delay starts no further provider session', async (t) => {
+  const { store, events, controller, run } = await setup(t, { evolutions: 3 }, { provider: null });
+  const provider = flakyProvider(controller.provider);
+  controller.provider = provider;
+
+  const loop = controller.start(run.id);
+  await until(() => events.since(run.id, 0).some((event) => event.type === 'log' && /One more try in 20 seconds/.test(event.payload?.message ?? '')));
+
+  // Every variant is already inside its retry delay. A Stop must interrupt the
+  // delay and must not let a retry reach the provider.
+  const callsAtRetry = provider.calls.author;
+  assert.ok(callsAtRetry >= 1);
+  const stoppedAt = Date.now();
+  await controller.stop(run.id, 'human_stop');
+  await loop;
+
+  assert.equal(provider.calls.author, callsAtRetry, 'the retry never reached the provider');
+  assert.ok(Date.now() - stoppedAt < 10000, 'the retry delay was interrupted, not waited out');
+  const finished = store.getRun(run.id);
+  assert.equal(finished.state, 'stopped');
+  assert.equal(finished.evolutionsDone, 0, 'a stopped run does not consume an evolution');
 });

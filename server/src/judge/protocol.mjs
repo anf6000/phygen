@@ -20,7 +20,11 @@ export class JudgeError extends ArtworkError {
 export const UNCERTAINTY_LEVELS = Object.freeze(['low', 'medium', 'high']);
 export const DISTINCTIVENESS_LEVELS = Object.freeze(['low', 'medium', 'high']);
 
-const LABELS = ['A', 'B', 'C', 'D', 'E', 'F'];
+/** One label per compared version: the parent, plus every supported variant. */
+const LABELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+
+/** The number of versions one comparison can hold. The API checks this before authoring. */
+export const MAX_COMPARISON_ENTRIES = LABELS.length;
 
 export const JUDGE_SYSTEM_PROMPT = [
   'You compare images of a generative artwork and report what you see.',

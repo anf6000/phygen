@@ -53,11 +53,15 @@ function describeReason(detection) {
 /** A provider fault that a second try can clear: a gateway error, a dropped
  *  connection, or a catalog fetch that failed while the session started. */
 export function isTransientProviderError(error) {
+  if (error?.code === 'session_timeout') return true;
+  if (error?.details?.transient === true) return true;
   const text = `${error?.message ?? ''} ${error?.details?.stderr ?? ''}`;
   if (/Failed to fetch models/i.test(text)) return true;
   if (/Unknown provider/i.test(text)) return true;
-  if (/\b5\d\d\b/.test(text)) return true;
+  // A 5xx STATUS, not any three-digit number that starts with 5. A step count
+  // or a sample size must never be read as a gateway fault.
+  if (/\bHTTP[/\s]?[\d.]*\s*5\d\d\b/i.test(text)) return true;
+  if (/\b(?:status|statusCode|status_code|response code)\s*[:=]?\s*5\d\d\b/i.test(text)) return true;
   if (/ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up/i.test(text)) return true;
-  if (error?.code === 'session_timeout') return true;
   return false;
 }

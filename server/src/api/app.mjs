@@ -12,7 +12,9 @@ import fastifyStatic from '@fastify/static';
 
 import { ArtworkError } from '../../../runtime/contract.js';
 import { checkPackage } from '../../../runtime/node/package-checks.js';
+import { MAX_COMPARISON_ENTRIES } from '../judge/protocol.mjs';
 import { publishSnapshot } from '../artwork/workspace.mjs';
+import { streamEvents } from './stream.mjs';
 import { round6 } from '../util.mjs';
 import { isInside } from '../artifacts.mjs';
 
@@ -25,9 +27,20 @@ function fail(reply, code, message, detail = {}) {
     version_not_found: 404,
     run_not_found: 404,
     capture_not_found: 404,
+    not_found: 404,
+    analysis_not_found: 404,
+    measure_unknown: 400,
+    measure_not_enabled: 400,
+    measure_too_few_versions: 400,
+    measure_already_running: 409,
+    measure_unavailable: 503,
     payload_invalid: 400,
     run_state_invalid: 409,
     budget_exceeded: 400,
+    request_limit_reached: 400,
+    token_limit_reached: 400,
+    round_limit_reached: 400,
+    time_limit_reached: 400,
     capture_unavailable: 503,
     isolation_required: 503,
     provider_unavailable: 503,
@@ -72,7 +85,7 @@ function validateProtocol(protocol) {
   return null;
 }
 
-export function buildApp({ store, events, budget, controller, capture, provider, config, artifacts, detection, captureStatus, catalog, recorder = null }) {
+export function buildApp({ store, events, budget, controller, capture, provider, config, artifacts, detection, captureStatus, catalog, recorder = null, analysis = null }) {
   const app = Fastify({ logger: false, bodyLimit: config.server.requestBodyLimit });
 
   app.setErrorHandler((error, request, reply) => {
@@ -210,10 +223,19 @@ export function buildApp({ store, events, budget, controller, capture, provider,
     const variantOf = variantIndexMap(store, artwork.id);
     const latestCapture = store.latestCaptureByArtwork(artwork.id);
     const usageByVersion = store.usageCostByArtwork(artwork.id);
+    // A version produced by a run whose provider was the test double is NOT real
+    // work, and it must never look like it. The card carries the mark.
+    const stubRuns = new Set(
+      store
+        .listRuns(500)
+        .filter((run) => run.protocol?.providerDriver === 'fake')
+        .map((run) => run.id),
+    );
     const nodes = versions.map((version) => ({
       ...publicVersion(version, variantOf.get(version.id) ?? null, latestCapture.get(version.id) ?? null),
       liveUrl: artifacts.liveUrlFor(version.id),
       onLineage: version.onLineage,
+      stub: Boolean(version.runId && stubRuns.has(version.runId)),
       usageUsd: round6(usageByVersion.get(version.id) ?? 0),
       error: version.errorCode ? { code: version.errorCode, message: version.errorMessage } : null,
     }));
@@ -243,6 +265,62 @@ export function buildApp({ store, events, budget, controller, capture, provider,
       activeVersionIds: [...new Set(activeVersionIds)],
       activeKinds,
     };
+  });
+
+  // ── measurements ──────────────────────────────────────────────────────────
+  // A measurement is a record of how two versions relate. It is never ancestry:
+  // no route here changes a parent link, and every answer states the measure and
+  // how old the record is.
+  app.get('/api/measures', async () => ({ measures: analysis ? analysis.measures() : [], defaultMeasure: analysis?.measures().find((measure) => measure.available)?.id ?? null }));
+
+  app.get('/api/artworks/:artworkId/relationships', async (request, reply) => {
+    if (!analysis) return fail(reply, 'measure_unavailable', 'The measurement service is not running.');
+    const artwork = store.getArtwork(request.params.artworkId);
+    if (!artwork) return fail(reply, 'artwork_not_found', `No artwork ${request.params.artworkId}`);
+    const measureId = String(request.query?.measure ?? analysis.measures().find((measure) => measure.available)?.id ?? 'configuration');
+    try {
+      const status = analysis.status(artwork.id, measureId);
+      const nodes = store.listVersions(artwork.id);
+      const byId = new Map(nodes.map((version) => [version.id, version]));
+      const pairs = status.pairs.map((pair) => ({
+        id: pair.id,
+        measure: pair.measure,
+        a: pair.versionA,
+        b: pair.versionB,
+        pairKey: pair.pairKey,
+        outcome: pair.outcome,
+        score: pair.score,
+        band: pair.band,
+        evidence: pair.evidence,
+        group: pair.evidence?.group ?? null,
+        ancestor: isAncestor(byId, pair.versionA, pair.versionB),
+        error: pair.errorCode ? { code: pair.errorCode, message: pair.errorMessage } : null,
+      }));
+      return { measure: status.measure, run: status.run, pairs, currentRevision: status.currentRevision, stale: status.stale, reason: status.reason, maximum: config.analysis.maxPairs };
+    } catch (error) {
+      return fail(reply, error.code ?? 'measure_failed', error.message, error.details ?? {});
+    }
+  });
+
+  app.post('/api/artworks/:artworkId/relationships', async (request, reply) => {
+    if (!analysis) return fail(reply, 'measure_unavailable', 'The measurement service is not running.');
+    const artwork = store.getArtwork(request.params.artworkId);
+    if (!artwork) return fail(reply, 'artwork_not_found', `No artwork ${request.params.artworkId}`);
+    const body = request.body ?? {};
+    const measureId = String(body.measure ?? '');
+    try {
+      const run = await analysis.start({ artwork, measureId, limit: body.limit, force: body.force === true });
+      return reply.code(202).send({ run, measure: analysis.measures().find((measure) => measure.id === run.measure) ?? null });
+    } catch (error) {
+      return fail(reply, error.code ?? 'measure_failed', error.message, error.details ?? {});
+    }
+  });
+
+  app.post('/api/analysis/:analysisRunId/cancel', async (request, reply) => {
+    if (!analysis) return fail(reply, 'measure_unavailable', 'The measurement service is not running.');
+    const run = store.getAnalysisRun(request.params.analysisRunId);
+    if (!run) return fail(reply, 'analysis_not_found', `No measurement ${request.params.analysisRunId}`);
+    return { run: analysis.cancel(run.id) };
   });
 
   // ── versions ──────────────────────────────────────────────────────────────
@@ -457,29 +535,68 @@ export function buildApp({ store, events, budget, controller, capture, provider,
       judgeModel,
     });
 
-    const run = store.createRun({
-      artworkId: artwork.id,
-      rootVersionId: rootVersion.id,
-      direction: body.direction.trim(),
-      evolutionsRequested: evolutions,
-      limitUsd,
-      protocol: { ...protocol, variantsPerEvolution: variants, providerDriver: detection?.driver ?? 'unknown', providerModel: judgeModel, authorModel, estimate: bound },
-      costBoundUsd: bound.boundUsd,
-    });
-    store.upsertRound({
-      runId: run.id,
-      round: 0,
-      parentVersionId: rootVersion.id,
-      candidateIds: [],
-      winnerVersionId: null,
-      promoted: false,
-      note: 'The run starts from this version.',
-    });
-    events.emit(run.id, 'run.state', { state: run.state, stopReason: null });
-    events.emit(run.id, 'budget', { spentUsd: 0, reservedUsd: 0, limitUsd: run.limitUsd, boundUsd: run.costBoundUsd });
-    // The contract promises that the maximum cost is reserved before the first
-    // request. The per-request reservations take over from the first call.
-    budget.reserve(run, bound.boundUsd, 'run-estimate', { emit: false });
+    // Every candidate is compared against the parent in one round comparison,
+    // so the label capacity and the image count are checked BEFORE the first
+    // author call. A run that could not be judged must never be authored.
+    if (variants + 1 > MAX_COMPARISON_ENTRIES) {
+      return fail(
+        reply,
+        'payload_invalid',
+        `A round comparison holds at most ${MAX_COMPARISON_ENTRIES} versions, so at most ${MAX_COMPARISON_ENTRIES - 1} variants can be compared with the parent`,
+      );
+    }
+    const imagesPerEntry = protocol.frameRoles.length * protocol.seeds.length;
+    const comparisonImages = (variants + 1) * imagesPerEntry;
+    if (comparisonImages > config.evolution.maxComparisonImages) {
+      return fail(
+        reply,
+        'payload_invalid',
+        `A round comparison would attach ${comparisonImages} images; the limit is ${config.evolution.maxComparisonImages}`,
+      );
+    }
+    try {
+      budget.assertAdmission({ evolutions, variants, limitUsd, boundUsd: bound.boundUsd });
+    } catch (error) {
+      return fail(reply, error.code ?? 'budget_exceeded', error.message, error.details ?? {});
+    }
+
+    let run;
+    try {
+      run = store.createRun({
+        artworkId: artwork.id,
+        rootVersionId: rootVersion.id,
+        direction: body.direction.trim(),
+        evolutionsRequested: evolutions,
+        limitUsd,
+        protocol: { ...protocol, variantsPerEvolution: variants, providerDriver: detection?.driver ?? 'unknown', providerModel: judgeModel, authorModel, estimate: bound },
+        costBoundUsd: bound.boundUsd,
+      });
+      store.upsertRound({
+        runId: run.id,
+        round: 0,
+        parentVersionId: rootVersion.id,
+        candidateIds: [],
+        winnerVersionId: null,
+        promoted: false,
+        note: 'The run starts from this version.',
+      });
+      events.emit(run.id, 'run.state', { state: run.state, stopReason: null });
+      events.emit(run.id, 'budget', { spentUsd: 0, reservedUsd: 0, limitUsd: run.limitUsd, boundUsd: run.costBoundUsd });
+      // The contract promises that the maximum cost is reserved before the first
+      // request. The per-request reservations take over from the first call.
+      budget.reserve(run, bound.boundUsd, 'run-estimate', { emit: false });
+    } catch (error) {
+      // The records exist by now, so close the run instead of leaving a queued
+      // run that no worker owns.
+      if (run) {
+        const code = error.code ?? 'run_admission_failed';
+        if (!['stopped', 'completed', 'failed'].includes(run.state)) {
+          store.updateRun(run.id, { state: 'failed', stopReason: code, finishedAt: new Date().toISOString() });
+        }
+        events.emit(run.id, 'error', { code, message: error.message ?? String(error) });
+      }
+      return fail(reply, error.code ?? 'budget_exceeded', error.message ?? String(error), error.details ?? {});
+    }
 
     // The tickbox can ask for a recording as the run starts.
     if (recorder && body.record === true) {
@@ -573,18 +690,33 @@ export function buildApp({ store, events, budget, controller, capture, provider,
       'x-accel-buffering': 'no',
     });
 
-    const write = (event) => {
-      reply.raw.write(`id: ${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
-    };
-    for (const event of events.since(run.id, since)) write(event);
-
-    const unsubscribe = events.subscribe(run.id, write);
-    const keepAlive = setInterval(() => reply.raw.write(': keep-alive\n\n'), config.server.sseKeepAliveMs);
-
-    request.raw.on('close', () => {
-      clearInterval(keepAlive);
-      unsubscribe();
+    let closed = false;
+    const stream = streamEvents({
+      store,
+      events,
+      runId: run.id,
+      since,
+      write: (event) => reply.raw.write(`id: ${event.seq}\ndata: ${JSON.stringify(event)}\n\n`),
+      onOverrun: (reason) => {
+        if (closed) return;
+        closed = true;
+        reply.raw.write(`: ${reason}\n\n`);
+        reply.raw.end();
+      },
     });
+
+    const keepAlive = setInterval(() => {
+      if (!closed) reply.raw.write(': keep-alive\n\n');
+    }, config.server.sseKeepAliveMs);
+
+    // Handle closure exactly once.
+    const finish = () => {
+      clearInterval(keepAlive);
+      stream.stop();
+      closed = true;
+    };
+    request.raw.on('close', finish);
+    reply.raw.on('error', finish);
   });
 
   app.setNotFoundHandler((request, reply) => {
@@ -626,7 +758,9 @@ function publicVersion(version, variant = null, newestCapture = null) {
     // The palette this version renders with, so the interface can show which
     // colours a new run will inherit.
     palette: version.configuration?.palette ?? null,
-    thumbnailUrl: `/api/versions/${version.id}/artifacts/thumb`,
+    // A version with no capture has no thumbnail. Saying so here stops the
+    // interface from requesting an image the server cannot answer.
+    thumbnailUrl: newestCapture ? `/api/versions/${version.id}/artifacts/thumb` : null,
     // The frame the capture wrote last, so a node can show work in progress.
     latestCaptureUrl: newestCapture ? `/api/captures/${newestCapture.id}.png` : null,
     latestCaptureStage: newestCapture ? newestCapture.stage : null,
@@ -647,6 +781,24 @@ function variantIndexMap(store, artworkId) {
     }
   }
   return map;
+}
+
+/**
+ * True when one version is an ancestor of the other. The comparison itself says
+ * so; the interface does not guess it from a ring number.
+ */
+function isAncestor(byId, a, b) {
+  const walk = (start, target) => {
+    const seen = new Set();
+    let current = byId.get(start);
+    while (current?.parentId && !seen.has(current.id)) {
+      seen.add(current.id);
+      if (current.parentId === target) return true;
+      current = byId.get(current.parentId);
+    }
+    return false;
+  };
+  return walk(a, b) || walk(b, a);
 }
 
 function escapeHtml(value) {

@@ -161,11 +161,51 @@ CREATE TABLE IF NOT EXISTS events (
   payload_json TEXT NOT NULL,
   PRIMARY KEY (run_id, seq)
 );
+-- Measurement records. These are NOT ancestry: a row here says "these two
+-- versions were compared with this measure", and nothing about parent links.
+CREATE TABLE IF NOT EXISTS analysis_runs (
+  id TEXT PRIMARY KEY,
+  artwork_id TEXT NOT NULL,
+  measure TEXT NOT NULL,
+  state TEXT NOT NULL,
+  revision TEXT,
+  params_json TEXT NOT NULL DEFAULT '{}',
+  progress_json TEXT NOT NULL DEFAULT '{}',
+  error_code TEXT,
+  error_message TEXT,
+  started_at TEXT,
+  finished_at TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS pair_measurements (
+  id TEXT PRIMARY KEY,
+  analysis_run_id TEXT NOT NULL,
+  artwork_id TEXT NOT NULL,
+  measure TEXT NOT NULL,
+  version_a TEXT NOT NULL,
+  version_b TEXT NOT NULL,
+  pair_key TEXT NOT NULL,
+  outcome TEXT NOT NULL,
+  score REAL,
+  band TEXT,
+  evidence_json TEXT NOT NULL DEFAULT '{}',
+  source_hash_a TEXT,
+  source_hash_b TEXT,
+  configuration_hash_a TEXT,
+  configuration_hash_b TEXT,
+  error_code TEXT,
+  error_message TEXT,
+  created_at TEXT NOT NULL,
+  UNIQUE (analysis_run_id, measure, pair_key)
+);
 CREATE INDEX IF NOT EXISTS idx_versions_artwork ON versions (artwork_id);
 CREATE INDEX IF NOT EXISTS idx_versions_parent ON versions (parent_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_run ON jobs (run_id);
 CREATE INDEX IF NOT EXISTS idx_captures_version ON captures (version_id);
 CREATE INDEX IF NOT EXISTS idx_usage_run ON usage (run_id);
+CREATE INDEX IF NOT EXISTS idx_analysis_artwork ON analysis_runs (artwork_id, measure, created_at);
+CREATE INDEX IF NOT EXISTS idx_pairs_lookup ON pair_measurements (artwork_id, measure, pair_key);
+CREATE INDEX IF NOT EXISTS idx_pairs_run ON pair_measurements (analysis_run_id);
 `;
 
 function json(value) {
@@ -715,6 +755,172 @@ export class Store {
     return record;
   }
 
+  // ── measurements ──────────────────────────────────────────────────────────
+
+  createAnalysisRun(entry) {
+    const record = {
+      id: entry.id ?? newId('ana'),
+      artworkId: entry.artworkId,
+      measure: entry.measure,
+      state: entry.state ?? 'queued',
+      revision: entry.revision ?? null,
+      params: entry.params ?? {},
+      progress: entry.progress ?? {},
+      errorCode: entry.errorCode ?? null,
+      errorMessage: entry.errorMessage ?? null,
+      startedAt: entry.startedAt ?? null,
+      finishedAt: entry.finishedAt ?? null,
+      createdAt: nowIso(),
+    };
+    this.db
+      .prepare(
+        `INSERT INTO analysis_runs (id, artwork_id, measure, state, revision, params_json, progress_json,
+           error_code, error_message, started_at, finished_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        record.id,
+        record.artworkId,
+        record.measure,
+        record.state,
+        record.revision,
+        json(record.params),
+        json(record.progress),
+        record.errorCode,
+        record.errorMessage,
+        record.startedAt,
+        record.finishedAt,
+        record.createdAt,
+      );
+    return record;
+  }
+
+  getAnalysisRun(id) {
+    const row = this.db.prepare('SELECT * FROM analysis_runs WHERE id = ?').get(id);
+    return row ? analysisRunFromRow(row) : null;
+  }
+
+  /** The newest measurement run of one measure for one artwork. */
+  latestAnalysisRun(artworkId, measure) {
+    const row = this.db
+      .prepare('SELECT * FROM analysis_runs WHERE artwork_id = ? AND measure = ? ORDER BY created_at DESC, rowid DESC LIMIT 1')
+      .get(artworkId, measure);
+    return row ? analysisRunFromRow(row) : null;
+  }
+
+  listAnalysisRuns(artworkId) {
+    return this.db
+      .prepare('SELECT * FROM analysis_runs WHERE artwork_id = ? ORDER BY created_at DESC, rowid DESC')
+      .all(artworkId)
+      .map(analysisRunFromRow);
+  }
+
+  updateAnalysisRun(id, patch) {
+    const current = this.getAnalysisRun(id);
+    if (!current) return null;
+    const next = { ...current, ...patch };
+    this.db
+      .prepare(
+        `UPDATE analysis_runs SET state = ?, revision = ?, progress_json = ?, error_code = ?, error_message = ?,
+           started_at = ?, finished_at = ? WHERE id = ?`,
+      )
+      .run(
+        next.state,
+        next.revision ?? null,
+        json(next.progress ?? {}),
+        next.errorCode ?? null,
+        next.errorMessage ?? null,
+        next.startedAt ?? null,
+        next.finishedAt ?? null,
+        id,
+      );
+    return this.getAnalysisRun(id);
+  }
+
+  /** A state that a restart left behind. Nothing is resumed automatically. */
+  listUnfinishedAnalysisRuns() {
+    return this.db
+      .prepare("SELECT * FROM analysis_runs WHERE state IN ('queued', 'running')")
+      .all()
+      .map(analysisRunFromRow);
+  }
+
+  upsertPairMeasurement(entry) {
+    const record = {
+      id: entry.id ?? newId('pm'),
+      analysisRunId: entry.analysisRunId,
+      artworkId: entry.artworkId,
+      measure: entry.measure,
+      versionA: entry.versionA,
+      versionB: entry.versionB,
+      pairKey: entry.pairKey,
+      outcome: entry.outcome ?? 'ok',
+      score: entry.score ?? null,
+      band: entry.band ?? null,
+      evidence: entry.evidence ?? {},
+      sourceHashA: entry.sourceHashA ?? null,
+      sourceHashB: entry.sourceHashB ?? null,
+      configurationHashA: entry.configurationHashA ?? null,
+      configurationHashB: entry.configurationHashB ?? null,
+      errorCode: entry.errorCode ?? null,
+      errorMessage: entry.errorMessage ?? null,
+      createdAt: nowIso(),
+    };
+    this.db
+      .prepare(
+        `INSERT INTO pair_measurements (id, analysis_run_id, artwork_id, measure, version_a, version_b, pair_key,
+           outcome, score, band, evidence_json, source_hash_a, source_hash_b, configuration_hash_a,
+           configuration_hash_b, error_code, error_message, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (analysis_run_id, measure, pair_key) DO UPDATE SET
+           outcome = excluded.outcome, score = excluded.score, band = excluded.band, evidence_json = excluded.evidence_json,
+           source_hash_a = excluded.source_hash_a, source_hash_b = excluded.source_hash_b,
+           configuration_hash_a = excluded.configuration_hash_a, configuration_hash_b = excluded.configuration_hash_b,
+           error_code = excluded.error_code, error_message = excluded.error_message`,
+      )
+      .run(
+        record.id,
+        record.analysisRunId,
+        record.artworkId,
+        record.measure,
+        record.versionA,
+        record.versionB,
+        record.pairKey,
+        record.outcome,
+        record.score,
+        record.band,
+        json(record.evidence),
+        record.sourceHashA,
+        record.sourceHashB,
+        record.configurationHashA,
+        record.configurationHashB,
+        record.errorCode,
+        record.errorMessage,
+        record.createdAt,
+      );
+    return record;
+  }
+
+  listPairMeasurements(analysisRunId, { limit = 2000 } = {}) {
+    return this.db
+      .prepare('SELECT * FROM pair_measurements WHERE analysis_run_id = ? ORDER BY score ASC, pair_key ASC LIMIT ?')
+      .all(analysisRunId, limit)
+      .map(pairMeasurementFromRow);
+  }
+
+  /** Reuse a measurement when both versions still hold the same evidence. */
+  findReusablePairMeasurement({ artworkId, measure, pairKey, sourceHashA, sourceHashB, configurationHashA, configurationHashB }) {
+    const row = this.db
+      .prepare(
+        `SELECT * FROM pair_measurements
+         WHERE artwork_id = ? AND measure = ? AND pair_key = ? AND outcome = 'ok'
+           AND source_hash_a = ? AND source_hash_b = ? AND configuration_hash_a = ? AND configuration_hash_b = ?
+         ORDER BY created_at DESC LIMIT 1`,
+      )
+      .get(artworkId, measure, pairKey, sourceHashA, sourceHashB, configurationHashA, configurationHashB);
+    return row ? pairMeasurementFromRow(row) : null;
+  }
+
   // ── usage ─────────────────────────────────────────────────────────────────
   createUsage(entry) {
     const record = {
@@ -803,6 +1009,11 @@ export class Store {
       }));
   }
 
+  /** The greatest stored sequence of one run. The SSE high-water mark. */
+  latestEventSeq(runId) {
+    return this.db.prepare('SELECT COALESCE(MAX(seq), 0) AS seq FROM events WHERE run_id = ?').get(runId).seq;
+  }
+
   listEvents(runId, sinceSeq = 0, limit = 500) {
     return this.db
       .prepare('SELECT * FROM events WHERE run_id = ? AND seq > ? ORDER BY seq LIMIT ?')
@@ -815,6 +1026,46 @@ export class Store {
         payload: parseJson(row.payload_json, {}),
       }));
   }
+}
+
+function analysisRunFromRow(row) {
+  return {
+    id: row.id,
+    artworkId: row.artwork_id,
+    measure: row.measure,
+    state: row.state,
+    revision: row.revision,
+    params: parseJson(row.params_json, {}),
+    progress: parseJson(row.progress_json, {}),
+    errorCode: row.error_code,
+    errorMessage: row.error_message,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
+    createdAt: row.created_at,
+  };
+}
+
+function pairMeasurementFromRow(row) {
+  return {
+    id: row.id,
+    analysisRunId: row.analysis_run_id,
+    artworkId: row.artwork_id,
+    measure: row.measure,
+    versionA: row.version_a,
+    versionB: row.version_b,
+    pairKey: row.pair_key,
+    outcome: row.outcome,
+    score: row.score,
+    band: row.band,
+    evidence: parseJson(row.evidence_json, {}),
+    sourceHashA: row.source_hash_a,
+    sourceHashB: row.source_hash_b,
+    configurationHashA: row.configuration_hash_a,
+    configurationHashB: row.configuration_hash_b,
+    errorCode: row.error_code,
+    errorMessage: row.error_message,
+    createdAt: row.created_at,
+  };
 }
 
 function artworkFromRow(row) {

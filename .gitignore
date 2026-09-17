@@ -12,3 +12,7 @@ Thumbs.db
 docs/recordings/
 docs/videos/
 *.mp4
+# A consistent copy of the record and its artifacts, made before a migration.
+backups/
+# Local verification helpers and their screenshots. Not part of the product.
+.verify/

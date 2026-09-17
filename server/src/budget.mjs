@@ -153,6 +153,49 @@ export class Budget {
   }
 
   /**
+   * Refuse a run BEFORE any record is created. An admitted run must be able to
+   * reserve its own bound: a rejection after the record exists leaves a queued
+   * run that nobody runs.
+   *
+   * @param {object} options
+   * @param {number} options.evolutions
+   * @param {number} [options.variants] variants per level
+   * @param {number} options.limitUsd 0 means no per-run limit
+   * @param {number} options.boundUsd the highest possible cost of the run
+   */
+  assertAdmission({ evolutions, variants, limitUsd = 0, boundUsd = 0 }) {
+    const { maxRunUsd, maxRounds, maxCallsPerRun } = this.config.cost;
+    if (maxRounds > 0 && evolutions > maxRounds) {
+      throw new BudgetError('round_limit_reached', `The run asks for ${evolutions} rounds; the limit is ${maxRounds}`, {
+        rounds: evolutions,
+        limit: maxRounds,
+      });
+    }
+    const configured = Number.isFinite(limitUsd) && limitUsd > 0 ? limitUsd : Number.POSITIVE_INFINITY;
+    const ceiling = maxRunUsd > 0 ? maxRunUsd : Number.POSITIVE_INFINITY;
+    const limit = Math.min(configured, ceiling);
+    if (!Number.isFinite(limit)) return true;
+    if (boundUsd > limit) {
+      throw new BudgetError(
+        'budget_exceeded',
+        `The run cannot start: its highest possible cost is ${boundUsd.toFixed(4)} USD and the limit is ${limit.toFixed(4)} USD`,
+        { requested: boundUsd, limit, evolutions },
+      );
+    }
+    if (maxCallsPerRun > 0) {
+      const perLevel = Math.max(1, variants ?? this.config.evolution.variants);
+      const authorCalls = evolutions * perLevel;
+      if (authorCalls > maxCallsPerRun) {
+        throw new BudgetError('request_limit_reached', `The run would make at least ${authorCalls} author requests; the limit is ${maxCallsPerRun}`, {
+          calls: authorCalls,
+          limit: maxCallsPerRun,
+        });
+      }
+    }
+    return true;
+  }
+
+  /**
    * Throw when a run has used its request count, token budget, round count, or
    * elapsed time. A limit of 0 removes that guardrail.
    */

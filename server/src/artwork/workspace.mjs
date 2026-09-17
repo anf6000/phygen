@@ -5,11 +5,14 @@
 // files the manifest allows and nothing else. This module enforces that rule
 // and reports every change, so the record holds the real difference.
 // ─────────────────────────────────────────────────────────────────────────────
+import { randomUUID } from 'node:crypto';
 import { cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
+import { ArtworkError } from '../../../runtime/contract.js';
 import { classifyPackageFile, isEditablePath } from '../../../runtime/manifest.js';
 import { IGNORED_DIRS, hashPackageFiles, snapshotMarker, walkPackage } from '../../../runtime/node/package-checks.js';
+import { FILES_DIR, MARKER_NAME, readSnapshotMarker, verifySnapshot } from './snapshot-integrity.mjs';
 
 // One ignore list for the whole system: the validator owns it.
 const SKIP_DIRS = new Set(IGNORED_DIRS);
@@ -136,48 +139,113 @@ function longestCommonSubsequence(a, b) {
   return previous[b.length];
 }
 
-/** Copy the accepted workspace to its immutable snapshot directory. */
-export async function publishSnapshot({ workspaceDir, snapshotRoot, artworkId, packageHash }) {
-  const target = join(snapshotRoot, artworkId, packageHash);
-  const marker = join(target, 'snapshot.json');
-  try {
-    await stat(marker);
-    return { path: target, created: false, packageHash };
-  } catch {
-    // not published yet
-  }
+/**
+ * The canonical hash mapping of one artwork. A snapshot published before the
+ * path convention was corrected carries a marker that names the hash of
+ * `files/…` paths. The evidence stays as it is; this file records the mapping
+ * from that directory to the hash of its real contents.
+ */
+export const CANONICAL_MAP_NAME = 'canonical-hashes.json';
 
-  const working = join(snapshotRoot, artworkId, `.pending-${packageHash}-${process.pid}`);
+async function recordCanonicalHash(artworkRoot, entry) {
+  const path = join(artworkRoot, CANONICAL_MAP_NAME);
+  let map = {};
+  try {
+    map = JSON.parse(await readFile(path, 'utf8'));
+  } catch {
+    map = {};
+  }
+  map[entry.directory] = { ...entry, recordedAt: new Date().toISOString() };
+  await writeFile(path, `${JSON.stringify(map, null, 2)}\n`, 'utf8');
+}
+
+/** Reuse a directory only when its real contents hash to the requested value. */
+async function reuseSnapshot(target, packageHash) {
+  const verdict = await verifySnapshot(target, { expectedHash: packageHash });
+  if (verdict.contentsHash !== packageHash) {
+    throw new ArtworkError('snapshot_conflict', `The snapshot directory ${packageHash.slice(0, 12)} holds different content`, {
+      problems: verdict.problems,
+    });
+  }
+  if (verdict.state !== 'ok') {
+    // The content is correct and the directory name is correct; an older
+    // publication wrote a marker that used the wrong path prefix. Keep it.
+    await recordCanonicalHash(dirname(target), {
+      directory: packageHash,
+      markerHash: verdict.markerHash,
+      contentsHash: packageHash,
+      problems: verdict.problems,
+    });
+    return { path: target, created: false, packageHash, verified: false, legacyMarkerHash: verdict.markerHash };
+  }
+  return { path: target, created: false, packageHash, verified: true, legacyMarkerHash: null };
+}
+
+/**
+ * Copy the accepted workspace to its immutable snapshot directory.
+ *
+ * The hash covers package-relative paths, exactly as `checkPackage` computes it,
+ * so the directory name, the marker, the returned value, and the version record
+ * all agree. An existing directory is reused only after its file hashes are
+ * verified.
+ */
+export async function publishSnapshot({ workspaceDir, snapshotRoot, artworkId, packageHash }) {
+  const artworkRoot = join(snapshotRoot, artworkId);
+  const target = join(artworkRoot, packageHash);
+  await mkdir(artworkRoot, { recursive: true });
+
+  if (await readSnapshotMarker(target)) return reuseSnapshot(target, packageHash);
+
+  // A unique working directory: two publications of the same hash must never
+  // share one, or each would delete the other's files.
+  const working = join(artworkRoot, `.pending-${packageHash}-${process.pid}-${randomUUID()}`);
   await rm(working, { recursive: true, force: true });
   await mkdir(working, { recursive: true });
-  await cp(workspaceDir, join(working, 'files'), {
+  await cp(workspaceDir, join(working, FILES_DIR), {
     recursive: true,
     filter: (source) => !SKIP_DIRS.has(source.split(/[\\/]/).pop()),
   });
 
-  const walked = (await walkPackage(working)).filter((file) => !file.symlink);
+  // Hash the package relative to its own root. Walking `files/` would put the
+  // prefix into every path and produce a hash that no other check agrees with.
+  const walked = (await walkPackage(join(working, FILES_DIR))).filter((file) => !file.symlink);
   const { files, packageHash: computed } = await hashPackageFiles(walked);
-  await writeFile(
-    join(working, 'snapshot.json'),
-    snapshotMarker({
-      artworkId,
-      packageHash: computed,
-      files: files.map((file) => ({ ...file, path: file.path.replace(/^files\//, '') })),
-    }),
-    { encoding: 'utf8', flag: 'wx' },
-  );
+  if (computed !== packageHash) {
+    await rm(working, { recursive: true, force: true });
+    throw new ArtworkError('snapshot_hash_mismatch', 'The published files do not hash to the validated package hash', {
+      computed,
+      requested: packageHash,
+    });
+  }
+  await writeFile(join(working, MARKER_NAME), snapshotMarker({ artworkId, packageHash: computed, files }), {
+    encoding: 'utf8',
+    flag: 'wx',
+  });
 
   try {
     await stat(target);
-    // another worker published the same hash first; keep the existing one
+    // Another worker published the same hash first. Verify it, then drop this one.
+    const reused = await reuseSnapshot(target, packageHash);
     await rm(working, { recursive: true, force: true });
-    return { path: target, created: false, packageHash: computed };
-  } catch {
-    // the target is free
+    return reused;
+  } catch (error) {
+    if (error instanceof ArtworkError) throw error;
+    // The target is free.
   }
-  await mkdir(dirname(target), { recursive: true });
-  await rename(working, target);
-  return { path: target, created: true, packageHash: computed };
+
+  try {
+    await rename(working, target);
+  } catch (error) {
+    if (['EEXIST', 'ENOTEMPTY', 'EPERM', 'EACCES'].includes(error.code)) {
+      // A concurrent publication won the rename. Its directory is complete,
+      // because a rename of a complete working directory is atomic.
+      await rm(working, { recursive: true, force: true });
+      return { path: target, created: false, packageHash, verified: true, legacyMarkerHash: null };
+    }
+    await rm(working, { recursive: true, force: true });
+    throw error;
+  }
+  return { path: target, created: true, packageHash, verified: true, legacyMarkerHash: null };
 }
 
 /** The candidate workspace file list, for diagnostics. */

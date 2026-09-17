@@ -12,7 +12,7 @@ import { canTransition, transition } from '../src/state.mjs';
 import { isTransientProviderError } from '../src/providers/index.mjs';
 import { extractJson } from '../src/providers/json.mjs';
 import { lineStats, reviewEdits } from '../src/artwork/workspace.mjs';
-import { assignLabels, decideWinner, validateVerdict } from '../src/judge/protocol.mjs';
+import { assignLabels, decideWinner, validateVerdict, MAX_COMPARISON_ENTRIES } from '../src/judge/protocol.mjs';
 
 async function tempDir(t) {
   const dir = await mkdtemp(join(tmpdir(), 'phygen-unit-'));
@@ -209,6 +209,70 @@ test('a fault that a second try can clear is recognised', () => {
   ];
   for (const error of permanent) assert.equal(isTransientProviderError(error), false, error.message);
   assert.equal(isTransientProviderError({ code: 'session_timeout' }), true);
+  // A three-digit number is not an HTTP status.
+  assert.equal(isTransientProviderError(new Error('captured step 500 of 3600 frames')), false);
+  assert.equal(isTransientProviderError(new Error('HTTP 503 Service Unavailable')), true);
+  assert.equal(isTransientProviderError(new Error('status: 502')), true);
+});
+
+test('a comparison holds a parent and all eight supported variants', () => {
+  assert.equal(MAX_COMPARISON_ENTRIES, 9);
+  const entries = Array.from({ length: 9 }, (_, index) => ({ versionId: `v${index}` }));
+  const { labels, labelToVersion } = assignLabels(entries);
+  assert.equal(Object.keys(labelToVersion).length, 9);
+  assert.deepEqual(Object.values(labels).sort(), ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']);
+  assert.throws(() => assignLabels([...entries, { versionId: 'v9' }]), (error) => error.code === 'too_many_entries');
+});
+
+test('a run is refused before its records exist when it cannot be afforded or judged', (t) => {
+  const store = makeStore(t);
+  const events = new EventBus(store);
+
+  const capped = loadConfig({ cost: { maxRunUsd: 1, maxRounds: 0, maxCallsPerRun: 0 } });
+  const budget = new Budget({ store, events, config: capped });
+  assert.throws(
+    () => budget.assertAdmission({ evolutions: 2, variants: 3, limitUsd: 0.5, boundUsd: 2 }),
+    (error) => error instanceof BudgetError && error.code === 'budget_exceeded',
+  );
+  assert.throws(
+    () => budget.assertAdmission({ evolutions: 2, variants: 3, limitUsd: 0, boundUsd: 2 }),
+    (error) => error.code === 'budget_exceeded',
+  );
+  assert.equal(store.listRuns(10).length, 0, 'the check never writes a record');
+
+  // A run with no per-run limit and no ceiling is admitted.
+  const open = new Budget({ store, events, config: loadConfig({ cost: { maxRunUsd: 0, maxRounds: 0, maxCallsPerRun: 0 } }) });
+  assert.equal(open.assertAdmission({ evolutions: 2, variants: 3, limitUsd: 0, boundUsd: 5 }), true);
+
+  const roundLimited = new Budget({ store, events, config: loadConfig({ cost: { maxRounds: 1, maxRunUsd: 0, maxCallsPerRun: 0 } }) });
+  assert.throws(
+    () => roundLimited.assertAdmission({ evolutions: 3, variants: 2, limitUsd: 0, boundUsd: 0 }),
+    (error) => error.code === 'round_limit_reached',
+  );
+});
+
+test('a startup configuration that cannot run is refused by name', () => {
+  assert.throws(
+    () => loadConfig({ evolution: { stepSchedule: [] } }),
+    (error) => error.code === 'config_invalid' && /stepSchedule/.test(error.message),
+  );
+  assert.throws(
+    () => loadConfig({ evolution: { stepSchedule: [1800, 600, 3600] } }),
+    (error) => error.code === 'config_invalid' && /PHYGEN_STEP_SCHEDULE/.test(error.message),
+  );
+  assert.throws(
+    () => loadConfig({ evolution: { stepSchedule: [600, 1800] } }),
+    (error) => error.code === 'config_invalid' && /same length/.test(error.message),
+  );
+  assert.throws(
+    () => loadConfig({ evolution: { variants: 9 } }),
+    (error) => error.code === 'config_invalid',
+  );
+  assert.throws(
+    () => loadConfig({ evolution: { seeds: [] } }),
+    (error) => error.code === 'config_invalid',
+  );
+  assert.equal(loadConfig().evolution.variants, 3);
 });
 
 test('records survive a store reopen', async (t) => {

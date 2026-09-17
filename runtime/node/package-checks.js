@@ -63,6 +63,18 @@ export async function walkPackage(root, dir = root, out = []) {
   return out;
 }
 
+/**
+ * The set hash of already-described files. One algorithm for publication, for
+ * checkPackage, and for the snapshot integrity report, so the three cannot drift.
+ * @param {{path: string, sha256: string}[]} described
+ */
+export function hashDescribedFiles(described) {
+  const sorted = [...described].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  const hash = createHash('sha256');
+  for (const file of sorted) hash.update(`${file.path}\0${file.sha256}\n`);
+  return hash.digest('hex');
+}
+
 /** The hash of one file, and of the sorted set of all package files. */
 export async function hashPackageFiles(files) {
   const described = [];
@@ -76,9 +88,7 @@ export async function hashPackageFiles(files) {
     });
   }
   described.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
-  const hash = createHash('sha256');
-  for (const file of described) hash.update(`${file.path}\0${file.sha256}\n`);
-  return { files: described, packageHash: hash.digest('hex') };
+  return { files: described, packageHash: hashDescribedFiles(described) };
 }
 
 async function checkDeclaredPath(root, realRoot, label, entry, problems) {

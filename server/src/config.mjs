@@ -33,6 +33,79 @@ function readList(name, fallback) {
 }
 
 /**
+ * Validate the whole configuration before the server accepts work.
+ *
+ * A value that survives startup and fails every run is worse than a refusal:
+ * the refusal names the variable, the run failure hides it.
+ *
+ * @param {object} config
+ * @throws {Error} with code `config_invalid` and the offending variable name
+ */
+export function validateConfig(config) {
+  const fail = (variable, message) => {
+    const error = new Error(`Invalid configuration ${variable}: ${message}`);
+    error.code = 'config_invalid';
+    error.variable = variable;
+    throw error;
+  };
+
+  const schedule = [
+    ['evolution.stepSchedule', 'PHYGEN_STEP_SCHEDULE', config.evolution.stepSchedule],
+    ['evolution.denseStepSchedule', 'PHYGEN_DENSE_STEP_SCHEDULE', config.evolution.denseStepSchedule],
+  ];
+  for (const [path, name, values] of schedule) {
+    if (!Array.isArray(values) || values.length === 0) fail(`${path} (${name})`, 'must hold at least one step');
+    if (!values.every((step) => Number.isInteger(step) && step >= 1 && step <= 200000)) {
+      fail(`${path} (${name})`, 'every step must be an integer from 1 to 200000');
+    }
+    for (let index = 1; index < values.length; index++) {
+      if (values[index] <= values[index - 1]) fail(`${path} (${name})`, `step ${values[index]} must be greater than the step before it (${values[index - 1]})`);
+    }
+  }
+  const roles = [
+    ['evolution.frameRoles', config.evolution.frameRoles, 'evolution.stepSchedule'],
+    ['evolution.denseFrameRoles', config.evolution.denseFrameRoles, 'evolution.denseStepSchedule'],
+  ];
+  for (const [path, names, schedulePath] of roles) {
+    if (!Array.isArray(names) || names.length === 0) fail(path, 'must hold at least one frame name');
+    if (names.length !== config.evolution[schedulePath.split('.')[1]].length) {
+      fail(`${path} and ${schedulePath}`, `must have the same length (${names.length} and ${config.evolution[schedulePath.split('.')[1]].length})`);
+    }
+  }
+  const seeds = config.evolution.seeds;
+  if (!Array.isArray(seeds) || seeds.length < 1 || seeds.length > 8) fail('evolution.seeds', 'must hold from 1 to 8 seeds');
+  if (!seeds.every((seed) => Number.isInteger(seed) && seed >= 0 && seed <= 4294967295)) {
+    fail('evolution.seeds', 'every seed must be an integer from 0 to 4294967295');
+  }
+  if (!Number.isInteger(config.evolution.variants) || config.evolution.variants < 1 || config.evolution.variants > 8) {
+    fail('evolution.variants (PHYGEN_VARIANTS)', 'must be an integer from 1 to 8');
+  }
+  const viewport = config.evolution.viewport;
+  if (!viewport || !Number.isInteger(viewport.width) || !Number.isInteger(viewport.height)) fail('evolution.viewport', 'width and height must be integers');
+  if (viewport.width < 64 || viewport.width > 16384 || viewport.height < 64 || viewport.height > 16384) {
+    fail('evolution.viewport', 'width and height must be from 64 to 16384');
+  }
+  if (typeof viewport.dpr !== 'number' || viewport.dpr < 0.25 || viewport.dpr > 4) fail('evolution.viewport.dpr', 'must be from 0.25 to 4');
+  for (const [path, value] of [
+    ['evolution.authorConcurrency', config.evolution.authorConcurrency],
+    ['capture.captureConcurrency', config.capture.captureConcurrency],
+    ['capture.captureTimeoutMs', config.capture.captureTimeoutMs],
+    ['capture.containerTimeoutMs', config.capture.containerTimeoutMs],
+    ['provider.sessionTimeoutMs', config.provider.sessionTimeoutMs],
+    ['provider.judgeTimeoutMs', config.provider.judgeTimeoutMs],
+    ['evolution.maxComparisonImages', config.evolution.maxComparisonImages],
+    ['analysis.maxPairs', config.analysis.maxPairs],
+    ['server.sseKeepAliveMs', config.server.sseKeepAliveMs],
+  ]) {
+    if (!Number.isFinite(value) || value <= 0) fail(path, 'must be a positive number');
+  }
+  if (config.capture.captureTimeoutMs > config.capture.containerTimeoutMs) {
+    fail('capture.captureTimeoutMs', 'must not exceed capture.containerTimeoutMs');
+  }
+  return true;
+}
+
+/**
  * Cost bounds, in US dollars, for one provider request.
  *
  * These are CONFIGURED BOUNDS, not provider prices. The plan requires a
@@ -152,8 +225,17 @@ export function loadConfig(overrides = {}) {
       tieBreak: true,
       // Remove candidate workspaces when a run finishes. Records and captures stay.
       cleanupWorkspaces: readBool('PHYGEN_CLEANUP_WORKSPACES', true),
+      // One round comparison attaches every stage of every seed for the parent
+      // and every variant. This is the ceiling on that image count.
+      maxComparisonImages: readNumber('PHYGEN_MAX_COMPARISON_IMAGES', 60),
       // Grades: a candidate must beat the parent by this confidence margin.
       promoteMargin: readNumber('PHYGEN_PROMOTE_MARGIN', 0.15),
+    },
+    // Bounded relationship measurement. A run has a fixed pair budget and stops
+    // when too many pairs fail.
+    analysis: {
+      maxPairs: Math.max(1, Math.round(readNumber('PHYGEN_ANALYSIS_MAX_PAIRS', 400))),
+      failureLimit: Math.max(0, Math.round(readNumber('PHYGEN_ANALYSIS_FAILURE_LIMIT', 20))),
     },
 
     server: {
@@ -171,11 +253,6 @@ export function loadConfig(overrides = {}) {
     }
   }
 
-  if (config.evolution.stepSchedule.length !== config.evolution.frameRoles.length) {
-    config.evolution.stepSchedule = config.evolution.stepSchedule.slice(0, config.evolution.frameRoles.length);
-  }
-  if (config.evolution.denseStepSchedule.length !== config.evolution.denseFrameRoles.length) {
-    config.evolution.denseStepSchedule = config.evolution.denseStepSchedule.slice(0, config.evolution.denseFrameRoles.length);
-  }
+  validateConfig(config);
   return config;
 }

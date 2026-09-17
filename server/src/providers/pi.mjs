@@ -191,6 +191,10 @@ export class PiProvider {
    * @returns {Promise<{text: string, sessionId: string|null, usage: object, events: object[], exitCode: number, stderr: string}>}
    */
   async run({ kind, prompt, images = [], cwd, sessionId, model, timeoutMs, signal, systemPrompt, onEvent = null }) {
+    // A Stop before the request must not start a process at all.
+    if (signal?.aborted) {
+      throw new ProviderError('cancelled', 'The run stopped before the provider session started.', { kind });
+    }
     if (!this.config.provider.allowSpend) {
       throw new ProviderError(
         'spend_not_allowed',
