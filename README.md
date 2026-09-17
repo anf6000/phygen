@@ -8,6 +8,9 @@ keeps every version. Any version can be played live.
 
 ![flow](docs/flow.svg)
 
+How the whole system works, from the package contract to the measurement layer,
+is in [DOCUMENTATION.md](DOCUMENTATION.md).
+
 ## What is here
 
 | Path | Contents |
@@ -39,9 +42,10 @@ it is kept separate on purpose.
 ## Test
 
 ```bash
-cd server && npm test      # controller, budget, judge, and one full round
+cd server && npm test      # controller, budget, judge, records, measurement, prune
 cd threejs && npm test     # artwork package: seeds, reset, bounds, adapter
 cd threejs && npm run validate
+cd web && npm test         # the generation-ring layout
 ```
 
 ## Settings

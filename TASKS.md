@@ -22,6 +22,10 @@ and the run settings survive a browser refresh.
 is recorded, and a run is never refused or stopped for money. Set
 `PHYGEN_MAX_RUN_USD` to a positive value only if you want a limit.
 
+A configured limit that refuses a request must stop the run. It must not consume
+an evolution and it must not look like a candidate fault. The run records the
+exact reason, for example `budget_exceeded`, and names the limit.
+
 To spend money you must set `PHYGEN_ALLOW_SPEND=1` and `PHYGEN_DRIVER=pi`. A run
 made with `PHYGEN_DRIVER=fake` is marked `stub: true` in every comparison, and
 its verdicts are not evidence.
@@ -45,14 +49,62 @@ Open <http://127.0.0.1:8787/>.
 Checks:
 
 ```bash
-cd server && npm test       # 14 controller tests, including one full round
+cd server && npm test       # 43 controller and measurement tests
 cd threejs && npm test      # 57 artwork tests
+cd web && npm test          # 12 generation-ring layout tests
 cd threejs && npm run validate
 cd server && npm run capture-check -- --version <id>   # capture measurement
+cd server && node tools/snapshot-report.mjs            # snapshot integrity report
+cd server && node tools/backup.mjs --out <dir>         # consistent backup
 node tools/live-check.mjs   # the live artwork on both routes
 node tools/ui-check.mjs     # the selection survives a reload; writes a tree image
 node tools/pages-shot.mjs   # one image of every page
 ```
+
+## Generation rings and measured relationships
+
+The version canvas draws **generation rings**. Every node's children are placed
+around that node, and the arrangement repeats at every level, so the tree grows
+as a recursive circular structure.
+
+The root is the centre and its children surround it. Every other node spreads
+its children over a fan centred on the direction **away from its parent**, so no
+child is ever placed behind its own parent. A brood whose children are all
+leaves is packed as a **block** at card pitch instead of a ring, which is much
+tighter: none of those children needs room to grow outward.
+
+The spacing is solved on the real card rectangles, which is the tightest spacing
+that holds the cards, and a repair pass measures every pair again and spreads the
+drawing only when the geometry demands it. The canvas reports any pair it could
+not separate.
+
+The canvas calculates ring positions before the "hide failed" filter is applied.
+A filter changes what is drawn. It never moves a card. The original root stays
+visible when a filter would remove it.
+
+Ring position is **ancestry**. It is not similarity. A second, separate layer
+holds **measured relationships**: one record per pair of versions and per
+measure. Ancestry is drawn as straight black lines. A measured relationship is
+drawn as a purple cubic bow, at every zoom including the widest, and keeps its
+width on screen so it stays readable when the whole artwork is in view. The
+measured layer can be hidden.
+
+Two deterministic measures are available now. They call no model and spend
+nothing:
+
+- **Configuration distance**: the share of configuration fields that differ.
+- **Source similarity**: one minus the share of shared token sequences.
+
+An appearance measure, which would read the captured frames with a model, is
+listed but not enabled. The interface states that it is unavailable and states
+that an individual-type comparison does not exist. It never substitutes a
+silent approximation.
+
+A measurement run is bounded by `PHYGEN_ANALYSIS_MAX_PAIRS` (default 400). It
+records its own progress, it can be cancelled, and it is never resumed
+automatically after a restart. The interface shows the record revision and
+whether the measurement is out of date.
+
 
 ## Settings
 
@@ -60,6 +112,7 @@ node tools/pages-shot.mjs   # one image of every page
 | --- | --- | --- |
 | `PHYGEN_ALLOW_SPEND` | unset | Model calls are refused until this is `1`. |
 | `PHYGEN_DRIVER` | `auto` | `pi`, `fake`, or `auto`. |
+| `PHYGEN_PI_ENTRY` | unset | The JavaScript entry of the Pi CLI. **Set this on Windows**: Node cannot start the `pi.cmd` shim (it fails with `spawn EINVAL`), so point it at the CLI bundle instead, for example `%LOCALAPPDATA%\pi-node\current\node_modules\@earendil-works\pi-coding-agent\dist\bundle\cli.js`. |
 | `PHYGEN_MODEL` | `moonshotai/kimi-k3` | The judge model. |
 | `PHYGEN_AUTHOR_MODEL` | as above | The author model. |
 | `PHYGEN_VARIANTS` | `3` | Default children per evolution. |
@@ -67,6 +120,22 @@ node tools/pages-shot.mjs   # one image of every page
 | `PHYGEN_COST_SAFETY_FACTOR` | `1.8` | The reserve is this multiple of the estimate. |
 | `PHYGEN_REQUIRE_ISOLATION` | `0` | `1` refuses source candidates without a container. |
 | `PHYGEN_CAPTURE` | `auto` | `local`, `docker`, or `auto`. |
+
+### The test double
+
+`PHYGEN_DRIVER=fake` runs a deterministic stub. It ignores the direction, its
+code changes are canned, and every comparison it produces carries `stub: true`
+with the note "Deterministic test double. Never use this verdict as aesthetic
+evidence". The interface shows a red banner while it is in use, and every card it
+produced carries a **test double** chip.
+
+Remove such work, and anything built on top of it, with:
+
+```bash
+cd server && node tools/prune-failed.mjs --stub          # show the plan
+cd server && node tools/prune-failed.mjs --stub --apply  # do it
+```
+
 | `PHYGEN_BROWSER_EXECUTABLE` | unset | The Chromium path on a server. |
 | `PHYGEN_PI_ENTRY` | unset | The Pi CLI entry. Required on Windows, where the `pi` command is a .cmd shim. |
 | `PHYGEN_AUTHOR_THINKING` | `low` | Author effort. `minimal` is much faster. |
