@@ -380,45 +380,52 @@ export function TreeView({
     [edges],
   );
 
-  // Keep the version that is being worked on in view. Documentation mode holds
-  // the greatest zoom, so the recording shows the work close up.
+  /** The active version with its parent, its siblings, and its children. */
+  const family = useMemo(() => {
+    const target = activeVersionIds[0] ?? null;
+    if (!target) return [];
+    const node = nodes.find((entry) => entry.id === target);
+    const ids = new Set<string>([target]);
+    if (node?.parentId) ids.add(node.parentId);
+    for (const other of nodes) {
+      if (other.parentId === target) ids.add(other.id);
+      if (node?.parentId && other.parentId === node.parentId) ids.add(other.id);
+    }
+    return [...ids];
+  }, [nodes, activeVersionIds]);
+
+  // Keep the version that is being worked on in view, together with the versions
+  // around it, so following never hides the tree. Documentation mode instead
+  // holds the greatest zoom, because the recording wants the work close up.
   useEffect(() => {
     if (!follow) return;
-    const target = activeVersionIds[0] ?? (docMode ? selected : null);
-    if (!target) return;
     const instance = flow.current;
     if (!instance) return;
+    const target = activeVersionIds[0] ?? (docMode ? selected : null);
+    if (!target) return;
+
+    if (!docMode) {
+      const ids = family.length > 0 ? family : [target];
+      instance.fitView({
+        nodes: ids.map((id) => ({ id })),
+        padding: 0.25,
+        duration: 300,
+        minZoom: 0.2,
+        maxZoom: 1.1,
+      });
+      return;
+    }
+
     const position = positions.get(target);
     if (!position) return;
-
-    /** Where the view was last centred, so small shakes are ignored. */
-    let centredAt: { x: number; y: number } | null = null;
-
-    /** Centre on the version, using the geometry React Flow measured. */
-    const centre = (duration: number, force: boolean) => {
-      // The internal node carries the measured size and the absolute position.
-      const measured = instance.getNode(target) as
-        | (ReturnType<ReactFlowInstance['getNode']> & { positionAbsolute?: { x: number; y: number }; width?: number; height?: number })
-        | undefined;
-      const absolute = measured?.positionAbsolute;
-      const x = absolute ? absolute.x + (measured?.width ?? NODE_WIDTH) / 2 : position.x + NODE_WIDTH / 2;
-      const y = absolute ? absolute.y + (measured?.height ?? NODE_HEIGHT) / 2 : position.y + NODE_HEIGHT / 2;
-      // A node that grows as its code column fills must not drag the view on
-      // every tick, or the recording shakes. Follow a real move only.
-      if (!force && centredAt && Math.abs(centredAt.x - x) + Math.abs(centredAt.y - y) < 40) return;
-      centredAt = { x, y };
-      // Documentation mode zooms right in. Otherwise keep the zoom the person
-      // chose, so following never hides the tree.
-      const zoom = docMode ? MAX_ZOOM : instance.getZoom();
-      instance.setCenter(x, y, { zoom, duration });
-    };
-
-    centre(docMode ? 180 : 300, true);
-    if (!docMode) return undefined;
-    // Documentation mode checks again, so it keeps up when the version moves.
-    const timer = window.setInterval(() => centre(160, false), 600);
-    return () => window.clearInterval(timer);
-  }, [activeKey, follow, docMode, selected, activeVersionIds, positions]);
+    const measured = instance.getNode(target) as
+      | (ReturnType<ReactFlowInstance['getNode']> & { positionAbsolute?: { x: number; y: number }; width?: number; height?: number })
+      | undefined;
+    const absolute = measured?.positionAbsolute;
+    const x = absolute ? absolute.x + (measured?.width ?? NODE_WIDTH) / 2 : position.x + NODE_WIDTH / 2;
+    const y = absolute ? absolute.y + (measured?.height ?? NODE_HEIGHT) / 2 : position.y + NODE_HEIGHT / 2;
+    instance.setCenter(x, y, { zoom: MAX_ZOOM, duration: 180 });
+  }, [activeKey, follow, docMode, selected, activeVersionIds, positions, family]);
 
   const handleSelect = useCallback((id: string) => onSelect(id), [onSelect]);
 
