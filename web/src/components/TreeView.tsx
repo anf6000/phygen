@@ -318,6 +318,9 @@ export function TreeView({
   const activeKey = activeVersionIds.join(',');
 
   const positions = useMemo(() => layoutTree(nodes), [nodes]);
+  // A stable object: a new one on every render makes React Flow re-fit and
+  // fight the follow logic.
+  const fitOptions = useMemo(() => ({ padding: 0.15, maxZoom: 1, minZoom: MIN_READABLE_ZOOM }), []);
   const activeSet = useMemo(() => new Set(activeVersionIds), [activeVersionIds]);
   const rowsByVersion = useMemo(() => {
     const grouped: Record<string, AgentRow[]> = {};
@@ -397,6 +400,7 @@ export function TreeView({
   // Keep the version that is being worked on in view, together with the versions
   // around it, so following never hides the tree. Documentation mode instead
   // holds the greatest zoom, because the recording wants the work close up.
+  const familyKey = useMemo(() => [...family].sort().join('|'), [family]);
   useEffect(() => {
     if (!follow) return;
     const instance = flow.current;
@@ -416,16 +420,17 @@ export function TreeView({
       return;
     }
 
-    const position = positions.get(target);
-    if (!position) return;
     const measured = instance.getNode(target) as
       | (ReturnType<ReactFlowInstance['getNode']> & { positionAbsolute?: { x: number; y: number }; width?: number; height?: number })
       | undefined;
     const absolute = measured?.positionAbsolute;
-    const x = absolute ? absolute.x + (measured?.width ?? NODE_WIDTH) / 2 : position.x + NODE_WIDTH / 2;
-    const y = absolute ? absolute.y + (measured?.height ?? NODE_HEIGHT) / 2 : position.y + NODE_HEIGHT / 2;
+    if (!absolute) return;
+    const x = absolute.x + (measured?.width ?? NODE_WIDTH) / 2;
+    const y = absolute.y + (measured?.height ?? NODE_HEIGHT) / 2;
     instance.setCenter(x, y, { zoom: MAX_ZOOM, duration: 180 });
-  }, [activeKey, follow, docMode, selected, activeVersionIds, positions, family]);
+    // The keys, not the arrays: a poll that returns the same versions must not
+    // move the view, or the tree and a person's own zoom fight each other.
+  }, [activeKey, familyKey, follow, docMode, selected, activeVersionIds, family]);
 
   const handleSelect = useCallback((id: string) => onSelect(id), [onSelect]);
 
@@ -440,7 +445,7 @@ export function TreeView({
       }}
       onNodeClick={(_, node) => handleSelect(node.id)}
       fitView
-      fitViewOptions={{ padding: 0.15, maxZoom: 1, minZoom: MIN_READABLE_ZOOM }}
+      fitViewOptions={fitOptions}
       minZoom={0.1}
       maxZoom={MAX_ZOOM}
       proOptions={{ hideAttribution: true }}
