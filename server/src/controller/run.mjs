@@ -640,11 +640,19 @@ export class RunController {
         const files = this.#fileReporter(run.id, versionId, workspaceDir);
         const agent = this.#agentReporter(run.id, versionId);
         await files.announce();
+        // Tell the session what this run already did, so a one-time change in
+        // the direction is not applied again at every evolution.
+        const earlier = this.store.listRounds(run.id).filter((entry) => entry.round > 0 && entry.round < round);
+        const history = [
+          ...earlier.map((entry) => `evolution ${entry.round}: ${truncate(entry.note ?? 'no note', 160)}`),
+          ...parent.changes.slice(0, 8).map((change) => `the parent changed ${change.path} (+${change.added} -${change.removed})`),
+        ];
         const prompt = buildAuthorPrompt({
           direction: run.direction,
           plan,
           manifest: context.manifest,
           parentConfiguration: parent.configuration,
+          history,
         });
         const sessionId = `phygen-${versionId}`;
         const attemptCall = (attempt) =>

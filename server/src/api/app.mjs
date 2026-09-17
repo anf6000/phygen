@@ -623,6 +623,9 @@ function publicVersion(version, variant = null, newestCapture = null) {
     title: version.title,
     status: version.status,
     direction: version.direction,
+    // The palette this version renders with, so the interface can show which
+    // colours a new run will inherit.
+    palette: version.configuration?.palette ?? null,
     thumbnailUrl: `/api/versions/${version.id}/artifacts/thumb`,
     // The frame the capture wrote last, so a node can show work in progress.
     latestCaptureUrl: newestCapture ? `/api/captures/${newestCapture.id}.png` : null,

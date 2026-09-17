@@ -24,7 +24,7 @@ export const AUTHOR_SYSTEM_PROMPT = [
  * @param {object} options.manifest
  * @param {object} options.parentConfiguration
  */
-export function buildAuthorPrompt({ direction, plan, manifest, parentConfiguration }) {
+export function buildAuthorPrompt({ direction, plan, manifest, parentConfiguration, history = [] }) {
   const lines = [];
   lines.push(`Evolution direction: ${direction}`);
   lines.push('');
@@ -54,6 +54,16 @@ export function buildAuthorPrompt({ direction, plan, manifest, parentConfigurati
   lines.push('');
   lines.push('Work efficiently. Read only src/physarum.js, src/renderer.js, and config.json. Do not read the tests or the other package files. Do not write long code: one focused change is enough.');
   lines.push('');
+  if (history.length > 0) {
+    lines.push('Earlier evolutions of THIS run already did the following:');
+    for (const entry of history) lines.push(`- ${entry}`);
+    lines.push('');
+    lines.push('The direction above describes the intent of the whole run, not a fresh task for each');
+    lines.push('evolution. Check the parent first: if a part of the direction is already done, do not');
+    lines.push('do it again. For example, "spawn double the particles" means 4000 to 8000 once, not a');
+    lines.push('doubling at every evolution.');
+    lines.push('');
+  }
   lines.push('The current configuration of the parent:');
   lines.push('```json');
   lines.push(JSON.stringify(parentConfiguration, null, 2));

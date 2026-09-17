@@ -414,6 +414,11 @@ export default function App() {
         <p className="branch-row muted">
           selected version spawns the variants:
           <span className="branch-chip">{parentNode ? parentNode.title : 'the root version'}</span>
+          {parentNode ? (
+            <span className="muted">
+              palette <strong>{parentNode.palette ?? 'unknown'}</strong> · the variants inherit it
+            </span>
+          ) : null}
           <label className="follow-toggle">
             <input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} /> follow the active node
           </label>

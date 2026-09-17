@@ -36,6 +36,8 @@ export interface TreeNode {
   title: string;
   status: VersionStatus;
   direction: string | null;
+  /** The palette this version renders with. */
+  palette: string | null;
   thumbnailUrl: string;
   /** The frame the capture wrote last, while the node is still working. */
   latestCaptureUrl: string | null;
