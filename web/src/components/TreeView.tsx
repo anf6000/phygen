@@ -29,8 +29,6 @@ const ROW_GAP = 110;
 const PITCH = NODE_WIDTH + COLUMN_GAP;
 /** Never show the tree smaller than this: below it a node is a speck. */
 const MIN_READABLE_ZOOM = 0.35;
-/** The zoom the view keeps while it follows the work. */
-const FOLLOW_ZOOM = 0.75;
 /** The greatest zoom the canvas allows. Documentation mode holds this. */
 const MAX_ZOOM = 2;
 const ROW_PITCH = NODE_HEIGHT + ROW_GAP;
@@ -409,7 +407,9 @@ export function TreeView({
       // every tick, or the recording shakes. Follow a real move only.
       if (!force && centredAt && Math.abs(centredAt.x - x) + Math.abs(centredAt.y - y) < 40) return;
       centredAt = { x, y };
-      const zoom = docMode ? MAX_ZOOM : Math.max(instance.getZoom(), FOLLOW_ZOOM);
+      // Documentation mode zooms right in. Otherwise keep the zoom the person
+      // chose, so following never hides the tree.
+      const zoom = docMode ? MAX_ZOOM : instance.getZoom();
       instance.setCenter(x, y, { zoom, duration });
     };
 
