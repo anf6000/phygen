@@ -1,4 +1,5 @@
 import type { TreeNode } from '../types';
+import { VersionThumb } from './VersionThumb';
 
 /** The compact list the plan asks for on a narrow screen. */
 export function GenerationList({
@@ -19,7 +20,7 @@ export function GenerationList({
       {ordered.map((node) => (
         <li key={node.id}>
           <button type="button" className={node.id === selected ? 'is-selected' : ''} onClick={() => onSelect(node.id)}>
-            <img src={node.thumbnailUrl} alt={`${node.title}, first captured frame`} loading="lazy" />
+            <VersionThumb url={node.thumbnailUrl} alt={`${node.title}, first captured frame`} />
             <span>
               <strong>{node.title}</strong>
               <span className="muted">

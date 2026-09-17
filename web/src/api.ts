@@ -1,7 +1,7 @@
 // Thin API client and the event stream hook.
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { AgentRow, ApiError, CostEstimate, Health, ModelList, ProgressEvent, RecordingStatus, Run, RunDetail, Tree, VersionDetail } from './types';
+import type { AgentRow, ApiError, CostEstimate, Health, Measure, MeasureList, ModelList, ProgressEvent, RecordingStatus, RelationshipsView, Run, RunDetail, Tree, VersionDetail } from './types';
 
 export class RequestError extends Error {
   readonly code: string;
@@ -57,6 +57,17 @@ export const api = {
   runSummary: (runId: string) => request<{ run: Run; active: boolean }>(`/api/runs/${runId}/summary`),
   runs: () => request<{ runs: Run[] }>('/api/runs?limit=20'),
   control: (runId: string, action: 'pause' | 'resume' | 'stop') => request<{ run: Run }>(`/api/runs/${runId}/${action}`, { method: 'POST', body: '{}' }),
+  measures: () => request<MeasureList>('/api/measures'),
+  relationships: (artworkId: string, measure: string, limit?: number) =>
+    request<RelationshipsView>(
+      `/api/artworks/${artworkId}/relationships?measure=${encodeURIComponent(measure)}${limit ? `&limit=${limit}` : ''}`,
+    ),
+  rebuildRelationships: (artworkId: string, measure: string, limit?: number) =>
+    request<{ run: RelationshipsView['run']; measure: Measure | null }>(`/api/artworks/${artworkId}/relationships`, {
+      method: 'POST',
+      body: JSON.stringify({ measure, limit }),
+    }),
+  cancelAnalysis: (runId: string) => request<{ run: RelationshipsView['run'] }>(`/api/analysis/${runId}/cancel`, { method: 'POST', body: '{}' }),
 };
 
 export interface StreamState {

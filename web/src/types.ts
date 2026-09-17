@@ -38,7 +38,8 @@ export interface TreeNode {
   direction: string | null;
   /** The palette this version renders with. */
   palette: string | null;
-  thumbnailUrl: string;
+  /** Null when this version holds no capture. The interface must not request it. */
+  thumbnailUrl: string | null;
   /** The frame the capture wrote last, while the node is still working. */
   latestCaptureUrl: string | null;
   latestCaptureStage: string | null;
@@ -48,6 +49,9 @@ export interface TreeNode {
   sourceHash: string;
   createdAt: string;
   onLineage: boolean;
+  /** The run that made this version used the deterministic test double, so this
+   *  is not real work and its verdicts are not evidence. */
+  stub: boolean;
   usageUsd: number;
   error: { code: string; message: string } | null;
 }
@@ -67,6 +71,68 @@ export interface Tree {
   activeVersionIds: string[];
   activeKinds: Record<string, string>;
 }
+
+/** A way of measuring the relationship between two versions. */
+export interface Measure {
+  id: string;
+  label: string;
+  /** "deterministic" spends nothing; "model" needs a provider and a budget. */
+  method: 'deterministic' | 'model';
+  available: boolean;
+  /** What a HIGH score means. The interface states this, never the reverse. */
+  direction: string;
+  description: string;
+  unavailableReason?: string;
+}
+
+export interface MeasureList {
+  measures: Measure[];
+  defaultMeasure: string | null;
+}
+
+export interface AnalysisRun {
+  id: string;
+  artworkId: string;
+  measure: string;
+  state: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+  revision: string | null;
+  params: { limit?: number; groups?: Record<string, number>; considered?: number };
+  progress: { total?: number; done?: number; reused?: number; failed?: number; cancelling?: boolean; elapsedMs?: number };
+  errorCode: string | null;
+  errorMessage: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+}
+
+/** One measured pair. `score` is a distance: a HIGH score means less alike. */
+export interface RelationshipPair {
+  id: string;
+  measure: string;
+  a: string;
+  b: string;
+  pairKey: string;
+  outcome: 'ok' | 'error';
+  score: number | null;
+  band: string | null;
+  evidence: Record<string, unknown>;
+  /** Why this pair was chosen: lineage, round, generation, slot, or sampled. */
+  group: string | null;
+  /** True when one version is the ancestor of the other, from the records. */
+  ancestor: boolean;
+  error: { code: string; message: string | null } | null;
+}
+
+export interface RelationshipsView {
+  measure: Measure;
+  run: AnalysisRun | null;
+  pairs: RelationshipPair[];
+  currentRevision: string;
+  stale: boolean;
+  reason: string | null;
+  maximum: number;
+}
+
 
 export interface Capture {
   id: string;

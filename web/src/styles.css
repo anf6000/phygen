@@ -193,7 +193,289 @@ button.primary:focus-visible {
   flex: 1;
   min-width: 0;
   border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
 }
+
+/* The rings are an overview. These controls keep Fit All and Focus reachable
+   however far out the tree reaches, and they say what the rings mean. */
+.tree-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.tree-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.tree-toolbar button {
+  font: inherit;
+  padding: 2px 8px;
+}
+
+.tree-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted, #666);
+}
+
+.tree-note {
+  font-size: 11px;
+  color: var(--muted, #666);
+}
+
+/* The run state, stated where the settings are: a paused run used to leave the
+   whole header disabled with no explanation. */
+.run-state {
+  margin: 4px 0 0;
+  padding: 4px 6px;
+  font-size: 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--panel);
+}
+
+/* A stub provider produces work that LOOKS finished and is not. It must not be
+   possible to miss. */
+.notice-alert {
+  border-left-color: #a33;
+  background: #fdf2f2;
+  color: #611;
+  font-size: 12px;
+}
+
+.notice-alert code {
+  font-weight: 600;
+}
+
+/* A card the layout could not separate is a fault, and it says so. */
+.tree-warning {
+  color: #a33;
+  font-weight: 600;
+}
+
+.tree-wrap .react-flow {
+  flex: 1;
+  min-height: 0;
+}
+
+.vnode-diagnostic {
+  border-style: dashed;
+  opacity: 0.9;
+}
+
+/* A card from a test-double run must not look like real work. */
+.stub-chip {
+  padding: 0 4px;
+  border: 1px solid #a33;
+  background: #fdf2f2;
+  color: #611;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+/* ── Relationship layer ──────────────────────────────────────────────────── */
+/* A measured relationship is drawn unlike an ancestry line: thinner, purple,
+   and solid. Both layers are solid; width and colour tell them apart. */
+.edge-measured {
+  stroke: #7a5cc6;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 8px;
+}
+
+.tabs button {
+  font: inherit;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.tabs button.is-current {
+  border-color: var(--line);
+  background: var(--bg);
+  font-weight: 600;
+}
+
+.relationships section {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.relationships h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.rel-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.rel-field select,
+.rel-field input {
+  font: inherit;
+}
+
+.rel-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.rel-direction {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.rel-facts {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 2px 8px;
+  margin: 8px 0;
+  font-size: 12px;
+}
+
+.rel-facts dt {
+  color: var(--muted, #666);
+}
+
+.rel-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.rel-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.rel-key {
+  display: inline-block;
+  width: 22px;
+  height: 0;
+  border-top: 2px solid var(--ink);
+}
+
+.rel-key-measure {
+  border-top-color: #7a5cc6;
+  border-top-width: 1px;
+}
+
+.rel-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.rel-table th,
+.rel-table td {
+  text-align: left;
+  padding: 2px 4px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.rel-table tr.is-selected {
+  background: var(--bg);
+}
+
+.rel-table button {
+  font: inherit;
+  background: none;
+  border: none;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.rel-pair-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rel-pair-button img,
+.rel-thumb,
+.rel-noimage {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  background: var(--line);
+  display: inline-block;
+}
+
+.rel-thumb-large,
+.rel-compare .rel-noimage {
+  width: 100%;
+  height: 110px;
+  object-fit: cover;
+  background: var(--line);
+  display: block;
+}
+
+/* A missing frame is a labelled placeholder, never a broken image. */
+.thumb-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: repeating-linear-gradient(45deg, var(--line) 0 4px, transparent 4px 8px);
+  color: var(--muted, #666);
+  font-size: 10px;
+  text-align: center;
+  overflow: hidden;
+}
+
+.rel-noimage.is-large {
+  width: 100%;
+  height: 90px;
+}
+
+.rel-compare {
+  display: flex;
+  gap: 8px;
+}
+
+.rel-compare figure {
+  flex: 1;
+  margin: 0;
+}
+
+.rel-compare img,
+.rel-compare .rel-noimage {
+  width: 100%;
+  height: 110px;
+  object-fit: cover;
+  background: var(--line);
+}
+
+.rel-compare figcaption {
+  font-size: 11px;
+}
+
 
 .panel {
   width: 400px;
@@ -314,6 +596,15 @@ button.primary:focus-visible {
 .react-flow {
   background: var(--bg);
 }
+
+/* A drawn line is never a click target: it crosses many cards, and a line that
+   swallows a click makes the canvas feel dead. The cards take every click. */
+.react-flow__edge,
+.react-flow__edge *,
+.react-flow__connectionline {
+  pointer-events: none !important;
+}
+
 
 .react-flow__node {
   padding: 0;

@@ -1,14 +1,20 @@
-// The version tree. Children are centered under their parent, and the layout is
-// recomputed whenever the node list changes, so a new generation appears under
-// the version it came from.
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
+// The version tree, drawn as generation rings.
+//
+// The original artwork root sits at the graph origin. Each generation is one
+// ring further out, and a lineage that does not divide stays on one ray. The
+// ring number is the calculated distance from the canonical root, so a stored
+// generation field can never move a card.
+//
+// Rings are ancestry. They are NOT a measured relationship between two
+// artworks; that is a separate layer with its own module and its own draws.
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Background,
   Controls,
   Handle,
   Position,
   ReactFlow,
-  getSmoothStepPath,
+  useInternalNode,
   type Edge,
   type EdgeProps,
   type EdgeTypes,
@@ -19,19 +25,32 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
+import { boundaryPoint, layoutKey, layoutRings, type RadialNode } from '../layout/radial';
 import type { AgentRow, Decision, FileRow, TreeEdge, TreeNode } from '../types';
 import { CodeStream } from './CodeStream';
+import { VersionThumb } from './VersionThumb';
 
 const NODE_WIDTH = 260;
 const NODE_HEIGHT = 300;
-const COLUMN_GAP = 32;
-const ROW_GAP = 110;
-const PITCH = NODE_WIDTH + COLUMN_GAP;
-/** Never show the tree smaller than this: below it a node is a speck. */
-const MIN_READABLE_ZOOM = 0.35;
+/** Free space between two cards that must not touch. The packing grows a ring or
+ *  a block until every pair of cards clears this, so the number is a promise. */
+const CARD_GAP = 12;
 /** The greatest zoom the canvas allows. Documentation mode holds this. */
 const MAX_ZOOM = 2;
-const ROW_PITCH = NODE_HEIGHT + ROW_GAP;
+/**
+ * The smallest zoom the canvas allows, and the floor for Fit All.
+ *
+ * A card is 260 graph units wide, so this floor keeps it about 42 pixels wide:
+ * a target a person can actually hit. Fit All fits as much of the artwork as
+ * that floor allows and the rest is reached by panning. An overview where every
+ * card is a 15-pixel speck is not a usable interface, however much of the
+ * artwork it shows at once.
+ */
+const MIN_OVERVIEW_ZOOM = 0.16;
+/** The smallest zoom that still reads as a card. Focus never goes below it. */
+const MIN_READABLE_ZOOM = 0.35;
+/** The greatest number of measured lines drawn at once. */
+const MAX_RELATIONSHIP_DRAWS = 150;
 
 /** The stages a candidate passes through, in order. */
 export const STAGES = ['queued', 'authoring', 'validating', 'capturing', 'judging'] as const;
@@ -50,49 +69,22 @@ interface NodeData extends Record<string, unknown> {
   onPlay: (id: string) => void;
 }
 
-/**
- * Lay out the tree: a parent sits centered over its children, and the next free
- * column is given to each leaf. Loop-free, because a version has one parent.
- */
-export function layoutTree(nodes: TreeNode[]): Map<string, { x: number; y: number }> {
-  const byId = new Map(nodes.map((node) => [node.id, node]));
-  const children = new Map<string, TreeNode[]>();
-  const roots: TreeNode[] = [];
+interface DiagnosticData extends Record<string, unknown> {
+  id: string;
+  label: string;
+  reason: string;
+}
 
-  for (const node of nodes) {
-    if (node.parentId && byId.has(node.parentId)) {
-      const list = children.get(node.parentId) ?? [];
-      list.push(node);
-      children.set(node.parentId, list);
-    } else {
-      roots.push(node);
-    }
-  }
-  const byAge = (a: TreeNode, b: TreeNode) => a.createdAt.localeCompare(b.createdAt);
-  for (const list of children.values()) list.sort(byAge);
-  roots.sort(byAge);
-
-  const positions = new Map<string, { x: number; y: number }>();
-  let nextLeaf = 0;
-
-  const place = (node: TreeNode, depth: number, seen: Set<string>): number => {
-    if (seen.has(node.id)) return nextLeaf * PITCH;
-    seen.add(node.id);
-    const kids = children.get(node.id) ?? [];
-    let x: number;
-    if (kids.length === 0) {
-      x = nextLeaf * PITCH;
-      nextLeaf += 1;
-    } else {
-      const centers = kids.map((kid) => place(kid, depth + 1, seen));
-      x = (centers[0] + centers[centers.length - 1]) / 2;
-    }
-    positions.set(node.id, { x, y: depth * ROW_PITCH });
-    return x;
-  };
-
-  for (const root of roots) place(root, 0, new Set());
-  return positions;
+/** One measured pair to draw. A score is a distance: a high score is a wider draw. */
+export interface RelationshipDraw {
+  id: string;
+  source: string;
+  target: string;
+  pairKey: string;
+  score: number;
+  band: string | null;
+  group: string | null;
+  ancestor: boolean;
 }
 
 function stageProgress(status: TreeNode['status']): { index: number; working: boolean } {
@@ -107,8 +99,7 @@ const VersionNode = memo(
     const pending = working;
     const hasImage = !pending && node.status !== 'failed';
     const done = TERMINAL.includes(node.status);
-    // While a capture runs, the newest frame stands in for the thumbnail.
-    // While the node works, the newest frame stands in for the thumbnail. A
+    // While a node works, the newest frame stands in for the thumbnail. A
     // finished node keeps its stored thumbnail.
     const liveUrl = liveFrame?.url ?? (pending ? node.latestCaptureUrl : null);
     const imageUrl = liveUrl ?? (hasImage ? node.thumbnailUrl : null);
@@ -137,7 +128,8 @@ const VersionNode = memo(
         }}
         onClick={() => onSelect(node.id)}
       >
-        <Handle type="target" position={Position.Top} />
+        {/* The edges attach to the card boundary, so the handles carry no mark. */}
+        <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
         {active ? (
           <svg className="node-runner" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
             <rect x="1" y="1" width="98" height="98" pathLength={1} vectorEffect="non-scaling-stroke" />
@@ -146,7 +138,7 @@ const VersionNode = memo(
         <div className="vnode-media">
           {frame ? (
             <>
-              <img src={frame.url} alt={`${node.title}, frame ${frame.stage} at step ${frame.step}`} loading="lazy" />
+              <VersionThumb url={frame.url} alt={`${node.title}, frame ${frame.stage} at step ${frame.step}`} />
               <span className="live-chip">
                 {frame.live ? `live · ${frame.stage} ${frame.step}` : `${frame.stage}${frame.step ? ` ${frame.step}` : ''}`}
               </span>
@@ -192,6 +184,11 @@ const VersionNode = memo(
         </div>
         <div className="vnode-actions">
           {active ? <span className="active-chip">working now</span> : null}
+          {node.stub ? (
+            <span className="stub-chip" title="The run that made this version used the deterministic test double. It is not real work and its verdicts are not evidence.">
+              test double
+            </span>
+          ) : null}
           {node.onLineage ? <span className="lineage-chip">lineage</span> : null}
           {hasImage && (node.status === 'promoted' || node.status === 'rejected') ? (
             <button
@@ -216,7 +213,7 @@ const VersionNode = memo(
             </button>
           ) : null}
         </div>
-        <Handle type="source" position={Position.Bottom} />
+        <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
       </div>
     );
   },
@@ -242,6 +239,27 @@ const VersionNode = memo(
     );
   },
 );
+
+/**
+ * A record with no valid ancestry. It is never given a ring, an angle, or an
+ * invented parent; the card states why it is here.
+ */
+const DiagnosticNode = memo(function DiagnosticNode({ data }: NodeProps) {
+  const { label, reason } = data as unknown as DiagnosticData;
+  return (
+    <div className="vnode vnode-diagnostic" role="note" aria-label={`${label}: ${reason}`}>
+      <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
+      <div className="vnode-placeholder is-failed">
+        <span className="vnode-placeholder-text">{reason}</span>
+      </div>
+      <div className="vnode-body">
+        <span className="vnode-title">{label}</span>
+        <span className="vnode-meta">not reachable from the root</span>
+      </div>
+      <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
+    </div>
+  );
+});
 
 function stageLabel(status: TreeNode['status']): string {
   if (status === 'queued') return 'queued';
@@ -272,18 +290,74 @@ function kindLabel(kind: string): string {
   return kind;
 }
 
-/** An edge that draws itself in: pathLength makes one dash value fit any path. */
-function GrowEdge({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, style, data }: EdgeProps) {
-  const [path] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
-  const className = (data as { className?: string } | undefined)?.className ?? '';
-  return <path d={path} pathLength={1} className={className} style={style} fill="none" />;
+function centerOf(node: ReturnType<typeof useInternalNode>) {
+  if (!node) return null;
+  const position = (node as { internals?: { positionAbsolute?: { x: number; y: number } } }).internals?.positionAbsolute;
+  if (!position) return null;
+  const width = (node as { measured?: { width?: number } }).measured?.width ?? NODE_WIDTH;
+  const height = (node as { measured?: { height?: number } }).measured?.height ?? NODE_HEIGHT;
+  return { x: position.x + width / 2, y: position.y + height / 2, width, height };
 }
 
-const nodeTypes = { version: VersionNode } as unknown as NodeTypes;
-const edgeTypes = { grow: GrowEdge } as unknown as EdgeTypes;
+/**
+ * An ancestry edge. It leaves the source card where the line to the target card
+ * crosses the card boundary, so the draw follows the ring instead of a fixed
+ * top-to-bottom side that a radial layout does not have.
+ */
+function RadialEdge({ source, target, sourceX, sourceY, targetX, targetY, style, data }: EdgeProps) {
+  const settings = (data ?? {}) as { className?: string; curve?: boolean };
+  const className = settings.className ?? '';
+  const sourceNode = useInternalNode(source);
+  const targetNode = useInternalNode(target);
+  const from = centerOf(sourceNode);
+  const to = centerOf(targetNode);
+
+  let start = { x: sourceX, y: sourceY };
+  let end = { x: targetX, y: targetY };
+  if (from && to) {
+    start = boundaryPoint(from, to, from.width, from.height);
+    end = boundaryPoint(to, from, to.width, to.height);
+  }
+
+  // An ancestry line is a straight spoke: it says "this card hangs from that
+  // one", and a curve would blur that. A measured relationship joins two cards
+  // that can sit anywhere, so it is drawn as a bow that bends away from the
+  // middle of the artwork. The bow keeps crossing lines apart and reads as a
+  // flowing mesh instead of a knot of chords.
+  if (!settings.curve) {
+    return <path d={`M ${start.x} ${start.y} L ${end.x} ${end.y}`} pathLength={1} className={className} style={style} fill="none" />;
+  }
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const length = Math.hypot(dx, dy);
+  if (length < 1e-6) {
+    return <path d={`M ${start.x} ${start.y}`} pathLength={1} className={className} style={style} fill="none" />;
+  }
+  // The perpendicular, on the side that leads away from the graph origin.
+  const normalX = -dy / length;
+  const normalY = dx / length;
+  const midX = (start.x + end.x) / 2;
+  const midY = (start.y + end.y) / 2;
+  const away = midX * normalX + midY * normalY >= 0 ? 1 : -1;
+  const bow = length * 0.16 * away;
+  const control1 = { x: start.x + dx * 0.25 + normalX * bow, y: start.y + dy * 0.25 + normalY * bow };
+  const control2 = { x: start.x + dx * 0.75 + normalX * bow, y: start.y + dy * 0.75 + normalY * bow };
+  const path = `M ${start.x} ${start.y} C ${control1.x} ${control1.y} ${control2.x} ${control2.y} ${end.x} ${end.y}`;
+  return (
+    // A stroke is measured in graph units, so it shrinks to a hairline as the
+    // canvas zooms out. The measured layer keeps its width on SCREEN, which is
+    // what makes it readable at the widest zoom.
+    <path d={path} pathLength={1} className={className} style={style} fill="none" vectorEffect="non-scaling-stroke" />
+  );
+}
+
+const nodeTypes = { version: VersionNode, diagnostic: DiagnosticNode } as unknown as NodeTypes;
+const edgeTypes = { radial: RadialEdge } as unknown as EdgeTypes;
 
 export function TreeView({
   nodes,
+  allNodes,
+  rootId,
   edges,
   selected,
   activeVersionIds,
@@ -294,12 +368,20 @@ export function TreeView({
   fileRows,
   follow,
   docMode,
+  relationships,
   onSelect,
   onOpen,
   onPlay,
 }: {
+  /** The records the filter keeps: what is drawn. */
   nodes: TreeNode[];
+  /** Every record of the artwork: what the rings are calculated from. */
+  allNodes: TreeNode[];
+  /** The canonical root of the artwork, from the artwork record. */
+  rootId: string | null;
   edges: TreeEdge[];
+  /** Measured relationships to draw on top of the ancestry. Never ancestry. */
+  relationships?: RelationshipDraw[];
   selected: string | null;
   activeVersionIds: string[];
   activeKinds: Record<string, string>;
@@ -316,11 +398,25 @@ export function TreeView({
 }) {
   const flow = useRef<ReactFlowInstance | null>(null);
   const activeKey = activeVersionIds.join(',');
+  // A person's own pan or zoom wins until they ask for Focus again.
+  const userMoved = useRef(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(true);
 
-  const positions = useMemo(() => layoutTree(nodes), [nodes]);
-  // A stable object: a new one on every render makes React Flow re-fit and
-  // fight the follow logic.
-  const fitOptions = useMemo(() => ({ padding: 0.15, maxZoom: 1, minZoom: MIN_READABLE_ZOOM }), []);
+  // The layout follows TOPOLOGY and card size only. A status change, a new
+  // capture, or a selection never moves a card.
+  const topology = useMemo<RadialNode[]>(
+    () => allNodes.map((node) => ({ id: node.id, parentId: node.parentId, generation: node.generation, createdAt: node.createdAt })),
+    [allNodes],
+  );
+  const key = layoutKey(topology, rootId, NODE_WIDTH, NODE_HEIGHT);
+  const layout = useMemo(
+    () => layoutRings(topology, { rootId, cardWidth: NODE_WIDTH, cardHeight: NODE_HEIGHT, cardGap: CARD_GAP }),
+    // The key is the whole input: topology, root and card size.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [key],
+  );
+
+  const fitOptions = useMemo(() => ({ padding: 0.15, maxZoom: 1 }), []);
   const activeSet = useMemo(() => new Set(activeVersionIds), [activeVersionIds]);
   const rowsByVersion = useMemo(() => {
     const grouped: Record<string, AgentRow[]> = {};
@@ -341,48 +437,101 @@ export function TreeView({
   }, [fileRows]);
   const filesOf = useCallback((id: string) => filesByVersion[id] ?? [], [filesByVersion]);
 
-  const flowNodes = useMemo<Node[]>(
-    () =>
-      nodes.map((node) => ({
-        id: node.id,
-        type: 'version',
-        position: positions.get(node.id) ?? { x: 0, y: 0 },
-        data: {
-          node,
-          active: activeSet.has(node.id),
-          activeKind: activeKinds[node.id] ?? null,
-          liveFrame: liveFrames[node.id] ?? null,
-          decision: decisions[node.id] ?? null,
-          rows: rowsOf(node.id),
-          files: filesOf(node.id),
-          onSelect,
-          onOpen,
-          onPlay,
-        } as NodeData,
-        selected: node.id === selected,
-        style: { width: NODE_WIDTH },
-      })),
-    [nodes, positions, selected, activeSet, activeKinds, liveFrames, decisions, rowsOf, filesOf, onSelect, onOpen, onPlay],
-  );
+  // Hidden records keep the position they had. A filter changes what is drawn,
+  // never where the remaining cards are.
+  const flowNodes = useMemo<Node[]>(() => {
+    const drawn: Node[] = nodes.map((node) => ({
+      id: node.id,
+      type: 'version',
+      position: layout.positions.get(node.id) ?? { x: 0, y: 0 },
+      data: {
+        node,
+        active: activeSet.has(node.id),
+        activeKind: activeKinds[node.id] ?? null,
+        liveFrame: liveFrames[node.id] ?? null,
+        decision: decisions[node.id] ?? null,
+        rows: rowsOf(node.id),
+        files: filesOf(node.id),
+        onSelect,
+        onOpen,
+        onPlay,
+      } as NodeData,
+      selected: node.id === selected,
+      style: { width: NODE_WIDTH },
+    }));
+    if (showDiagnostics) {
+      for (const diagnostic of layout.diagnostics) {
+        const node = allNodes.find((entry) => entry.id === diagnostic.id);
+        if (!node) continue;
+        drawn.push({
+          id: node.id,
+          type: 'diagnostic',
+          position: layout.diagnosticPositions.get(node.id) ?? { x: 0, y: 0 },
+          data: { id: node.id, label: node.title, reason: diagnostic.reason } as DiagnosticData,
+          selected: node.id === selected,
+          style: { width: NODE_WIDTH },
+        });
+      }
+    }
+    return drawn;
+  }, [nodes, allNodes, layout, selected, activeSet, activeKinds, liveFrames, decisions, rowsOf, filesOf, onSelect, onOpen, onPlay, showDiagnostics]);
 
+  const visibleIds = useMemo(() => new Set(flowNodes.map((node) => node.id)), [flowNodes]);
   const flowEdges = useMemo<Edge[]>(
     () =>
-      edges.map((edge) => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        type: 'grow',
-        // The selected lineage is blue and solid: two cues, not colour alone.
-        // pathLength normalises the path, so one dash value draws any edge.
-        data: { className: edge.onLineage ? 'edge-lineage' : 'edge-dashed' },
-        style: edge.onLineage
-          ? { stroke: '#000000', strokeWidth: 3, strokeDasharray: '1 0', strokeDashoffset: 1 }
-          : { stroke: '#000000', strokeWidth: 1, strokeDasharray: '0.012 0.012', strokeDashoffset: 1 },
-        animated: false,
-      })),
-    [edges],
+      edges
+        // A hidden card must not leave a dangling draw behind.
+        .filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target))
+        .map((edge) => ({
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          type: 'radial',
+          // Solid, and thicker on the selected lineage: two cues, not colour alone.
+          data: { className: edge.onLineage ? 'edge-lineage' : 'edge-dashed' },
+          style: edge.onLineage
+            ? { stroke: '#000000', strokeWidth: 3, strokeDasharray: '1 0', strokeDashoffset: 1 }
+            : { stroke: '#000000', strokeWidth: 1.4, strokeDasharray: '1 0', strokeDashoffset: 1 },
+          animated: false,
+        })),
+    [edges, visibleIds],
   );
 
+  /**
+   * The secondary draw layer: measured relationships, not ancestry. They are
+   * thinner and purple against the wider black ancestry, so the two layers are
+   * never told apart by colour alone. The width follows the score.
+   */
+  const measuredEdges = useMemo<Edge[]>(
+    () =>
+      (relationships ?? [])
+        .filter((draw) => visibleIds.has(draw.source) && visibleIds.has(draw.target))
+        .slice()
+        .sort((a, b) => b.score - a.score)
+        .slice(0, MAX_RELATIONSHIP_DRAWS)
+        .map((draw) => ({
+          id: draw.id,
+          source: draw.source,
+          target: draw.target,
+          type: 'radial',
+          selectable: true,
+          // A bow, not a chord: this layer joins cards that can sit anywhere.
+          data: { className: 'edge-measured', curve: true },
+          style: {
+            stroke: '#7a5cc6',
+            strokeWidth: 1.1 + Math.min(1.3, Math.abs(draw.score)),
+            strokeDasharray: '1 0',
+            strokeDashoffset: 0,
+            opacity: 0.9,
+          },
+          animated: false,
+        })),
+    [relationships, visibleIds],
+  );
+
+  // Every measured relationship is drawn at every zoom, the overview included.
+  // The layer has its own toggle, so hiding it stays one click away.
+  const drawnEdges = useMemo(() => [...flowEdges, ...measuredEdges], [flowEdges, measuredEdges]);
   /** The active version with its parent, its siblings, and its children. */
   const family = useMemo(() => {
     const target = activeVersionIds[0] ?? null;
@@ -397,29 +546,54 @@ export function TreeView({
     return [...ids];
   }, [nodes, activeVersionIds]);
 
-  // Keep the version that is being worked on in view, together with the versions
-  // around it, so following never hides the tree. Documentation mode instead
-  // holds the greatest zoom, because the recording wants the work close up.
-  const familyKey = useMemo(() => [...family].sort().join('|'), [family]);
-  useEffect(() => {
-    if (!follow) return;
-    const instance = flow.current;
-    if (!instance) return;
-    const target = activeVersionIds[0] ?? (docMode ? selected : null);
-    if (!target) return;
-
-    if (!docMode) {
-      const ids = family.length > 0 ? family : [target];
+  const focus = useCallback(
+    (ids: string[], { readable }: { readable: boolean }) => {
+      const instance = flow.current;
+      if (!instance || ids.length === 0) return;
       instance.fitView({
         nodes: ids.map((id) => ({ id })),
         padding: 0.25,
         duration: 300,
-        minZoom: 0.2,
+        minZoom: readable ? MIN_READABLE_ZOOM : MIN_OVERVIEW_ZOOM,
         maxZoom: 1.1,
       });
-      return;
-    }
+    },
+    [],
+  );
 
+  /** Fit every ring, however far out it reaches. */
+  const fitAll = useCallback(() => {
+    userMoved.current = false;
+    flow.current?.fitView({ padding: 0.15, duration: 300, minZoom: MIN_OVERVIEW_ZOOM, maxZoom: 1 });
+  }, []);
+
+  /** Focus the selected version at a zoom that reads. */
+  const focusSelection = useCallback(() => {
+    userMoved.current = false;
+    focus([selected ?? rootId ?? ''].filter(Boolean), { readable: true });
+  }, [focus, selected, rootId]);
+
+  // Keep the version that is being worked on in view, together with the
+  // versions around it. A pan or zoom that a person made wins until Focus.
+  const familyKey = useMemo(() => [...family].sort().join('|'), [family]);
+  useEffect(() => {
+    if (!follow || docMode || userMoved.current) return;
+    const instance = flow.current;
+    if (!instance) return;
+    const target = activeVersionIds[0] ?? null;
+    if (!target) return;
+    const ids = family.length > 0 ? family : [target];
+    instance.fitView({ nodes: ids.map((id) => ({ id })), padding: 0.25, duration: 300, minZoom: MIN_OVERVIEW_ZOOM, maxZoom: 1.1 });
+    // The keys, not the arrays: a poll that returns the same versions must not
+    // move the view, or the tree and a person's own zoom fight each other.
+  }, [activeKey, familyKey, follow, docMode, activeVersionIds, family]);
+
+  useEffect(() => {
+    if (!docMode) return;
+    const instance = flow.current;
+    if (!instance) return;
+    const target = activeVersionIds[0] ?? selected;
+    if (!target) return;
     const measured = instance.getNode(target) as
       | (ReturnType<ReactFlowInstance['getNode']> & { positionAbsolute?: { x: number; y: number }; width?: number; height?: number })
       | undefined;
@@ -428,33 +602,75 @@ export function TreeView({
     const x = absolute.x + (measured?.width ?? NODE_WIDTH) / 2;
     const y = absolute.y + (measured?.height ?? NODE_HEIGHT) / 2;
     instance.setCenter(x, y, { zoom: MAX_ZOOM, duration: 180 });
-    // The keys, not the arrays: a poll that returns the same versions must not
-    // move the view, or the tree and a person's own zoom fight each other.
-  }, [activeKey, familyKey, follow, docMode, selected, activeVersionIds, family]);
+  }, [activeKey, docMode, selected, activeVersionIds]);
 
   const handleSelect = useCallback((id: string) => onSelect(id), [onSelect]);
+  const mismatches = layout.generationMismatch.length;
+  const diagnostics = layout.diagnostics.length;
 
   return (
-    <ReactFlow
-      nodes={flowNodes}
-      edges={flowEdges}
-      nodeTypes={nodeTypes}
-      edgeTypes={edgeTypes}
-      onInit={(instance) => {
-        flow.current = instance;
-      }}
-      onNodeClick={(_, node) => handleSelect(node.id)}
-      fitView
-      fitViewOptions={fitOptions}
-      minZoom={0.1}
-      maxZoom={MAX_ZOOM}
-      proOptions={{ hideAttribution: true }}
-      nodesDraggable={false}
-      nodesConnectable={false}
-      elementsSelectable
-    >
-      <Background color="#d0d0d0" gap={24} />
-      <Controls showInteractive={false} />
-    </ReactFlow>
+    <div className="tree-wrap">
+      <div className="tree-toolbar" role="toolbar" aria-label="Tree view controls">
+        <button type="button" onClick={fitAll} title="Fit as much of the artwork as stays readable. Pan for the rest.">
+          Fit all
+        </button>
+        <button type="button" onClick={focusSelection} disabled={!(selected ?? rootId)} title="Centre the selected version at a readable zoom.">
+          Focus selection
+        </button>
+        {diagnostics > 0 ? (
+          <label className="tree-toggle">
+            <input type="checkbox" checked={showDiagnostics} onChange={(event) => setShowDiagnostics(event.target.checked)} />
+            {diagnostics} record(s) without valid ancestry
+          </label>
+        ) : null}
+        {mismatches > 0 ? (
+          <span className="tree-note" title={layout.generationMismatch.map((entry) => `${entry.id}: stored gen ${entry.generation}, ring ${entry.depth}`).join('\n')}>
+            {mismatches} stored generation(s) disagree with the rings
+          </span>
+        ) : null}
+        <span className="tree-note">each ring holds one parent's children · rings are ancestry, not measured similarity</span>
+        <span className="tree-note">cards stay clickable at this zoom · pan to reach the rest</span>
+        {layout.repairs > 0 ? (
+          <span className="tree-note" title={`The layout grew ${layout.repairs} ring(s) so that no card touches another.`}>
+            {layout.repairs} ring(s) widened to keep the cards apart
+          </span>
+        ) : null}
+        {layout.problems.length > 0 ? (
+          <span className="tree-note tree-warning" title={layout.problems.join('\n')}>
+            {layout.problems.length} card(s) could not be separated
+          </span>
+        ) : null}
+        {relationships && relationships.length > 0 ? (
+          <span className="tree-note">
+            {relationships.length} measured pair(s), the strongest {Math.min(relationships.length, MAX_RELATIONSHIP_DRAWS)} drawn as curves
+          </span>
+        ) : null}
+      </div>
+      <ReactFlow
+        nodes={flowNodes}
+        edges={drawnEdges}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        onInit={(instance) => {
+          flow.current = instance;
+        }}
+        onNodeClick={(_, node) => handleSelect(node.id)}
+        onMoveStart={(event) => {
+          const type = (event as { type?: string } | undefined)?.type;
+          if (type === 'mousedown' || type === 'touchstart' || type === 'wheel') userMoved.current = true;
+        }}
+        fitView
+        fitViewOptions={fitOptions}
+        minZoom={MIN_OVERVIEW_ZOOM}
+        maxZoom={MAX_ZOOM}
+        proOptions={{ hideAttribution: true }}
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable
+      >
+        <Background color="#d0d0d0" gap={24} />
+        <Controls showInteractive={false} />
+      </ReactFlow>
+    </div>
   );
 }

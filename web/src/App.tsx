@@ -1,10 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { RequestError, api, useRunEvents } from './api';
-import type { AgentRow, CostEstimate, Decision, FileRow, Health, ModelList, RecordingStatus, RunDetail, Tree } from './types';
+import type {
+  AgentRow,
+  CostEstimate,
+  Decision,
+  FileRow,
+  Health,
+  Measure,
+  ModelList,
+  RecordingStatus,
+  RelationshipsView,
+  RunDetail,
+  Tree,
+} from './types';
 import { TreeView } from './components/TreeView';
 import { GenerationList } from './components/GenerationList';
 import { DetailPanel } from './components/DetailPanel';
+import { RelationshipsPanel } from './components/RelationshipsPanel';
 import { CaptureViewer } from './components/CaptureViewer';
 
 // The build stamp shows in the strip, so a stale tab is easy to spot.
@@ -38,6 +51,18 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [narrow, setNarrow] = useState(false);
   const runId = run?.run.id ?? null;
+
+  // The relationship layer. It is independent of the run and of the rings.
+  const [panel, setPanel] = useState<'detail' | 'relationships'>('detail');
+  const [measures, setMeasures] = useState<Measure[]>([]);
+  const [measureId, setMeasureId] = useState('configuration');
+  const [relationships, setRelationships] = useState<RelationshipsView | null>(null);
+  const [relationshipsError, setRelationshipsError] = useState<string | null>(null);
+  const [relationshipsBusy, setRelationshipsBusy] = useState(false);
+  const [threshold, setThreshold] = useState(0);
+  const [hideAncestorPairs, setHideAncestorPairs] = useState(false);
+  const [showRelationshipLines, setShowRelationshipLines] = useState(true);
+  const [selectedPairKey, setSelectedPairKey] = useState<string | null>(null);
 
   const stream = useRunEvents(runId);
 
@@ -277,9 +302,23 @@ export default function App() {
   };
 
   const running = run ? ['queued', 'running', 'paused', 'stopping'].includes(run.run.state) : false;
+  /**
+   * The settings describe the NEXT run, so only a run that is actually working
+   * locks them. A paused run used to lock every field, which made the whole
+   * header look dead: a person could not even change a model.
+   */
+  const settingLocked = run ? ['queued', 'running', 'stopping'].includes(run.run.state) : false;
   const allNodes = tree?.nodes ?? [];
   const failedCount = allNodes.filter((node) => node.status === 'failed').length;
-  const nodes = useMemo(() => (hideFailed ? allNodes.filter((node) => node.status !== 'failed') : allNodes), [allNodes, hideFailed]);
+  const artworkRootId = tree?.artwork.rootVersionId ?? null;
+  const nodes = useMemo(() => {
+    if (!hideFailed) return allNodes;
+    const kept = allNodes.filter((node) => node.status !== 'failed');
+    // The original root stays on the canvas: a filter must not delete the
+    // centre that every ring is measured from.
+    const root = allNodes.find((node) => node.id === artworkRootId);
+    return root && !kept.some((node) => node.id === root.id) ? [root, ...kept] : kept;
+  }, [allNodes, hideFailed, artworkRootId]);
   const visibleIds = useMemo(() => new Set(nodes.map((node) => node.id)), [nodes]);
   // A hidden version must not leave a dangling connection behind.
   const edges = useMemo(
@@ -287,6 +326,91 @@ export default function App() {
     [tree, visibleIds],
   );
   const selectedNode = useMemo(() => nodes.find((node) => node.id === selected) ?? null, [nodes, selected]);
+
+  // ── the relationship layer ────────────────────────────────────────────────
+  // The measure catalog is loaded once. A measurement is loaded per artwork and
+  // measure, and polled only while it is running.
+  useEffect(() => {
+    void api
+      .measures()
+      .then((list) => {
+        setMeasures(list.measures);
+        if (list.defaultMeasure) setMeasureId((current) => (list.measures.some((m) => m.id === current && m.available) ? current : list.defaultMeasure as string));
+      })
+      .catch(() => setMeasures([]));
+  }, []);
+
+  const analysisRunning = relationships?.run ? ['queued', 'running'].includes(relationships.run.state) : false;
+  useEffect(() => {
+    if (!artworkId) return undefined;
+    let cancelled = false;
+    const load = () => {
+      api
+        .relationships(artworkId, measureId)
+        .then((view) => {
+          if (cancelled) return;
+          setRelationships(view);
+          setRelationshipsError(null);
+        })
+        .catch((cause) => {
+          if (!cancelled) setRelationshipsError(describe(cause).message);
+        });
+    };
+    load();
+    if (!analysisRunning) return () => { cancelled = true; };
+    const timer = window.setInterval(load, 1200);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [artworkId, measureId, analysisRunning]);
+
+  const rebuildRelationships = useCallback(async () => {
+    if (!artworkId) return;
+    setRelationshipsBusy(true);
+    setRelationshipsError(null);
+    try {
+      await api.rebuildRelationships(artworkId, measureId);
+      setRelationships(await api.relationships(artworkId, measureId));
+    } catch (cause) {
+      setRelationshipsError(describe(cause).message);
+    } finally {
+      setRelationshipsBusy(false);
+    }
+  }, [artworkId, measureId]);
+
+  const cancelAnalysis = useCallback(async () => {
+    if (!relationships?.run) return;
+    try {
+      await api.cancelAnalysis(relationships.run.id);
+    } catch (cause) {
+      setRelationshipsError(describe(cause).message);
+    }
+  }, [relationships]);
+
+  /**
+   * The secondary draw layer. A pair that passes the filter becomes one dashed
+   * line between the two cards. The score decides the dash, never the ring.
+   */
+  const relationshipDraws = useMemo(() => {
+    if (!showRelationshipLines) return [];
+    const pairs = relationships?.pairs ?? [];
+    const nodeIds = new Set(allNodes.map((node) => node.id));
+    const seen = new Set<string>();
+    const draws: { id: string; source: string; target: string; pairKey: string; score: number; band: string | null; group: string | null; ancestor: boolean }[] = [];
+    for (const pair of pairs) {
+      if (pair.outcome !== 'ok') continue;
+      if (!nodeIds.has(pair.a) || !nodeIds.has(pair.b)) continue;
+      if (hideAncestorPairs && pair.ancestor) continue;
+      if ((pair.score ?? 0) < threshold) continue;
+      // A lineage pair already has a solid ancestry line: do not draw it twice.
+      if (pair.ancestor) continue;
+      if (seen.has(pair.pairKey)) continue;
+      seen.add(pair.pairKey);
+      draws.push({ id: `rel_${pair.id}`, source: pair.a, target: pair.b, pairKey: pair.pairKey, score: pair.score ?? 0, band: pair.band, group: pair.group, ancestor: pair.ancestor });
+    }
+    return draws;
+  }, [relationships, showRelationshipLines, hideAncestorPairs, threshold, allNodes]);
   // The selected version spawns the children. There is no second step.
   const parentVersionId = selected ?? tree?.artwork.rootVersionId ?? null;
   const parentNode = useMemo(() => nodes.find((node) => node.id === parentVersionId) ?? null, [nodes, parentVersionId]);
@@ -349,7 +473,7 @@ export default function App() {
               value={direction}
               onChange={(event) => setDirection(event.target.value)}
               placeholder="which way should the artwork evolve?"
-              disabled={running}
+              disabled={settingLocked}
             />
           </label>
           <label className="field">
@@ -360,12 +484,12 @@ export default function App() {
               max={20}
               value={evolutions}
               onChange={(event) => setEvolutions(Math.max(1, Math.min(20, Number(event.target.value) || 1)))}
-              disabled={running}
+              disabled={settingLocked}
             />
           </label>
           <label className="field">
             <span>Judge model</span>
-            <select value={judgeModel} onChange={(event) => setJudgeModel(event.target.value)} disabled={running}>
+            <select value={judgeModel} onChange={(event) => setJudgeModel(event.target.value)} disabled={settingLocked}>
               {visionModels.length === 0 ? <option value={judgeModel}>{judgeModel || 'no catalog'}</option> : null}
               {visionModels.map((model) => (
                 <option key={model.id} value={model.id}>
@@ -376,7 +500,7 @@ export default function App() {
           </label>
           <label className="field">
             <span>Author model</span>
-            <select value={authorModel} onChange={(event) => setAuthorModel(event.target.value)} disabled={running}>
+            <select value={authorModel} onChange={(event) => setAuthorModel(event.target.value)} disabled={settingLocked}>
               {models?.models.length ? null : <option value={authorModel}>{authorModel || 'no catalog'}</option>}
               {(models?.models ?? []).map((model) => (
                 <option key={model.id} value={model.id}>
@@ -393,24 +517,41 @@ export default function App() {
               max={8}
               value={variants}
               onChange={(event) => setVariants(Math.max(1, Math.min(8, Number(event.target.value) || 1)))}
-              disabled={running}
+              disabled={settingLocked}
             />
           </label>
           <div className="bar-actions">
-            <button type="submit" className="primary" disabled={running || busy || !tree}>
+            <button
+              type="submit"
+              className="primary"
+              disabled={running || busy || !tree}
+              title={
+                running
+                  ? `A run is ${run?.run.state ?? 'active'}. Resume or stop it before you start another.`
+                  : 'Start a run from the selected version.'
+              }
+            >
               Start
             </button>
-            <button type="button" onClick={() => void control('pause')} disabled={!run || run.run.state !== 'running'}>
+            <button type="button" onClick={() => void control('pause')} disabled={!run || run.run.state !== 'running'} title="Stop new work after the current step.">
               Pause
             </button>
-            <button type="button" onClick={() => void control('resume')} disabled={!run || run.run.state !== 'paused'}>
+            <button type="button" onClick={() => void control('resume')} disabled={!run || run.run.state !== 'paused'} title="Continue the paused run from what it already published.">
               Resume
             </button>
-            <button type="button" onClick={() => void control('stop')} disabled={!run || !running}>
+            <button type="button" onClick={() => void control('stop')} disabled={!run || !running} title="End the run. The work already published stays.">
               Stop
             </button>
           </div>
         </form>
+        {run ? (
+          <p className={`run-state run-state-${run.run.state}`} role="status">
+            <strong>This run is {run.run.state}.</strong>{' '}
+            {run.run.state === 'paused'
+              ? 'The settings below apply to the next run. Resume this one to continue it, or stop it to finish it.'
+              : 'The settings below apply to the next run.'}
+          </p>
+        ) : null}
         <p className="branch-row muted">
           selected version spawns the variants:
           <span className="branch-chip">{parentNode ? parentNode.title : 'the root version'}</span>
@@ -440,6 +581,14 @@ export default function App() {
         </p>
       </header>
 
+      {health?.provider.substituted ? (
+        <div className="notice notice-alert" role="alert">
+          <strong>The provider is a TEST DOUBLE.</strong> The agents are a deterministic stub: they ignore the direction, and their
+          verdicts are not evidence. Every comparison from these runs is marked <code>stub</code>. To run the real agents, start the
+          server with <code>PHYGEN_DRIVER=pi</code> and <code>PHYGEN_ALLOW_SPEND=1</code>.
+        </div>
+      ) : null}
+
       {health && !health.capture.isolated ? (
         <div className="notice" role="status">
           Source-code candidates run in the sandboxed artwork page: a separate origin, no credentials, no network, and no host
@@ -463,6 +612,9 @@ export default function App() {
           ) : (
             <TreeView
               nodes={nodes}
+              allNodes={allNodes}
+              rootId={artworkRootId}
+              relationships={relationshipDraws}
               edges={edges}
               selected={selected}
               activeVersionIds={activeVersionIds}
@@ -480,16 +632,61 @@ export default function App() {
           )}
         </section>
         <aside className="panel" aria-label="Version detail">
-          <DetailPanel
-            version={selectedNode}
-            onOpenViewer={setViewerVersion}
-            onPlay={(id) => setPlaying(id)}
-            isParent={parentVersionId === selectedNode?.id}
-            agentRows={feedRows}
-            agentFor={workedVersion && workedVersion.id !== selectedNode?.id ? workedVersion.title : null}
-            agentActive={Boolean(workedVersion)}
-            active={Boolean(running)}
-          />
+          <div className="tabs" role="tablist" aria-label="Panel">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={panel === 'detail'}
+              className={panel === 'detail' ? 'is-current' : ''}
+              onClick={() => setPanel('detail')}
+            >
+              Detail
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={panel === 'relationships'}
+              className={panel === 'relationships' ? 'is-current' : ''}
+              onClick={() => setPanel('relationships')}
+            >
+              Relationships
+              {relationships?.run && ['queued', 'running'].includes(relationships.run.state) ? ' …' : ''}
+            </button>
+          </div>
+          {panel === 'detail' ? (
+            <DetailPanel
+              version={selectedNode}
+              onOpenViewer={setViewerVersion}
+              onPlay={(id) => setPlaying(id)}
+              isParent={parentVersionId === selectedNode?.id}
+              agentRows={feedRows}
+              agentFor={workedVersion && workedVersion.id !== selectedNode?.id ? workedVersion.title : null}
+              agentActive={Boolean(workedVersion)}
+              active={Boolean(running)}
+            />
+          ) : (
+            <RelationshipsPanel
+              measures={measures}
+              measureId={measureId}
+              onMeasure={setMeasureId}
+              view={relationships}
+              loading={relationshipsBusy}
+              error={relationshipsError}
+              onRebuild={() => void rebuildRelationships()}
+              onCancel={() => void cancelAnalysis()}
+              threshold={threshold}
+              onThreshold={setThreshold}
+              hideAncestorPairs={hideAncestorPairs}
+              onHideAncestorPairs={setHideAncestorPairs}
+              showLines={showRelationshipLines}
+              onShowLines={setShowRelationshipLines}
+              selectedPairKey={selectedPairKey}
+              onSelectPair={setSelectedPairKey}
+              nodes={nodes}
+              onSelectVersion={selectNode}
+              onOpenVersion={setViewerVersion}
+            />
+          )}
         </aside>
       </main>
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { RequestError, api } from '../api';
 import type { AgentRow, TreeNode, VersionDetail } from '../types';
+import { VersionThumb } from './VersionThumb';
 
 export function DetailPanel({
   version,
@@ -114,6 +115,12 @@ export function DetailPanel({
         <p className="hash" title={version.sourceHash}>
           source {version.sourceHash.slice(0, 16)}…
         </p>
+        {version.stub ? (
+          <p className="notice-alert">
+            <strong>Test double.</strong> The run that made this version used the deterministic stub, so the code below is not a
+            response to the direction and the comparison verdicts are not evidence.
+          </p>
+        ) : null}
         <div className="row">
           {isParent ? <span className="parent-chip">variants spawn here</span> : null}
           <button type="button" onClick={() => onOpenViewer(version.id)}>
@@ -228,7 +235,7 @@ export function DetailPanel({
               <ul className="shots">
                 {detail.captures.map((capture) => (
                   <li key={capture.id}>
-                    <img src={capture.url} alt={`${capture.stage} frame at step ${capture.step}, seed ${capture.seed}`} loading="lazy" />
+                    <VersionThumb url={capture.url} alt={`${capture.stage} frame at step ${capture.step}, seed ${capture.seed}`} />
                     <span className="muted">
                       {capture.stage} · step {capture.step} · seed {capture.seed}
                     </span>
