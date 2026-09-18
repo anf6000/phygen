@@ -13,6 +13,9 @@ import fastifyStatic from '@fastify/static';
 import { ArtworkError } from '../../../runtime/contract.js';
 import { checkPackage } from '../../../runtime/node/package-checks.js';
 import { MAX_COMPARISON_ENTRIES } from '../judge/protocol.mjs';
+import { buildArchive } from '../controller/archive.mjs';
+import { measurePair } from '../analysis/relationships.mjs';
+import { readVersionSources } from '../analysis/service.mjs';
 import { publishSnapshot } from '../artwork/workspace.mjs';
 import { streamEvents } from './stream.mjs';
 import { round6 } from '../util.mjs';
@@ -323,6 +326,88 @@ export function buildApp({ store, events, budget, controller, capture, provider,
     return { run: analysis.cancel(run.id) };
   });
 
+  // ── the archive ───────────────────────────────────────────────────────────
+  // Which versions are worth evolving next, and why the others are not. A run
+  // reads this to choose its own parent, so the report has to be honest about
+  // every refusal. It changes no record and spends nothing.
+  app.get('/api/artworks/:artworkId/archive', async (request, reply) => {
+    const artwork = store.getArtwork(request.params.artworkId);
+    if (!artwork) return fail(reply, 'artwork_not_found', `No artwork ${request.params.artworkId}`);
+    const measure = String(request.query?.measure ?? 'configuration');
+    if (!['configuration', 'source'].includes(measure)) return fail(reply, 'measure_unknown', `No measure is named ${measure}`);
+
+    const versions = store.listVersions(artwork.id);
+    const comparisons = store.listComparisonsByArtwork(artwork.id);
+    const byId = new Map(versions.map((version) => [version.id, version]));
+
+    // The configuration measure reads the records only. The source measure reads
+    // the published text of each version once and keeps it for the whole report.
+    const sources = new Map();
+    const distance =
+      measure === 'configuration'
+        ? (a, b) => measurePair({ measure: 'configuration', a: byId.get(a), b: byId.get(b) }).score ?? 1
+        : (a, b) => 1;
+    if (measure === 'source') {
+      for (const version of versions) sources.set(version.id, await readVersionSources(version));
+    }
+    const sourceDistance = (a, b) => measurePair({ measure: 'source', a: byId.get(a), b: byId.get(b), aSources: sources.get(a), bSources: sources.get(b) }).score ?? 1;
+    const gap = measure === 'source' ? sourceDistance : distance;
+
+    const archive = buildArchive({
+      versions,
+      comparisons,
+      distance: gap,
+      size: config.archive.size,
+      noveltyFloor: config.archive.noveltyFloor,
+      qualityFloor: config.archive.qualityFloor,
+    });
+
+    const memberIds = new Set(archive.members.map((member) => member.version.id));
+    const publicEntry = (version, extra = {}) => ({
+      id: version.id,
+      title: version.title,
+      generation: version.generation,
+      status: version.status,
+      createdAt: version.createdAt,
+      parentId: version.parentId,
+      ...extra,
+    });
+
+    return {
+      measure,
+      floors: { novelty: config.archive.noveltyFloor, quality: config.archive.qualityFloor, size: config.archive.size },
+      members: archive.members.map((member) =>
+        publicEntry(byId.get(member.version.id), {
+          quality: round6(member.quality.score),
+          votes: member.quality.votes,
+          wins: member.quality.wins,
+          losses: member.quality.losses,
+          confidence: round6(member.quality.confidence),
+          novelty: round6(member.novelty),
+          addedBy: member.addedBy,
+        }),
+      ),
+      refused: archive.refused
+        .map((entry) => ({ ...publicEntry(byId.get(entry.id)), reason: entry.reason, quality: round6(entry.quality), novelty: round6(entry.novelty) }))
+        .sort((a, b) => (a.reason === b.reason ? b.novelty - a.novelty : a.reason.localeCompare(b.reason))),
+      totals: {
+        versions: versions.length,
+        members: archive.members.length,
+        refused: archive.refused.length,
+        nearDuplicates: archive.refused.filter((entry) => entry.reason === 'near duplicate').length,
+        belowQuality: archive.refused.filter((entry) => entry.reason === 'quality').length,
+        capacity: archive.refused.filter((entry) => entry.reason === 'capacity').length,
+        compared: comparisons.length,
+      },
+      health: {
+        // The mean novelty of the members is how much ground the tree covers. A
+        // number near the floor means the archive is nearly full of copies.
+        meanNovelty: archive.members.length > 0 ? round6(archive.members.reduce((sum, member) => sum + member.novelty, 0) / archive.members.length) : 0,
+        votes: archive.members.reduce((sum, member) => sum + member.quality.votes, 0),
+      },
+    };
+  });
+
   // ── versions ──────────────────────────────────────────────────────────────
   app.get('/api/versions/:versionId', async (request, reply) => {
     const version = store.getVersion(request.params.versionId);
@@ -474,8 +559,13 @@ export function buildApp({ store, events, budget, controller, capture, provider,
     const body = request.body ?? {};
     const artwork = store.getArtwork(body.artworkId);
     if (!artwork) return fail(reply, 'artwork_not_found', `No artwork ${body.artworkId}`);
-    if (typeof body.direction !== 'string' || body.direction.trim().length < 3) {
-      return fail(reply, 'payload_invalid', 'direction is required and must be at least 3 characters');
+    // A person who steers by hand must say what they want. An autonomous run
+    // writes its own instruction from the archive and the last verdicts, so it
+    // may start with no direction at all.
+    const autonomous = body.pinned !== true;
+    const direction = typeof body.direction === 'string' ? body.direction.trim() : '';
+    if (!autonomous && direction.length < 3) {
+      return fail(reply, 'payload_invalid', 'direction is required for a pinned run and must be at least 3 characters');
     }
     const evolutions = Number(body.evolutions);
     if (!Number.isInteger(evolutions) || evolutions < 1 || evolutions > 50) {
@@ -508,6 +598,11 @@ export function buildApp({ store, events, budget, controller, capture, provider,
       denseFrameRoles: body.evaluation?.denseFrameRoles ?? config.evolution.denseFrameRoles,
       denseStepSchedule: body.evaluation?.denseStepSchedule ?? config.evolution.denseStepSchedule,
       tieBreak: body.evaluation?.tieBreak ?? config.evolution.tieBreak,
+      // Autonomous by default: the run reads its archive and picks its own parent
+      // at every level, after the level that starts from the seed version. A
+      // pinned run follows the promoted lineage instead, which is the predictable
+      // mode a person chooses when they want to steer by hand.
+      pinnedParent: body.pinned === true,
     };
     if (protocol.stepSchedule.length !== protocol.frameRoles.length) {
       return fail(reply, 'payload_invalid', 'stepSchedule and frameRoles must have the same length');
@@ -565,7 +660,7 @@ export function buildApp({ store, events, budget, controller, capture, provider,
       run = store.createRun({
         artworkId: artwork.id,
         rootVersionId: rootVersion.id,
-        direction: body.direction.trim(),
+        direction,
         evolutionsRequested: evolutions,
         limitUsd,
         protocol: { ...protocol, variantsPerEvolution: variants, providerDriver: detection?.driver ?? 'unknown', providerModel: judgeModel, authorModel, estimate: bound },

@@ -61,7 +61,42 @@ node tools/ui-check.mjs     # the selection survives a reload; writes a tree ima
 node tools/pages-shot.mjs   # one image of every page
 ```
 
+## Autonomous heredity (in progress)
+
+A run is **autonomous by default**. It starts from the seed version, then reads
+its **archive** at every level and picks its own parent, rotating three roles:
+`exploit` the best quality, `explore` the furthest from it, and `repair` the
+weakest member still worth keeping. Every pick and every promotion records why.
+
+- The archive holds at most `PHYGEN_ARCHIVE_SIZE` versions (8) that clear
+  `PHYGEN_QUALITY_FLOOR` (0.4) and are at least `PHYGEN_NOVELTY_FLOOR` (0.35)
+  apart. Quality is the win and loss tally over every comparison of the artwork,
+  smoothed so one lucky win cannot outrank a proven record.
+- A candidate is promoted on quality by the margin, **or** on novelty above the
+  floor when its quality is not worse than the parent by more than
+  `PHYGEN_QUALITY_TOLERANCE` (0.1). The decision records the branch and the
+  numbers. A disagreement between the two comparison orders is not evidence, and
+  the parent stays.
+- A run with no direction **writes one** from the records: the judge's recorded
+  weaknesses, the configuration fields the archive has moved least, or a stall.
+  The recorded direction names its own source.
+- A **pinned** run (`pinned: true`) follows the promoted lineage and must state a
+  direction. That is the predictable mode.
+
+`GET /api/artworks/:id/archive` reports the members, every refusal with its
+reason, and the mean novelty. Measured on the recorded tree: **65 versions, 5
+members, 46 refused for quality, 12 near-duplicates, mean novelty 0.62** — the
+tree is mostly near-copies, which is why the novelty floor and the appearance
+measure matter.
+
+Not built yet: the **appearance measure** (a vision model comparing two frames;
+its config keys exist and do nothing), the **pop tool** (`tools/new-pop.mjs`), the
+**archive panel**, and the plan's fuller policy of three parents per level, each
+compared with its own parent. The plan is at
+`phygen-autonomous-heredity-impl.md` in the plans directory.
+
 ## Generation rings and measured relationships
+
 
 The version canvas draws **generation rings**. Every node's children are placed
 around that node, and the arrangement repeats at every level, so the tree grows

@@ -191,6 +191,11 @@ export function planPairs({ versions, measure, limit = 400 }) {
 // ── deterministic measures ───────────────────────────────────────────────────
 
 /** Flatten any configuration value into comparable scalar leaves. */
+export function flattenConfiguration(value) {
+  return flatten(value ?? {});
+}
+
+/** Flatten any configuration value into comparable scalar leaves. */
 function flatten(value, prefix = '', out = new Map()) {
   if (value === null || value === undefined) {
     out.set(prefix, 'null');

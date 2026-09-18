@@ -23,6 +23,9 @@ const PROTOCOL = {
   denseFrameRoles: ['early', 'middle', 'late'],
   denseStepSchedule: [10, 20, 30],
   tieBreak: true,
+  // The classic contract: the winner of a level is the parent of the next. The
+  // autonomous path is tested on its own, in archive.test.mjs and below.
+  pinnedParent: true,
 };
 
 /** A capture backend that writes a small file per frame and needs no browser. */
@@ -69,7 +72,8 @@ function stubCapture() {
   };
 }
 
-async function setup(t, configOverrides = {}, hooks = {}) {
+async function setup
+(t, configOverrides = {}, hooks = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'phygen-round-'));
   t.after(async () => {
     await rm(dir, { recursive: true, force: true, maxRetries: 3 }).catch(() => {});
@@ -147,10 +151,10 @@ async function setup(t, configOverrides = {}, hooks = {}) {
   const run = store.createRun({
     artworkId: artwork.id,
     rootVersionId: rootVersion.id,
-    direction: 'quieter, more directional, fewer crossings',
+    direction: hooks.direction ?? 'quieter, more directional, fewer crossings',
     evolutionsRequested: configOverrides.evolutions ?? 1,
     limitUsd: hooks.runLimitUsd ?? 100,
-    protocol: PROTOCOL,
+    protocol: hooks.protocol ?? PROTOCOL,
     costBoundUsd: hooks.runLimitUsd ?? 100,
   });
 
@@ -349,6 +353,56 @@ test('a provider that cannot answer pauses the run instead of failing it', async
   assert.equal(paused.evolutionsDone, 0, 'no evolution was spent');
   const jobs = store.listJobs(run.id);
   assert.equal(jobs.filter((job) => job.kind === 'author').length, 0, 'no author session started');
+});
+
+test('an autonomous run picks its own parent and records why', async (t) => {
+  // No pin: the run starts from the seed version and then reads its archive.
+  const { store, controller, run, rootVersion } = await setup(
+    t,
+    { evolutions: 2, variants: 2 },
+    { protocol: { ...PROTOCOL, pinnedParent: false } },
+  );
+
+  await controller.start(run.id);
+
+  const rounds = store.listRounds(run.id);
+  assert.equal(rounds.length, 2, 'both levels ran');
+
+  // Level one starts where the run started, and says so.
+  assert.equal(rounds[0].parentVersionId, rootVersion.id);
+  assert.match(rounds[0].note, /Chosen by seed: the version this run started from/);
+
+  // Level two is chosen from the archive, not by the lineage rule alone.
+  const second = rounds[1];
+  assert.match(second.note, /Chosen by (exploit|explore|repair):/, 'the pick explains itself');
+  const candidate = store.listVersions(run.artworkId).find((version) => version.round === 2 && version.parentId === second.parentVersionId);
+  assert.ok(candidate, 'the level two candidate hangs from the chosen parent');
+
+  // The archive is a record the API can report, and it names the parent.
+  const archive = store.listComparisonsByArtwork(run.artworkId);
+  assert.ok(archive.length > 0, 'the comparisons behind a pick are kept');
+});
+
+test('an autonomous run with no direction writes its own instruction', async (t) => {
+  // Nothing from a person: no pin, and no direction. The run has to choose a
+  // parent AND say what it wants the next level to do.
+  const { store, events, controller, run } = await setup(
+    t,
+    { evolutions: 1, variants: 2 },
+    { protocol: { ...PROTOCOL, pinnedParent: false }, direction: '' },
+  );
+
+  await controller.start(run.id);
+
+  const started = events.since(run.id, 0).find((event) => event.type === 'run.round' && event.payload?.phase === 'author');
+  assert.ok(started, 'the level announced itself');
+  assert.ok(typeof started.payload.direction === 'string' && started.payload.direction.length > 60, 'the run wrote an instruction');
+  assert.ok(typeof started.payload.directionSource === 'string' && started.payload.directionSource.length > 0, 'and it names the source');
+
+  const round = store.listRounds(run.id)[0];
+  const candidates = store.listVersions(run.artworkId).filter((version) => version.round === 1);
+  assert.ok(candidates.length > 0, 'a candidate was authored from the written instruction');
+  assert.match(round.note, /Chosen by seed/, 'the level one parent is the seed, and the note says so');
 });
 
 test('a stop request ends the run without new rounds', async (t) => {

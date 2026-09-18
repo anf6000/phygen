@@ -735,6 +735,34 @@ export class Store {
       }));
   }
 
+  /**
+   * Every comparison of one artwork, across all of its runs. The archive policy
+   * needs the whole voting record of a version, not only the run that made it.
+   */
+  listComparisonsByArtwork(artworkId) {
+    return this.db
+      .prepare(
+        `SELECT c.* FROM comparisons c JOIN runs r ON r.id = c.run_id
+         WHERE r.artwork_id = ? ORDER BY c.created_at`,
+      )
+      .all(artworkId)
+      .map((row) => ({
+        id: row.id,
+        runId: row.run_id,
+        round: row.round,
+        kind: row.kind,
+        order: parseJson(row.order_json, []),
+        labels: parseJson(row.labels_json, {}),
+        verdict: parseJson(row.verdict_json, {}),
+        winnerVersionId: row.winner_version_id,
+        confidence: row.confidence,
+        uncertainty: row.uncertainty,
+        judgeSession: row.judge_session,
+        sourceHash: row.source_hash,
+        createdAt: row.created_at,
+      }));
+  }
+
   createEvaluation(evaluation) {
     const record = { id: evaluation.id ?? newId('ev'), createdAt: nowIso(), ...evaluation };
     this.db

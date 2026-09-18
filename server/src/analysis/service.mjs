@@ -234,22 +234,31 @@ export class RelationshipAnalysis {
 
   /** The source text a comparison reads. Bounded, and never outside the snapshot. */
   async #readSources(version) {
-    const files = new Map();
-    const root = version.snapshotPath ? join(version.snapshotPath, 'files') : null;
-    if (!root) return { files };
-    const walked = await walkPackage(root);
-    for (const file of walked) {
-      if (file.symlink) continue;
-      if (!SOURCE_DIRS.some((dir) => file.rel.startsWith(`${dir}/`))) continue;
-      if (!/\.(m?js|json|css)$/.test(file.rel)) continue;
-      if (file.bytes !== undefined && file.bytes > MAX_SOURCE_BYTES) continue;
-      try {
-        const text = await readFile(file.full, 'utf8');
-        if (text.length <= MAX_SOURCE_BYTES) files.set(file.rel, text);
-      } catch {
-        // An unreadable file is not a measurement failure: it is simply absent.
-      }
-    }
-    return { files };
+    return readVersionSources(version);
   }
+}
+
+/**
+ * The source text of one published version. Bounded, and never outside the
+ * snapshot directory. Shared with the archive report, which needs the same text
+ * to compare two versions without a measurement run.
+ */
+export async function readVersionSources(version) {
+  const files = new Map();
+  const root = version.snapshotPath ? join(version.snapshotPath, 'files') : null;
+  if (!root) return { files };
+  const walked = await walkPackage(root);
+  for (const file of walked) {
+    if (file.symlink) continue;
+    if (!SOURCE_DIRS.some((dir) => file.rel.startsWith(`${dir}/`))) continue;
+    if (!/\.(m?js|json|css)$/.test(file.rel)) continue;
+    if (file.bytes !== undefined && file.bytes > MAX_SOURCE_BYTES) continue;
+    try {
+      const text = await readFile(file.full, 'utf8');
+      if (text.length <= MAX_SOURCE_BYTES) files.set(file.rel, text);
+    } catch {
+      // An unreadable file is not a measurement failure: it is simply absent.
+    }
+  }
+  return { files };
 }

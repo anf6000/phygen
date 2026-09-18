@@ -95,6 +95,8 @@ export function validateConfig(config) {
     ['provider.judgeTimeoutMs', config.provider.judgeTimeoutMs],
     ['evolution.maxComparisonImages', config.evolution.maxComparisonImages],
     ['analysis.maxPairs', config.analysis.maxPairs],
+    ['analysis.appearancePairs', config.analysis.appearancePairs],
+    ['archive.size', config.archive.size],
     ['server.sseKeepAliveMs', config.server.sseKeepAliveMs],
   ]) {
     if (!Number.isFinite(value) || value <= 0) fail(path, 'must be a positive number');
@@ -236,6 +238,19 @@ export function loadConfig(overrides = {}) {
     analysis: {
       maxPairs: Math.max(1, Math.round(readNumber('PHYGEN_ANALYSIS_MAX_PAIRS', 400))),
       failureLimit: Math.max(0, Math.round(readNumber('PHYGEN_ANALYSIS_FAILURE_LIMIT', 20))),
+      // The appearance measure compares two frames with a model. It is bounded by
+      // pairs, not by money, so the cost follows from this number.
+      appearancePairs: Math.max(1, Math.round(readNumber('PHYGEN_APPEARANCE_MAX_PAIRS', 60))),
+      appearanceModel: process.env.PHYGEN_APPEARANCE_MODEL || '',
+      appearanceCallUsd: readNumber('PHYGEN_COST_APPEARANCE_USD', 0.05),
+    },
+    // The archive: which versions are worth evolving next. It is what lets a run
+    // choose its own parent instead of waiting for a person.
+    archive: {
+      size: Math.max(1, Math.round(readNumber('PHYGEN_ARCHIVE_SIZE', 8))),
+      noveltyFloor: readNumber('PHYGEN_NOVELTY_FLOOR', 0.35),
+      qualityFloor: readNumber('PHYGEN_QUALITY_FLOOR', 0.4),
+      qualityTolerance: readNumber('PHYGEN_QUALITY_TOLERANCE', 0.1),
     },
 
     server: {

@@ -21,6 +21,9 @@ import { checkPackage, walkPackage } from '../../../runtime/node/package-checks.
 import { mapLimit, newId, nowIso, sha256Hex, sleep, stableStringify, truncate, unique } from '../util.mjs';
 import { canTransition, isTerminal, transition } from '../state.mjs';
 import { BudgetError } from '../budget.mjs';
+import { measurePair } from '../analysis/relationships.mjs';
+import { archiveStalled, buildArchive, pickParents } from './archive.mjs';
+import { recordedWeaknesses, unexploredAxes, writeDirection } from './direction.mjs';
 import { copyPackage, publishSnapshot, reviewEdits } from '../artwork/workspace.mjs';
 import { assertSourceMode, decideSourceMode, isLocalHost } from '../capture/index.mjs';
 import { isTransientProviderError } from '../providers/index.mjs';
@@ -261,11 +264,23 @@ export class RunController {
         this.budget.assertRunLimits(run);
 
         const round = run.evolutionsDone + 1;
-        const parent = this.#lineageHead(run);
-        this.#emit(runId, 'run.round', { round, phase: 'author', parentVersionId: parent.id });
-        this.logger('info', `Run ${runId} round ${round}: parent ${parent.id}`);
+        const { parent, pick, archive } = this.#parentForLevel(run, round);
+        const direction = this.#directionForLevel({ run, parent, pick, archive });
+        this.#emit(runId, 'run.round', {
+          round,
+          phase: 'author',
+          parentVersionId: parent.id,
+          role: pick?.role ?? null,
+          detail: pick ? `chosen by ${pick.role}: ${pick.reason}` : null,
+          direction: direction.text,
+          directionSource: direction.source,
+        });
+        this.logger(
+          'info',
+          `Run ${runId} round ${round}: parent ${parent.id}${pick ? ` (${pick.role}: ${pick.reason})` : ''}, direction from ${direction.source}`,
+        );
 
-        const outcome = await this.#runRound({ run, round, parent });
+        const outcome = await this.#runRound({ run, round, parent, direction });
 
         // An interrupted round is recorded, but it does not consume an
         // evolution: Resume continues the same round from what is durable.
@@ -291,6 +306,10 @@ export class RunController {
         });
         // A resumed round keeps the earlier candidate set in the record.
         const previousRound = this.store.listRounds(runId).find((entry) => entry.round === round);
+        // The note says who was chosen and why, then what the judge decided. A
+        // recorded pick that cannot be explained afterwards is not acceptable.
+        const choice = pick ? `Chosen by ${pick.role}: ${pick.reason}.` : null;
+        const note = [choice, outcome.note].filter(Boolean).join(' ');
         this.store.upsertRound({
           runId,
           round,
@@ -298,11 +317,11 @@ export class RunController {
           candidateIds: unique([...(previousRound?.candidateIds ?? []), ...outcome.candidateIds]),
           winnerVersionId: outcome.winnerVersionId,
           promoted: outcome.promoted,
-          note: outcome.note,
+          note,
         });
         for (const candidateId of outcome.candidateIds) {
           if (candidateId === outcome.winnerVersionId) continue;
-          this.store.createEvaluation({ runId, round, versionId: candidateId, outcome: 'rejected', note: outcome.note });
+          this.store.createEvaluation({ runId, round, versionId: candidateId, outcome: 'rejected', note });
         }
         this.#emit(runId, 'run.round', {
           round,
@@ -423,9 +442,102 @@ export class RunController {
     );
   }
 
+  /**
+   * The parent of one level, and why it was chosen.
+   *
+   * A PINNED run follows the promoted lineage: the winner of the last level is
+   * the parent of the next, which is what the system always did. An AUTONOMOUS
+   * run reads its archive and picks: exploit the best, explore the furthest,
+   * repair the weakest, one level at a time. Level one always uses the version
+   * the run started from, so a run begins where the seed says, and only then
+   * takes over.
+   */
+  #parentForLevel(run, round) {
+    const seed = this.#lineageHead(run);
+    if (run.protocol?.pinnedParent) return { parent: seed, pick: null, archive: null };
+    if (round <= 1) {
+      return { parent: seed, pick: { role: 'seed', kind: 'refinement', reason: 'the version this run started from' }, archive: null };
+    }
+    const versions = this.store.listVersions(run.artworkId);
+    const byId = new Map(versions.map((version) => [version.id, version]));
+    const comparisons = this.store.listComparisonsByArtwork(run.artworkId);
+    const distance = (a, b) => this.#configurationDistance(a, b) ?? 1;
+    const archive = buildArchive({
+      versions,
+      comparisons,
+      distance,
+      size: this.config.archive.size,
+      noveltyFloor: this.config.archive.noveltyFloor,
+      qualityFloor: this.config.archive.qualityFloor,
+    });
+    if (archive.members.length === 0) return { parent: seed, pick: null, archive: null };
+    const picks = pickParents({
+      archive,
+      variants: 3,
+      stalled: archiveStalled({ unchangedLevels: run.unchangedRounds, redirectAfter: 2 }),
+      distance,
+    });
+    const pick = picks.length > 0 ? picks[(Math.max(1, round) - 1) % picks.length] : null;
+    const parent = pick ? byId.get(pick.versionId) ?? null : null;
+    if (!parent) return { parent: seed, pick: null, archive };
+    return { parent, pick, archive };
+  }
+
+  /**
+   * The instruction for one level.
+   *
+   * A direction a person wrote is used as it is. When the run has none, it writes
+   * one from the records: what the judge said was wrong, which configuration axes
+   * the archive has moved least, and whether the archive has stalled. The source
+   * of the text is recorded with it, so an autonomous direction is never a mystery.
+   */
+  #directionForLevel({ run, parent, pick, archive }) {
+    const written = String(run.direction ?? '').trim();
+    if (written.length >= 3) return { text: written, source: 'the person who started the run', evidence: {} };
+    const comparisons = this.store.listComparisonsByArtwork(run.artworkId);
+    const lineage = [parent.id, ...(parent.parentId ? [parent.parentId] : [])];
+    const weaknesses = recordedWeaknesses(comparisons, lineage);
+    const members = archive?.members?.map((member) => member.version) ?? [parent];
+    const axes = unexploredAxes(members, 4);
+    const stalled = archiveStalled({ unchangedLevels: run.unchangedRounds, redirectAfter: 2 });
+    const direction = writeDirection({
+      role: pick?.role ?? 'exploit',
+      kind: pick?.kind ?? 'refinement',
+      parent,
+      weaknesses,
+      axes,
+      stalled,
+    });
+    return direction;
+  }
+
+  /** The configuration distance between two versions, or null when unknown. */
+  #configurationDistance(a, b) {
+    const left = this.store.getVersion(a);
+    const right = this.store.getVersion(b);
+    if (!left || !right) return null;
+    try {
+      const result = measurePair({ measure: 'configuration', a: left, b: right });
+      return typeof result.score === 'number' ? result.score : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * The single candidate of a two-entry comparison, which is the finalist. A
+   * comparison with more entries has no finalist, and the novelty branch then
+   * does not apply: it needs one candidate to reason about.
+   */
+  #finalistOf(primary, parentVersionId) {
+    const entries = Object.values(primary?.labelToVersion ?? {});
+    const others = entries.filter((id) => id !== parentVersionId);
+    return others.length === 1 ? others[0] : null;
+  }
+
   // ── one round ─────────────────────────────────────────────────────────────
 
-  async #runRound({ run, round, parent }) {
+  async #runRound({ run, round, parent, direction = null }) {
     const isolation = await this.capture.available();
     const localOnly = isLocalHost(this.config.host);
     const sourceMode = decideSourceMode({
@@ -455,7 +567,9 @@ export class RunController {
     const variants = run.protocol?.variantsPerEvolution ?? this.config.evolution.variants;
     const plans = planRound({
       level: round,
-      direction: run.direction,
+      // A level uses the instruction written for it: the person's own words when
+      // there are any, and the text the run wrote for itself when there are not.
+      direction: direction?.text ?? run.direction,
       variants,
       unchangedLevels: run.unchangedRounds,
       redirectAfter: this.config.evolution.unchangedRoundsBeforeRedirect,
@@ -679,15 +793,30 @@ export class RunController {
       });
     }
 
+    // The novelty branch needs one candidate and one parent, so it rides on the
+    // finalist comparison: that is where the promotion is finally decided. The
+    // distance is the configuration distance, which is free and already recorded.
+    const finalistId = this.#finalistOf(primary, parent.id);
+    const noveltyDistance = finalistId ? this.#configurationDistance(parent.id, finalistId) : null;
+
     const decided = decideWinner({
       primary,
       reversed: reversedComparison,
       tieBreak,
       parentVersionId: parent.id,
       promoteMargin: this.config.evolution.promoteMargin,
+      novelty:
+        finalistId && noveltyDistance !== null
+          ? {
+              candidateVersionId: finalistId,
+              distance: noveltyDistance,
+              floor: this.config.archive.noveltyFloor,
+              tolerance: this.config.archive.qualityTolerance,
+            }
+          : null,
     });
     const decision = reversedFailed
-      ? { winnerVersionId: parent.id, promoted: false, usedTieBreak: false, reason: 'The reversed comparison did not complete, so the parent stays.' }
+      ? { winnerVersionId: parent.id, promoted: false, usedTieBreak: false, branch: 'none', reason: 'The reversed comparison did not complete, so the parent stays.' }
       : decided;
 
     if (!decision.promoted) {
