@@ -440,25 +440,43 @@ export function TreeView({
   // Hidden records keep the position they had. A filter changes what is drawn,
   // never where the remaining cards are.
   const flowNodes = useMemo<Node[]>(() => {
-    const drawn: Node[] = nodes.map((node) => ({
-      id: node.id,
-      type: 'version',
-      position: layout.positions.get(node.id) ?? { x: 0, y: 0 },
-      data: {
-        node,
-        active: activeSet.has(node.id),
-        activeKind: activeKinds[node.id] ?? null,
-        liveFrame: liveFrames[node.id] ?? null,
-        decision: decisions[node.id] ?? null,
-        rows: rowsOf(node.id),
-        files: filesOf(node.id),
-        onSelect,
-        onOpen,
-        onPlay,
-      } as NodeData,
-      selected: node.id === selected,
-      style: { width: NODE_WIDTH },
-    }));
+    // A record the layout could not place, such as one whose parent is missing,
+    // belongs to the diagnostic column. Drawing it a second time at the graph
+    // origin would stack it on the root, where it hides behind the root card and
+    // looks like it vanished.
+    const diagnosticIds = new Set(layout.diagnostics.map((entry) => entry.id));
+    // A record the layout could not place is put in a spare column of its own,
+    // never at the graph origin: at the origin it would sit under the root card
+    // and look like it had vanished.
+    const columnX = Math.min(...[...layout.positions.values()].map((point) => point.x), ...[...layout.diagnosticPositions.values()].map((point) => point.x), 0) - NODE_WIDTH;
+    const stackY = Math.min(...[...layout.diagnosticPositions.values()].map((point) => point.y), 0);
+    let spare = 0;
+    const drawn: Node[] = nodes
+      .filter((node) => !diagnosticIds.has(node.id))
+      .map((node) => {
+        const position = layout.positions.get(node.id);
+        const fallback = { x: columnX, y: stackY - NODE_HEIGHT * (spare + 1) };
+        if (!position) spare += 1;
+        return {
+          id: node.id,
+          type: 'version',
+          position: position ?? fallback,
+          data: {
+            node,
+            active: activeSet.has(node.id),
+            activeKind: activeKinds[node.id] ?? null,
+            liveFrame: liveFrames[node.id] ?? null,
+            decision: decisions[node.id] ?? null,
+            rows: rowsOf(node.id),
+            files: filesOf(node.id),
+            onSelect,
+            onOpen,
+            onPlay,
+          } as NodeData,
+          selected: node.id === selected,
+          style: { width: NODE_WIDTH },
+        };
+      });
     if (showDiagnostics) {
       for (const diagnostic of layout.diagnostics) {
         const node = allNodes.find((entry) => entry.id === diagnostic.id);
@@ -594,15 +612,20 @@ export function TreeView({
     if (!instance) return;
     const target = activeVersionIds[0] ?? selected;
     if (!target) return;
-    const measured = instance.getNode(target) as
-      | (ReturnType<ReactFlowInstance['getNode']> & { positionAbsolute?: { x: number; y: number }; width?: number; height?: number })
-      | undefined;
-    const absolute = measured?.positionAbsolute;
-    if (!absolute) return;
-    const x = absolute.x + (measured?.width ?? NODE_WIDTH) / 2;
-    const y = absolute.y + (measured?.height ?? NODE_HEIGHT) / 2;
-    instance.setCenter(x, y, { zoom: MAX_ZOOM, duration: 180 });
-  }, [activeKey, docMode, selected, activeVersionIds]);
+    // Documentation mode must show the work IN CONTEXT. Centring the one working
+    // card at the greatest zoom loses the tree: a viewer of the recording sees a
+    // single card and then an empty canvas as the camera moves, which reads as
+    // the nodes disappearing. Frame the working version together with the
+    // versions around it, at a zoom that keeps a card readable.
+    const ids = family.length > 0 ? family : [target];
+    instance.fitView({
+      nodes: ids.map((id) => ({ id })),
+      padding: 0.3,
+      duration: 200,
+      minZoom: MIN_READABLE_ZOOM,
+      maxZoom: 1,
+    });
+  }, [activeKey, familyKey, docMode, selected, activeVersionIds, family]);
 
   const handleSelect = useCallback((id: string) => onSelect(id), [onSelect]);
   const mismatches = layout.generationMismatch.length;
