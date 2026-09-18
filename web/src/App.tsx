@@ -20,11 +20,8 @@ import { DetailPanel } from './components/DetailPanel';
 import { RelationshipsPanel } from './components/RelationshipsPanel';
 import { CaptureViewer } from './components/CaptureViewer';
 
-// The build stamp shows in the strip, so a stale tab is easy to spot.
+// A build stamp shows in the strip, so a stale tab is easy to spot.
 const BUILD_STAMP = typeof __BUILD__ === 'string' ? __BUILD__ : 'dev';
-
-/** The recorder opens the interface with ?doc=1 to ride on the active node. */
-const DOC_MODE = new URLSearchParams(window.location.search).get('doc') === '1';
 
 const DEFAULT_DIRECTION = 'quieter, more directional, fewer crossings, light background';
 
@@ -34,7 +31,7 @@ export default function App() {
   const [tree, setTree] = useState<Tree | null>(null);
   const [run, setRun] = useState<RunDetail | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [follow, setFollow] = useState(DOC_MODE);
+  const [follow, setFollow] = useState(false);
   const [hideFailed, setHideFailed] = useState(false);
   const [record, setRecord] = useState(false);
   const [recording, setRecording] = useState<RecordingStatus | null>(null);
@@ -181,8 +178,6 @@ export default function App() {
       if (typeof saved.direction === 'string' && saved.direction.length > 0) setDirection(saved.direction);
       if (typeof saved.hideFailed === 'boolean') setHideFailed(saved.hideFailed);
       if (typeof saved.record === 'boolean') setRecord(saved.record);
-      // Documentation mode always follows the work, whatever was stored before.
-      if (DOC_MODE) setFollow(true);
     } catch {
       // a broken entry must not stop the page
     }
@@ -623,8 +618,7 @@ export default function App() {
               decisions={freshDecisions}
               agentRows={agentRows}
               fileRows={fileRows}
-              follow={DOC_MODE ? true : follow}
-              docMode={DOC_MODE}
+              follow={follow}
               onSelect={selectNode}
               onOpen={setViewerVersion}
               onPlay={setPlaying}

@@ -81,13 +81,26 @@ export class UiRecorder {
     this.browser = await chromium.launch({ channel: this.config.capture.browserChannel || 'chrome', headless: true });
     const context = await this.browser.newContext({ viewport: this.size, deviceScaleFactor: 1 });
     const page = await context.newPage();
-    // Documentation mode: the interface rides on the working version at the
-    // greatest zoom, so the recording shows the work close up.
-    const view = url.includes('?') ? `${url}&doc=1` : `${url}?doc=1`;
-    await page.goto(view, { waitUntil: 'load', timeout: 45000 }).catch(() => {});
+    // No documentation mode: the recording shows the interface as it is, so it
+    // shows the whole tree. A camera that chased the work is what made the tree
+    // leave the frame.
+    await page.goto(url, { waitUntil: 'load', timeout: 45000 }).catch(() => {});
     // Let the tree load and the view settle before the first frame, so the
     // recording does not open with nodes appearing one by one.
     await page.waitForSelector('.vnode', { timeout: 30000 }).catch(() => {});
+    // A recording of an empty canvas is worse than no recording, so the canvas is
+    // verified before a single frame is written, and a failure is reported.
+    const drawn = await page
+      .waitForSelector('.react-flow__node', { timeout: 30000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!drawn) {
+      this.state = { active: false, runId: null, folder, name, frames: first, video: existing?.video ?? null, error: 'The canvas did not render, so the recording would be blank. Nothing was recorded.' };
+      await this.browser.close().catch(() => {});
+      this.browser = null;
+      this.logger('warn', 'Recording refused: the canvas did not render, so the frames would be blank.');
+      return this.status();
+    }
     await page.waitForTimeout(this.config.recording?.settleMs ?? 5000);
 
     this.state = { active: true, runId, folder, name, frames: first, video: existing?.video ?? null, error: null };

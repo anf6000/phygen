@@ -367,7 +367,6 @@ export function TreeView({
   agentRows,
   fileRows,
   follow,
-  docMode,
   relationships,
   onSelect,
   onOpen,
@@ -390,13 +389,12 @@ export function TreeView({
   agentRows: AgentRow[];
   fileRows: FileRow[];
   follow: boolean;
-  /** Documentation mode: ride on the working version at the greatest zoom. */
-  docMode: boolean;
   onSelect: (id: string) => void;
   onOpen: (id: string) => void;
   onPlay: (id: string) => void;
 }) {
   const flow = useRef<ReactFlowInstance | null>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
   const activeKey = activeVersionIds.join(',');
   // A person's own pan or zoom wins until they ask for Focus again.
   const userMoved = useRef(false);
@@ -591,48 +589,49 @@ export function TreeView({
     focus([selected ?? rootId ?? ''].filter(Boolean), { readable: true });
   }, [focus, selected, rootId]);
 
-  // Keep the version that is being worked on in view, together with the
-  // versions around it. A pan or zoom that a person made wins until Focus.
+  // Keep the version that is being worked on in view WITHOUT touching the zoom.
+  // Following used to frame the working family, which zooms in until that family
+  // fills the screen and the rest of the tree is off-frame: that is what made the
+  // nodes look like they had disappeared. Following now pans only, and only when
+  // the working version has left the viewport, so the tree always stays visible.
   const familyKey = useMemo(() => [...family].sort().join('|'), [family]);
   useEffect(() => {
-    if (!follow || docMode || userMoved.current) return;
+    if (!follow || userMoved.current) return;
     const instance = flow.current;
-    if (!instance) return;
+    const wrapper = wrapperRef.current;
+    if (!instance || !wrapper) return;
     const target = activeVersionIds[0] ?? null;
     if (!target) return;
-    const ids = family.length > 0 ? family : [target];
-    instance.fitView({ nodes: ids.map((id) => ({ id })), padding: 0.25, duration: 300, minZoom: MIN_OVERVIEW_ZOOM, maxZoom: 1.1 });
+    const node = instance.getNode(target) as
+      | (ReturnType<ReactFlowInstance['getNode']> & { positionAbsolute?: { x: number; y: number }; width?: number; height?: number; measured?: { width?: number; height?: number } })
+      | undefined;
+    if (!node) return;
+    const absolute = node.positionAbsolute ?? (node as { position?: { x: number; y: number } }).position;
+    if (!absolute) return;
+    const width = node.measured?.width ?? node.width ?? NODE_WIDTH;
+    const height = node.measured?.height ?? node.height ?? NODE_HEIGHT;
+    const centre = { x: absolute.x + width / 2, y: absolute.y + height / 2 };
+    const view = instance.getViewport();
+    const box = wrapper.getBoundingClientRect();
+    const margin = 90;
+    const screenX = centre.x * view.zoom + view.x;
+    const screenY = centre.y * view.zoom + view.y;
+    const visible =
+      screenX > box.left + margin && screenX < box.right - margin && screenY > box.top + margin && screenY < box.bottom - margin;
+    // The camera does not move when the work is already visible, and it never
+    // changes the zoom: a person's zoom is theirs.
+    if (visible) return;
+    instance.setCenter(centre.x, centre.y, { zoom: view.zoom, duration: 400 });
     // The keys, not the arrays: a poll that returns the same versions must not
     // move the view, or the tree and a person's own zoom fight each other.
-  }, [activeKey, familyKey, follow, docMode, activeVersionIds, family]);
-
-  useEffect(() => {
-    if (!docMode) return;
-    const instance = flow.current;
-    if (!instance) return;
-    const target = activeVersionIds[0] ?? selected;
-    if (!target) return;
-    // Documentation mode must show the work IN CONTEXT. Centring the one working
-    // card at the greatest zoom loses the tree: a viewer of the recording sees a
-    // single card and then an empty canvas as the camera moves, which reads as
-    // the nodes disappearing. Frame the working version together with the
-    // versions around it, at a zoom that keeps a card readable.
-    const ids = family.length > 0 ? family : [target];
-    instance.fitView({
-      nodes: ids.map((id) => ({ id })),
-      padding: 0.3,
-      duration: 200,
-      minZoom: MIN_READABLE_ZOOM,
-      maxZoom: 1,
-    });
-  }, [activeKey, familyKey, docMode, selected, activeVersionIds, family]);
+  }, [activeKey, familyKey, follow, activeVersionIds, family]);
 
   const handleSelect = useCallback((id: string) => onSelect(id), [onSelect]);
   const mismatches = layout.generationMismatch.length;
   const diagnostics = layout.diagnostics.length;
 
   return (
-    <div className="tree-wrap">
+    <div className="tree-wrap" ref={wrapperRef}>
       <div className="tree-toolbar" role="toolbar" aria-label="Tree view controls">
         <button type="button" onClick={fitAll} title="Fit as much of the artwork as stays readable. Pan for the rest.">
           Fit all
