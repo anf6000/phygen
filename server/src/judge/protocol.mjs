@@ -201,18 +201,35 @@ export function verdictsAgree(primary, reversed) {
 /**
  * Decide the winner of one round from one or more verdicts.
  *
+ * Two branches can promote a candidate:
+ *
+ *   quality   the judge preferred it, by at least the promotion margin. This is
+ *             the original rule and it is unchanged.
+ *   novelty   the candidate is a measured distance away from its parent AND its
+ *             quality is not worse than the parent's by more than a tolerance.
+ *             This is what lets the system cross a valley: a rule that only
+ *             accepts an improvement can never leave a good but stuck branch.
+ *
+ * The novelty branch never overrides a clear quality win, and it never applies
+ * when the two comparison orders disagreed: a disagreement is not evidence that
+ * the candidate is good, and the parent stays.
+ *
  * @param {object} options
  * @param {object} options.primary      the first verdict, with its label map
  * @param {object} [options.reversed]   a fresh session with the order reversed
  * @param {object} [options.tieBreak]   one bounded tie-break verdict
  * @param {string} options.parentVersionId
  * @param {number} options.promoteMargin
- * @returns {{winnerVersionId: string, promoted: boolean, reason: string, usedTieBreak: boolean}}
+ * @param {object} [options.novelty]    `{ candidateVersionId, distance, floor, tolerance }`
+ * @returns {{winnerVersionId: string, promoted: boolean, reason: string, usedTieBreak: boolean, branch: string, novelty: object|null}}
  */
-export function decideWinner({ primary, reversed, tieBreak, parentVersionId, promoteMargin }) {
-  const winnerOf = (verdict, labelToVersion) => (verdict.preference === 'none' ? null : labelToVersion[verdict.preference] ?? null);
+export function decideWinner({ primary, reversed, tieBreak, parentVersionId, promoteMargin, novelty = null }) {
+  // A comparison that never answered has no verdict. It must read as "no
+  // opinion", never as a crash: a required reversed comparison that failed keeps
+  // the parent, and it must not take the whole run down with it.
+  const winnerOf = (verdict, labelToVersion) => (!verdict || verdict.preference === 'none' ? null : labelToVersion?.[verdict.preference] ?? null);
 
-  const first = winnerOf(primary.verdict, primary.labelToVersion);
+  const first = winnerOf(primary?.verdict, primary?.labelToVersion);
   let agreed = first;
   let usedTieBreak = false;
 
@@ -226,22 +243,88 @@ export function decideWinner({ primary, reversed, tieBreak, parentVersionId, pro
     if (third !== null) agreed = third;
   }
 
+  const distance = typeof novelty?.distance === 'number' ? novelty.distance : null;
+  const floor = typeof novelty?.floor === 'number' ? novelty.floor : null;
+  const tolerance = typeof novelty?.tolerance === 'number' ? novelty.tolerance : 0;
+  const candidate = novelty?.candidateVersionId ?? null;
+  const numbers = { distance, floor, tolerance };
+
+  /** Why novelty allows a promotion, or null when it does not. */
+  const noveltyAllows = (parentConfidence) => {
+    if (candidate === null || distance === null || floor === null) return null;
+    if (distance < floor) return null;
+    if (parentConfidence > tolerance) return null;
+    return distance >= floor ? `novel at ${distance.toFixed(2)} (floor ${floor.toFixed(2)})` : null;
+  };
+  /** The parent's confidence in its own favour, which is how much worse the candidate is. */
+  const parentConfidence = () => {
+    const key = [primary, reversed, tieBreak].find((entry) => entry && entry.labelToVersion[entry.verdict.preference] === parentVersionId);
+    return key?.verdict.confidence ?? 0;
+  };
+
   if (agreed === null) {
-    return { winnerVersionId: parentVersionId, promoted: false, reason: 'The comparisons did not agree, so the parent stays.', usedTieBreak };
+    // A missing reversed comparison is not a disagreement: it never answered. The
+    // plan requires both orders, so the parent stays and the reason says which
+    // case this was.
+    const reason = !reversed
+      ? 'The reversed comparison did not complete, so the parent stays.'
+      : 'The comparisons did not agree, so the parent stays.';
+    return { winnerVersionId: parentVersionId, promoted: false, reason, usedTieBreak, branch: 'none', novelty: numbers };
   }
   if (agreed === parentVersionId) {
-    return { winnerVersionId: parentVersionId, promoted: false, reason: 'The judge preferred the parent.', usedTieBreak };
+    const why = noveltyAllows(parentConfidence());
+    if (why) {
+      return {
+        winnerVersionId: candidate,
+        promoted: true,
+        reason: `The judge preferred the parent, but the candidate is ${why} and not worse by more than ${tolerance.toFixed(2)}.`,
+        usedTieBreak,
+        branch: 'novelty',
+        novelty: numbers,
+      };
+    }
+    return { winnerVersionId: parentVersionId, promoted: false, reason: 'The judge preferred the parent.', usedTieBreak, branch: 'none', novelty: numbers };
   }
   const key = [primary, reversed, tieBreak].find((entry) => entry && entry.labelToVersion[entry.verdict.preference] === agreed);
   const confidence = key?.verdict.confidence ?? 0;
   const uncertainty = key?.verdict.uncertainty ?? 'high';
+  const label = primary.labels?.[agreed] ?? 'the candidate';
   if (uncertainty === 'high' && confidence < promoteMargin) {
-    return { winnerVersionId: parentVersionId, promoted: false, reason: 'The preference is uncertain, so the parent stays.', usedTieBreak };
+    const why = noveltyAllows(0);
+    if (why) {
+      return {
+        winnerVersionId: agreed,
+        promoted: true,
+        reason: `The preference is uncertain (${confidence.toFixed(2)} below ${promoteMargin.toFixed(2)}), but ${label} is ${why}.`,
+        usedTieBreak,
+        branch: 'novelty',
+        novelty: numbers,
+      };
+    }
+    return { winnerVersionId: parentVersionId, promoted: false, reason: 'The preference is uncertain, so the parent stays.', usedTieBreak, branch: 'none', novelty: numbers };
   }
   if (confidence < promoteMargin) {
-    return { winnerVersionId: parentVersionId, promoted: false, reason: 'The winning margin is too small, so the parent stays.', usedTieBreak };
+    const why = noveltyAllows(0);
+    if (why) {
+      return {
+        winnerVersionId: agreed,
+        promoted: true,
+        reason: `The winning margin is too small (${confidence.toFixed(2)} below ${promoteMargin.toFixed(2)}), but ${label} is ${why}.`,
+        usedTieBreak,
+        branch: 'novelty',
+        novelty: numbers,
+      };
+    }
+    return { winnerVersionId: parentVersionId, promoted: false, reason: 'The winning margin is too small, so the parent stays.', usedTieBreak, branch: 'none', novelty: numbers };
   }
-  return { winnerVersionId: agreed, promoted: true, reason: `The judge preferred ${primary.labels?.[agreed] ?? 'the candidate'} with confidence ${confidence}.`, usedTieBreak };
+  return {
+    winnerVersionId: agreed,
+    promoted: true,
+    reason: `The judge preferred ${label} with confidence ${confidence}.`,
+    usedTieBreak,
+    branch: 'quality',
+    novelty: numbers,
+  };
 }
 
 

@@ -186,6 +186,77 @@ test('the winner decision keeps the parent when the comparisons disagree', () =>
   assert.equal(tie.usedTieBreak, true);
 });
 
+test('the novelty branch promotes a distinct candidate that the margin would refuse', () => {
+  const make = (preference, confidence, uncertainty) => ({ verdict: { preference, confidence, uncertainty }, labelToVersion: { A: 'ver_parent', B: 'ver_candidate' }, labels: { ver_parent: 'A', ver_candidate: 'B' } });
+  const novelty = { candidateVersionId: 'ver_candidate', distance: 0.62, floor: 0.35, tolerance: 0.1 };
+
+  // A clear quality win still promotes through the quality branch, with novelty unused.
+  const clear = decideWinner({ primary: make('B', 0.8, 'low'), reversed: make('B', 0.7, 'low'), parentVersionId: 'ver_parent', promoteMargin: 0.15, novelty });
+  assert.equal(clear.branch, 'quality');
+  assert.equal(clear.promoted, true);
+
+  // A preference too weak to permit promotion now permits it when the candidate is distinct.
+  const weakButNovel = decideWinner({ primary: make('B', 0.06, 'high'), reversed: make('B', 0.05, 'high'), parentVersionId: 'ver_parent', promoteMargin: 0.15, novelty });
+  assert.equal(weakButNovel.promoted, true);
+  assert.equal(weakButNovel.branch, 'novelty');
+  assert.equal(weakButNovel.winnerVersionId, 'ver_candidate');
+  assert.match(weakButNovel.reason, /novel at 0\.62/);
+
+  // The same weak preference keeps the parent when the candidate is a near copy.
+  const weakAndClose = decideWinner({
+    primary: make('B', 0.06, 'high'),
+    reversed: make('B', 0.05, 'high'),
+    parentVersionId: 'ver_parent',
+    promoteMargin: 0.15,
+    novelty: { ...novelty, distance: 0.1 },
+  });
+  assert.equal(weakAndClose.promoted, false);
+  assert.equal(weakAndClose.branch, 'none');
+
+  // A parent that wins weakly is within tolerance, so a distinct candidate takes the lineage.
+  const parentWonWeakly = decideWinner({ primary: make('A', 0.08, 'high'), reversed: make('A', 0.05, 'high'), parentVersionId: 'ver_parent', promoteMargin: 0.15, novelty });
+  assert.equal(parentWonWeakly.promoted, true);
+  assert.equal(parentWonWeakly.branch, 'novelty');
+  assert.equal(parentWonWeakly.winnerVersionId, 'ver_candidate');
+
+  // A parent that wins clearly is never overridden by novelty.
+  const parentWonClearly = decideWinner({ primary: make('A', 0.9, 'low'), reversed: make('A', 0.85, 'low'), parentVersionId: 'ver_parent', promoteMargin: 0.15, novelty });
+  assert.equal(parentWonClearly.promoted, false);
+  assert.equal(parentWonClearly.branch, 'none');
+
+  // A disagreement is not evidence that the candidate is good, so novelty cannot act on it.
+  const disagreement = decideWinner({ primary: make('B', 0.9, 'low'), reversed: make('A', 0.9, 'low'), parentVersionId: 'ver_parent', promoteMargin: 0.15, novelty });
+  assert.equal(disagreement.promoted, false);
+  assert.equal(disagreement.novelty.distance, 0.62, 'the numbers are recorded even when the branch does not fire');
+
+  // Without novelty the behaviour is exactly as before.
+  const withoutNovelty = decideWinner({ primary: make('B', 0.06, 'high'), reversed: make('B', 0.05, 'high'), parentVersionId: 'ver_parent', promoteMargin: 0.15 });
+  assert.equal(withoutNovelty.promoted, false);
+  assert.equal(withoutNovelty.branch, 'none');
+});
+
+test('a reversed comparison that never answered keeps the parent instead of throwing', () => {
+  // A live run failed with "Cannot read properties of undefined (reading
+  // 'preference')" when the reversed comparison did not complete. A missing
+  // verdict must read as no opinion.
+  const primary = { verdict: { preference: 'B', confidence: 0.8, uncertainty: 'low' }, labelToVersion: { A: 'ver_parent', B: 'ver_candidate' }, labels: { ver_parent: 'A', ver_candidate: 'B' } };
+  const decision = decideWinner({ primary, reversed: null, parentVersionId: 'ver_parent', promoteMargin: 0.15 });
+  assert.equal(decision.promoted, false);
+  assert.equal(decision.winnerVersionId, 'ver_parent');
+  assert.match(decision.reason, /reversed comparison did not complete/);
+  assert.equal(decision.branch, 'none');
+
+  // A comparison with no verdict at all is an abstention, not a crash.
+  const abstained = decideWinner({
+    primary: { verdict: { preference: 'none', confidence: 0, uncertainty: 'high' }, labelToVersion: { A: 'ver_parent' }, labels: { ver_parent: 'A' } },
+    reversed: undefined,
+    parentVersionId: 'ver_parent',
+    promoteMargin: 0.15,
+  });
+  assert.equal(abstained.promoted, false);
+  assert.equal(abstained.winnerVersionId, 'ver_parent');
+});
+
 test('a json object is found inside prose and a code fence', () => {
   assert.deepEqual(extractJson('here: {"a":1} done'), { a: 1 });
   assert.deepEqual(extractJson('```json\n{"a":{"b":2}}\n```'), { a: { b: 2 } });
