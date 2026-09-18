@@ -15,11 +15,25 @@ import { join } from 'node:path';
 import { ArtworkError } from '../../../runtime/contract.js';
 import { walkPackage } from '../../../runtime/node/package-checks.js';
 import { sha256Hex, stableStringify } from '../util.mjs';
-import { MEASURES, measureById, measurePair, pairKey, planPairs, revisionOf } from './relationships.mjs';
+import { MEASURES, bandFor, measureById, measurePair, pairKey, planPairs, revisionOf } from './relationships.mjs';
+import { appearanceFrames, measureAppearance } from './appearance.mjs';
 
 /** The text files a source comparison reads, and the ceiling on each. */
 const SOURCE_DIRS = ['src', 'runtime'];
 const MAX_SOURCE_BYTES = 400000;
+
+/** The identity of the frames a record was measured from, for reuse. */
+function frameIdentityOf(frames) {
+  if (!Array.isArray(frames)) return null;
+  return frames.map((frame) => `${frame.label}:${frame.stage}@${frame.step}`).sort();
+}
+
+/** Two frame identities are the same list, or both unknown. */
+function sameList(left, right) {
+  if (!left || !right) return false;
+  if (left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
+}
 
 function nowIso() {
   return new Date().toISOString();
@@ -35,17 +49,44 @@ function hashOfVersion(version) {
 }
 
 export class RelationshipAnalysis {
-  constructor({ store, config, logger = () => {} }) {
+  constructor({ store, config, logger = () => {}, provider = null, providerStub = false }) {
     this.store = store;
     this.config = config;
     this.logger = logger;
+    /** The provider, for the measures that read frames with a model. */
+    this.provider = provider;
+    /** True when the provider is the deterministic test double. */
+    this.providerStub = providerStub;
     /** runId -> { cancelled: boolean } */
     this.active = new Map();
   }
 
   /** The measures this build offers, with the reason when one is unavailable. */
   measures() {
-    return MEASURES.map((measure) => ({ ...measure }));
+    return MEASURES.map((measure) => {
+      if (measure.method !== 'model') return { ...measure };
+      // A model measure is available only when a provider that can look at frames
+      // is configured. The test double cannot, and pretending otherwise would
+      // produce numbers that mean nothing.
+      const available = Boolean(this.provider) && !this.providerStub;
+      return {
+        ...measure,
+        available,
+        unavailableReason: available
+          ? undefined
+          : this.providerStub
+            ? 'The provider is the deterministic test double, which cannot look at frames. Configure a real provider to measure appearance.'
+            : 'No provider is configured, so no model can compare the frames.',
+        model: this.appearanceModel(),
+        costPerCallUsd: this.config.analysis.appearanceCallUsd,
+        maxPairs: this.config.analysis.appearancePairs,
+      };
+    });
+  }
+
+  /** The model that compares frames: the configured one, else the judge model. */
+  appearanceModel() {
+    return this.config.analysis.appearanceModel || this.config.provider.model;
   }
 
   /**
@@ -83,9 +124,9 @@ export class RelationshipAnalysis {
    * in the background.
    */
   async start({ artwork, measureId, limit, force = false }) {
-    const measure = measureById(measureId);
+    const measure = this.measures().find((entry) => entry.id === measureId) ?? null;
     if (!measure) throw new ArtworkError('measure_unknown', `No measure is named ${measureId}`);
-    if (measure.method === 'model' && !measure.available) {
+    if (!measure.available) {
       throw new ArtworkError('measure_not_enabled', measure.unavailableReason ?? `${measure.label} is not enabled.`);
     }
     const versions = this.store.listVersions(artwork.id);
@@ -96,7 +137,10 @@ export class RelationshipAnalysis {
       throw new ArtworkError('measure_already_running', 'A measurement of this artwork is already running', { runId: existing.id });
     }
 
-    const budget = Math.max(1, Math.min(Number(limit) || this.config.analysis.maxPairs, this.config.analysis.maxPairs));
+    // A model measure is bounded by pairs, not by money, so its default budget is
+    // its own: sixty frames pair calls, not four hundred.
+    const defaultBudget = measure.method === 'model' ? this.config.analysis.appearancePairs : this.config.analysis.maxPairs;
+    const budget = Math.max(1, Math.min(Number(limit) || defaultBudget, defaultBudget));
     const plan = planPairs({ versions, measure: measureId, limit: budget });
     const run = this.store.createAnalysisRun({
       artworkId: artwork.id,
@@ -154,6 +198,8 @@ export class RelationshipAnalysis {
     let done = 0;
     let reused = 0;
     let failed = 0;
+    /** What the measurement has really cost, from the provider's own numbers. */
+    let spent = 0;
     const failureLimit = this.config.analysis.failureLimit;
     const started = Date.now();
 
@@ -186,18 +232,40 @@ export class RelationshipAnalysis {
           configurationHashB: configurationHashOf(b),
         };
         // Reuse a record only when both versions still hold the same evidence.
+        // The appearance measure also depends on the FRAMES, so a recapture
+        // invalidates its record even when the code and configuration are
+        // unchanged. The frames are checked against the ones the record names.
         const reusable = this.store.findReusablePairMeasurement(base);
         if (reusable) {
-          reused += 1;
-          this.store.upsertPairMeasurement({ ...base, sourceHashA: base.sourceHashA, sourceHashB: base.sourceHashB, outcome: 'ok', score: reusable.score, band: reusable.band, evidence: { ...reusable.evidence, reused: true } });
-          done += 1;
-          continue;
+          const stillValid = measure !== 'appearance' || sameList(frameIdentityOf(reusable.evidence?.frames), this.#frameIdentity(a, b));
+          if (stillValid) {
+            reused += 1;
+            this.store.upsertPairMeasurement({ ...base, sourceHashA: base.sourceHashA, sourceHashB: base.sourceHashB, outcome: 'ok', score: reusable.score, band: reusable.band, evidence: { ...reusable.evidence, reused: true } });
+            spent += Number(reusable.evidence?.costUsd ?? 0);
+            done += 1;
+            continue;
+          }
         }
         try {
-          const aSources = measure === 'source' ? await sourceFor(a.id) : undefined;
-          const bSources = measure === 'source' ? await sourceFor(b.id) : undefined;
-          const result = measurePair({ measure, a, b, aSources, bSources });
-          this.store.upsertPairMeasurement({ ...base, outcome: 'ok', score: result.score, band: result.band, evidence: { ...result.evidence, group: pair.group } });
+          if (measure === 'appearance') {
+            const measured = await this.#measureAppearance({ a, b, run });
+            this.store.upsertPairMeasurement({
+              ...base,
+              outcome: 'ok',
+              score: measured.score,
+              band: bandFor(measured.score),
+              evidence: { ...measured.evidence, group: pair.group },
+            });
+            spent += measured.costUsd;
+            if (done % 10 === 0 || measured.costUsd > 0) {
+              this.logger('info', `Appearance pair ${done + 1}/${pairs.length}: ${measured.score.toFixed(2)} for ${measured.costUsd.toFixed(4)} USD`);
+            }
+          } else {
+            const aSources = measure === 'source' ? await sourceFor(a.id) : undefined;
+            const bSources = measure === 'source' ? await sourceFor(b.id) : undefined;
+            const result = measurePair({ measure, a, b, aSources, bSources });
+            this.store.upsertPairMeasurement({ ...base, outcome: 'ok', score: result.score, band: result.band, evidence: { ...result.evidence, group: pair.group } });
+          }
         } catch (error) {
           failed += 1;
           this.store.upsertPairMeasurement({ ...base, outcome: 'error', errorCode: error.code ?? 'pair_failed', errorMessage: String(error.message ?? error).slice(0, 400), evidence: { group: pair.group } });
@@ -207,7 +275,7 @@ export class RelationshipAnalysis {
         }
         done += 1;
         if (done % 25 === 0) {
-          this.store.updateAnalysisRun(run.id, { progress: { total: pairs.length, done, reused, failed, elapsedMs: Date.now() - started } });
+          this.store.updateAnalysisRun(run.id, { progress: { total: pairs.length, done, reused, failed, spentUsd: spent, elapsedMs: Date.now() - started } });
         }
       }
 
@@ -215,9 +283,9 @@ export class RelationshipAnalysis {
         state: 'succeeded',
         revision,
         finishedAt: nowIso(),
-        progress: { total: pairs.length, done, reused, failed, elapsedMs: Date.now() - started },
+        progress: { total: pairs.length, done, reused, failed, spentUsd: spent, elapsedMs: Date.now() - started },
       });
-      this.logger('info', `Measurement ${run.id} finished: ${done} pair(s), ${failed} error(s)`);
+      this.logger('info', `Measurement ${run.id} finished: ${done} pair(s), ${failed} error(s), ${spent.toFixed(4)} USD`);
     } catch (error) {
       this.store.updateAnalysisRun(run.id, {
         state: 'failed',
@@ -225,11 +293,88 @@ export class RelationshipAnalysis {
         errorCode: error.code ?? 'measure_failed',
         errorMessage: String(error.message ?? error).slice(0, 600),
         finishedAt: nowIso(),
-        progress: { total: pairs.length, done, reused, failed },
+        progress: { total: pairs.length, done, reused, failed, spentUsd: spent },
       });
     } finally {
       this.active.delete(run.id);
     }
+  }
+
+  /**
+   * Measure one pair by appearance: one frame of each version, under blind
+   * labels, through the configured model. The cost is recorded per pair, here
+   * and in the usage ledger, so the estimate can be replaced by the real number.
+   */
+  async #measureAppearance({ a, b, run }) {
+    if (!this.provider || this.providerStub) {
+      throw new ArtworkError('measure_not_enabled', 'No model is configured to compare frames');
+    }
+    const aFrames = await this.#framesFor(a);
+    const bFrames = await this.#framesFor(b);
+    const measured = await measureAppearance({
+      ask: (request) =>
+        this.provider.judge({
+          prompt: request.prompt,
+          images: request.images.map((image) => ({ path: image.path })),
+          cwd: this.config.repoRoot,
+          model: this.appearanceModel(),
+        }),
+      aFrames,
+      bFrames,
+      direction: run?.params?.direction ?? null,
+      cwd: this.config.repoRoot,
+      model: this.appearanceModel(),
+    });
+    const usage = measured.usage ?? {};
+    const costUsd = typeof usage.costUsd === 'number' ? usage.costUsd : 0;
+    // The ledger row belongs to no run and no version: it is the cost of a
+    // measurement, not of an artwork that was made.
+    this.store.createUsage({
+      runId: null,
+      jobId: null,
+      versionId: null,
+      kind: 'appearance',
+      model: measured.model ?? this.appearanceModel(),
+      sessionId: null,
+      inputTokens: usage.inputTokens ?? 0,
+      outputTokens: usage.outputTokens ?? 0,
+      costUsd,
+      raw: { ...(usage.raw ?? {}), costSource: usage.costKnown === true ? 'provider' : 'bound', pairKey: pairKey(a.id, b.id), score: measured.score },
+    });
+    return {
+      score: measured.score,
+      costUsd,
+      evidence: {
+        differences: measured.differences,
+        note: measured.note,
+        frames: measured.frames,
+        model: measured.model ?? this.appearanceModel(),
+        costUsd,
+        inputTokens: usage.inputTokens ?? 0,
+        outputTokens: usage.outputTokens ?? 0,
+        labels: ['A', 'B'],
+      },
+    };
+  }
+
+  /** The one frame of a version that the appearance measure uses. */
+  async #framesFor(version) {
+    const captures = this.store.listCaptures(version.id);
+    if (captures.length === 0) {
+      throw new ArtworkError('image_missing', `Version ${version.id} holds no frame to compare`);
+    }
+    return appearanceFrames(captures.map((capture) => ({ path: capture.path, stage: capture.stage, step: capture.step })));
+  }
+
+  /** The identity of the frames a pair would be measured from, without reading bytes. */
+  #frameIdentity(a, b) {
+    const middle = (captures) => (captures.length === 0 ? null : captures[Math.floor(captures.length / 2)]);
+    const left = middle(this.store.listCaptures(a.id));
+    const right = middle(this.store.listCaptures(b.id));
+    return [
+      left ? `A:${left.stage}@${left.step}` : 'A:none',
+      right ? `B:${right.stage}@${right.step}` : 'B:none',
+    ].sort();
   }
 
   /** The source text a comparison reads. Bounded, and never outside the snapshot. */

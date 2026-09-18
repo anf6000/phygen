@@ -1,5 +1,8 @@
 node_modules/
 data/
+# A fresh artwork tree gets its own records directory: PHYGEN_DATA=data-simple,
+# PHYGEN_DATA=data-pop1, and so on. Those are runtime state, never source.
+data-*/
 snapshots/
 web/dist/
 *.log

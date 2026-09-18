@@ -39,14 +39,17 @@ export async function startServer(overrides = {}) {
   const catalog = new ModelCatalog({ config, logger });
   await catalog.refresh();
   const budget = new Budget({ store, events, config, catalog });
-  const { provider, detection } = await createProvider({ config, logger });
+  const { provider, detection, substituted } = await createProvider({ config, logger });
   const capture = await createCapture({ config, logger });
   const status = await captureStatus({ config });
   const artifacts = createArtifacts({ store, config });
 
   const recorder = new UiRecorder({ store, config, logger });
   const controller = new RunController({ store, events, budget, capture, provider, config, artifacts, logger });
-  const analysis = new RelationshipAnalysis({ store, config, logger });
+  // The appearance measure looks at frames through the provider. The test double
+  // cannot see, so the service is told when the provider is a substitute and
+  // reports the measure as unavailable instead of inventing numbers.
+  const analysis = new RelationshipAnalysis({ store, config, logger, provider, providerStub: substituted === true });
 
   const live = createLiveServer({ store, config });
   const liveBaseUrl = await live.listen();

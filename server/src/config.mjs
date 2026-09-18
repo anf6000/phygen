@@ -232,6 +232,11 @@ export function loadConfig(overrides = {}) {
       maxComparisonImages: readNumber('PHYGEN_MAX_COMPARISON_IMAGES', 60),
       // Grades: a candidate must beat the parent by this confidence margin.
       promoteMargin: readNumber('PHYGEN_PROMOTE_MARGIN', 0.15),
+      // Every level must advance: the judge names a variant and the strongest
+      // variant takes the lineage, even when the parent is judged better. A run
+      // that is left with no variant to advance still keeps the parent, and the
+      // record says so.
+      requireVariant: readBool('PHYGEN_REQUIRE_VARIANT', true),
     },
     // Bounded relationship measurement. A run has a fixed pair budget and stops
     // when too many pairs fail.
