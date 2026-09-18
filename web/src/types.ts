@@ -83,6 +83,10 @@ export interface Measure {
   direction: string;
   description: string;
   unavailableReason?: string;
+  /** A model measure names the model, its per-call bound, and its pair budget. */
+  model?: string;
+  costPerCallUsd?: number;
+  maxPairs?: number;
 }
 
 export interface MeasureList {
@@ -97,7 +101,7 @@ export interface AnalysisRun {
   state: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
   revision: string | null;
   params: { limit?: number; groups?: Record<string, number>; considered?: number };
-  progress: { total?: number; done?: number; reused?: number; failed?: number; cancelling?: boolean; elapsedMs?: number };
+  progress: { total?: number; done?: number; reused?: number; failed?: number; cancelling?: boolean; elapsedMs?: number; spentUsd?: number };
   errorCode: string | null;
   errorMessage: string | null;
   startedAt: string | null;

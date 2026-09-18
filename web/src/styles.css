@@ -348,6 +348,13 @@ button.primary:focus-visible {
   font-size: 12px;
 }
 
+/* A model measure costs money per pair, so the ceiling is stated before the run. */
+.rel-estimate {
+  font-size: 12px;
+  border-left: 3px solid var(--accent);
+  padding-left: 6px;
+}
+
 .rel-facts {
   display: grid;
   grid-template-columns: 110px 1fr;
@@ -1198,12 +1205,15 @@ button.primary:focus-visible {
 }
 
 /* ── A border that travels around the node being worked on ───────────────── */
+/* The size must be stated. An SVG is a replaced element, so `width: auto` uses
+   its 300x150 default and ignores the right and bottom insets: the border was
+   then drawn at the wrong size and landed over the card instead of around it. */
 .node-runner {
   position: absolute;
-  /* 4px outside the node border: 1px border, 4px gap, and the stroke itself. */
-  inset: -6px;
-  width: auto;
-  height: auto;
+  left: -6px;
+  top: -6px;
+  width: calc(100% + 12px);
+  height: calc(100% + 12px);
   pointer-events: none;
   z-index: 2;
   overflow: visible;

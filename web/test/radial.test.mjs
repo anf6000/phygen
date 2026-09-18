@@ -90,8 +90,18 @@ function assertRingAroundParent(layout, parentId, childIds) {
   const angles = childIds.map((id) => layout.angles.get(id));
   const seen = new Set(angles.map((value) => value.toFixed(9)));
   assert.equal(seen.size, childIds.length, 'the children never share an angle');
-  // The children turn one way from the first, which points straight out.
-  for (let index = 1; index < angles.length; index++) assert.ok(angles[index] > angles[index - 1], 'the ring turns in one direction');
+  // The children turn one way from the first, which points straight out. The
+  // angle is measured relative to the first child, so a full turn that wraps at
+  // the axis still reads as a single direction.
+  const relative = childIds.map((id) => {
+    const offset = { x: layout.centers.get(id).x - parent.x, y: layout.centers.get(id).y - parent.y };
+    const delta = Math.atan2(offset.y, offset.x) - Math.atan2(layout.centers.get(childIds[0]).y - parent.y, layout.centers.get(childIds[0]).x - parent.x);
+    return (delta + Math.PI * 2) % (Math.PI * 2);
+  });
+  relative[0] = 0;
+  for (let index = 1; index < relative.length; index++) {
+    assert.ok(relative[index] > relative[index - 1], `the ring turns in one direction (${relative.map((value) => value.toFixed(2)).join(', ')})`);
+  }
 }
 
 test('a lineage that does not divide grows straight outward', () => {

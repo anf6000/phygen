@@ -136,6 +136,19 @@ export function RelationshipsPanel({
             <p className="muted">
               Method: {measure.method === 'deterministic' ? 'no model, no spend, repeatable' : 'a model call, which spends money'}
             </p>
+            {measure.method === 'model' && measure.available ? (
+              // The pair budget bounds the work and the record keeps the real
+              // cost. The number below is a CEILING, not a forecast: it is the
+              // per-call bound times the pair budget, and the real cost is
+              // almost always far lower.
+              <p className="rel-estimate">
+                Model <strong>{measure.model}</strong> · at most <strong>{measure.maxPairs}</strong> pair(s), so at most{' '}
+                <strong>
+                  ${((measure.maxPairs ?? 0) * (measure.costPerCallUsd ?? 0)).toFixed(2)}
+                </strong>{' '}
+                at a ${(measure.costPerCallUsd ?? 0).toFixed(3)} ceiling per frame pair. The record keeps the real cost.
+              </p>
+            ) : null}
             {!measure.available ? (
               <p className="alert" role="status">
                 {measure.unavailableReason}
@@ -177,6 +190,15 @@ export function RelationshipsPanel({
             </dd>
             <dt>Freshness</dt>
             <dd>{view.stale ? (view.reason ?? 'Out of date.') : 'Up to date with the versions that exist now.'}</dd>
+            {typeof view.run.progress.spentUsd === 'number' ? (
+              <>
+                <dt>Cost</dt>
+                <dd>
+                  {view.run.progress.spentUsd.toFixed(4)} USD, from the provider's own numbers
+                  {view.run.progress.reused ? ` · ${view.run.progress.reused} pair(s) reused, which cost nothing` : ''}
+                </dd>
+              </>
+            ) : null}
             {view.run.errorCode ? (
               <>
                 <dt>Error</dt>

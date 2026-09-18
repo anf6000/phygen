@@ -61,7 +61,87 @@ node tools/ui-check.mjs     # the selection survives a reload; writes a tree ima
 node tools/pages-shot.mjs   # one image of every page
 ```
 
-## Autonomous heredity (in progress)
+## The camera never zooms on its own
+
+The complaint "the nodes disappear while rendering" had one cause: **following
+the active node framed its family and zoomed in**, so that family filled the
+screen and the rest of the tree was off-frame. Following now:
+
+- **pans only, and never changes the zoom**;
+- moves only when the working version has left the viewport, with a margin;
+- stops panning once a person pans or zooms themselves, until Fit all or Focus
+  selection is pressed.
+
+`?doc=1` and the documentation camera are **removed**. The recorder no longer
+appends it, and the interface has no mode that moves the camera. The recorder
+also verifies that the canvas actually rendered before it writes a single frame,
+and refuses with a reason instead of recording a blank canvas. A recording now
+shows the whole tree.
+
+Measured: with follow ticked, the zoom stayed at 0.16 and 46 of 49 cards stayed
+in view across 30 seconds, and the recorder's own frames show the whole tree.
+
+A level also advances when the judge answer cannot be used at all: the earliest
+variant takes the lineage and the record says the comparison failed, so a
+malformed judgement cannot freeze the line.
+
+
+
+`appearance` compares two versions by how different they LOOK, using a vision
+model. It is listed as available whenever the provider can see frames, and it is
+refused with a reason when the provider is the deterministic test double.
+
+- The versions are anonymous: only the labels A and B appear in the prompt, never
+  a title, an id, or which came first. One frame per version is sent: the middle
+  frame of its sequence.
+- The score is a DISTANCE in [0, 1], the same direction as every other measure.
+  A non-zero score must name what differs, or the answer is a failure.
+- Bounded by PAIRS, not by money, as chosen: `PHYGEN_APPEARANCE_MAX_PAIRS` (60).
+  The per-call ceiling is `PHYGEN_COST_APPEARANCE_USD` (0.05) and the model is
+  `PHYGEN_APPEARANCE_MODEL`, which defaults to the judge model.
+- Every pair records its score, the differences it named, the frames behind it,
+  the model, and its real cost. The cost also goes to the `usage` ledger with no
+  run and no version, because it belongs to a measurement, not to an artwork.
+- A record is reused only when both versions' source and configuration hashes AND
+  the frame identities are unchanged, so a recapture measures the pair again.
+- The panel shows the model and the CEILING before the run, and the real cost
+  afterwards. The ceiling is not a forecast: 60 pairs at the 0.05 bound is $3.00,
+  and the real cost of a two-image call is far lower.
+
+Measured real cost of one pair is not yet known: run a small budget (for example
+four pairs, about two cents) to learn it, then set the pair budget from that.
+
+
+
+## Two trees, and which one the server uses
+
+The records live where `PHYGEN_DATA` points. Two trees exist now:
+
+| Directory | What it holds |
+| --- | --- |
+| `data/` | The manual tree: 73 versions, 16 runs, the record of the hand-picked era. Its last run was left `running` and the next start PAUSES it as `paused_after_restart`, so it can be resumed. |
+| `data-simple/` | The fresh tree: ONE version, `Root` at generation 0, the mother. Started from it with `PHYGEN_DATA=data-simple`. |
+
+Both trees share the published snapshots in `snapshots/`, which are
+content-addressed: the mother of the fresh tree names the same directory as the
+mother of the manual tree (`5883e4a0a59f…`), so nothing was re-rendered or
+duplicated.
+
+Start against the tree you want:
+
+```powershell
+$env:PHYGEN_DATA = 'S:\PROJECTS\phygen\data-simple'   # the fresh tree
+$env:PHYGEN_DATA = 'S:\PROJECTS\phygen\data'          # the manual tree
+```
+
+Only one server can hold the port at a time, so switching means stopping and
+starting. A second artwork in the SAME database is not possible yet: the import
+route is idempotent per package path, and the interface always shows the oldest
+artwork. That is what plan slice 6 fixes with a pop tool and an artwork selector.
+
+
+
+## Autonomous heredity
 
 A run is **autonomous by default**. It starts from the seed version, then reads
 its **archive** at every level and picks its own parent, rotating three roles:
@@ -84,15 +164,36 @@ weakest member still worth keeping. Every pick and every promotion records why.
   direction. That is the predictable mode.
 
 `GET /api/artworks/:id/archive` reports the members, every refusal with its
-reason, and the mean novelty. Measured on the recorded tree: **65 versions, 5
-members, 46 refused for quality, 12 near-duplicates, mean novelty 0.62** — the
+reason, and the mean novelty. Measured on the manual tree: **65 versions, 5
+members, 46 refused for quality, 12 near-duplicates, mean novelty 0.62** — that
 tree is mostly near-copies, which is why the novelty floor and the appearance
 measure matter.
 
-Not built yet: the **appearance measure** (a vision model comparing two frames;
-its config keys exist and do nothing), the **pop tool** (`tools/new-pop.mjs`), the
-**archive panel**, and the plan's fuller policy of three parents per level, each
-compared with its own parent. The plan is at
+### The appearance measure
+
+Built. It shows a vision model one frame of each version under the blind labels A
+and B and asks how different they look. The score is a distance in [0, 1], the
+same direction as the other measures. A non-zero score must name what differs.
+
+- Bounded by PAIRS, as chosen: `PHYGEN_APPEARANCE_MAX_PAIRS` (60), with a per-call
+  ceiling `PHYGEN_COST_APPEARANCE_USD` (0.05) and `PHYGEN_APPEARANCE_MODEL`, which
+  defaults to the judge model.
+- Each pair records its score, the differences it named, the frames behind it, the
+  model, and its real cost. The cost also goes to the `usage` ledger with no run
+  and no version: it belongs to a measurement, not to an artwork.
+- A record is reused only when both versions' source and configuration hashes AND
+  the frame identities are unchanged, so a recapture measures the pair again.
+- With the test double the measure is listed as unavailable and refused with the
+  reason, so no invented numbers are ever produced.
+- The panel shows the model and the CEILING before the run and the real cost
+  after. The ceiling is not a forecast.
+
+**The real cost of one pair is still unknown.** Run a small budget, four pairs for
+example, to learn it and then set the pair budget from that number.
+
+Not built yet: the **pop tool** (`tools/new-pop.mjs`), the **archive panel**, the
+**pin switch** in the header, and the plan's fuller policy of three parents per
+level, each compared with its own parent. The plan is at
 `phygen-autonomous-heredity-impl.md` in the plans directory.
 
 ## Generation rings and measured relationships

@@ -122,6 +122,19 @@ function byBirth(a: RadialNode, b: RadialNode): number {
 }
 
 /**
+ * The arc a node gives its children, by their number.
+ *
+ * A narrow brood keeps a narrow fan, so a small family reads as a branch that
+ * grows outward. A wide brood opens wider, because a narrow fan forces the cards
+ * onto a huge ring: ten children on a half turn need a radius of about 790, and
+ * the same ten on a full turn need about 450. The rule stops at a full turn.
+ */
+function defaultFan(count: number): number {
+  if (count <= 6) return Math.PI / 2;
+  return Math.PI;
+}
+
+/**
  * Lay out one artwork as nested circles.
  *
  * Only records reachable from `rootId` through parent links are placed. A record
@@ -211,16 +224,24 @@ export function layoutRings(nodes: RadialNode[], options: RadialOptions): Radial
   // repair can spread a cluster without re-deciding the packing.
   interface ClusterPlan {
     parentId: string;
-    /** The child ids in placement order: ring by ring, in the order they sit. */
+    /** The child ids in placement order. */
     order: string[];
-    /** One entry per ring: its radius, and the angle of each child on it. */
-    base: number[];
-    angles: number[][];
+    /** Each child's offset from its parent, in graph coordinates. */
+    offsets: { x: number; y: number }[];
     /** The factor a repair spreads this cluster by. */
     scale: number;
   }
   const plans = new Map<string, ClusterPlan>();
   const outwardOf = new Map<string, number>([[root.id, -Math.PI / 2]]);
+
+  /** Record where a node's children go, and which way each of them faces. */
+  const setPlan = (id: string, order: string[], offsets: { x: number; y: number }[]) => {
+    plans.set(id, { parentId: id, order, offsets, scale: 1 });
+    order.forEach((kidId, index) => {
+      const offset = offsets[index];
+      if (offset) outwardOf.set(kidId, Math.atan2(offset.y, offset.x));
+    });
+  };
 
   /** Even angles over `arc`, centred on `outward`. One child goes straight out. */
   const spread = (arc: number, count: number, outward: number) => {
@@ -300,48 +321,72 @@ export function layoutRings(nodes: RadialNode[], options: RadialOptions): Radial
    * cards a ring needs a circle of radius 1,670 and the block fits the same
    * cards in under 60% of that area.
    */
-  const planGrid = (id: string, kids: RadialNode[], shape: { columns: number; alongPitch: number; acrossPitch: number }) => {
+  const planBlock = (id: string, kids: RadialNode[], shape: { columns: number; alongPitch: number; acrossPitch: number }) => {
     const outward = outwardOf.get(id) ?? 0;
     const dx = Math.cos(outward);
     const dy = Math.sin(outward);
     const horizontal = Math.abs(dx) >= Math.abs(dy);
-    const columns = shape.columns;
     const sign = (horizontal ? dx : dy) >= 0 ? 1 : -1;
-    const radiiOut: number[] = [];
-    const anglesOut: number[][] = [];
-    kids.forEach((_, index) => {
-      const column = index % columns;
-      const row = Math.floor(index / columns);
+    const offsets = kids.map((_, index) => {
+      const column = index % shape.columns;
+      const row = Math.floor(index / shape.columns);
       const along = sign * shape.alongPitch * (row + 1);
-      const across = (column - (columns - 1) / 2) * shape.acrossPitch;
-      const x = horizontal ? along : across;
-      const y = horizontal ? across : along;
-      radiiOut.push(Math.hypot(x, y));
-      anglesOut.push([Math.atan2(y, x)]);
+      const across = (column - (shape.columns - 1) / 2) * shape.acrossPitch;
+      return { x: horizontal ? along : across, y: horizontal ? across : along };
     });
-    plans.set(id, { parentId: id, order: kids.map((kid) => kid.id), base: radiiOut, angles: anglesOut, scale: 1 });
-    kids.forEach((kid, index) => outwardOf.set(kid.id, anglesOut[index][0]));
+    return { offsets, horizontal, sign, rows: Math.ceil(kids.length / shape.columns) };
   };
 
   const planCluster = (id: string) => {
     const kids = children.get(id) ?? [];
     if (kids.length === 0) return;
-    const allLeaves = kids.every((kid) => (children.get(kid.id) ?? []).length === 0);
-    if (allLeaves && kids.length >= 4) {
+    const isLeaf = (kid: RadialNode) => (children.get(kid.id) ?? []).length === 0;
+    const leaves = kids.filter(isLeaf);
+    const branching = kids.filter((kid) => !isLeaf(kid));
+
+    // A brood whose children are almost all leaves packs as a block: those cards
+    // need no room to grow outward. A SINGLE branching child goes in one row
+    // beyond the block, where its own cluster grows into free space, and that one
+    // branching child must not cost twenty leaves their tight packing: it is what
+    // turned one brood into a fan five thousand units wide.
+    //
+    // Two or more branching children keep the fan. Measured: their clusters
+    // collide in a block, and the repair pass then spreads the whole drawing to
+    // separate them, which costs far more than the fan ever did.
+    if (leaves.length >= 4 && branching.length <= 1) {
       const outward = outwardOf.get(id) ?? 0;
-      planGrid(id, kids, gridShape(kids.length, Math.abs(Math.cos(outward)) >= Math.abs(Math.sin(outward))));
+      const horizontal = Math.abs(Math.cos(outward)) >= Math.abs(Math.sin(outward));
+      const shape = gridShape(leaves.length, horizontal);
+      const block = planBlock(id, leaves, shape);
+      if (branching.length === 0) {
+        setPlan(id, leaves.map((kid) => kid.id), block.offsets);
+        return;
+      }
+      const beyond = block.sign * shape.alongPitch * (block.rows + 1);
+      const extra = branching.map((_, index) => {
+        const across = (index - (branching.length - 1) / 2) * shape.acrossPitch;
+        return { x: block.horizontal ? beyond : across, y: block.horizontal ? across : beyond };
+      });
+      setPlan(id, [...leaves.map((kid) => kid.id), ...branching.map((kid) => kid.id)], [...block.offsets, ...extra]);
       return;
     }
+
     const outward = outwardOf.get(id) ?? 0;
     // The root is the centre, so its children surround it. Any other node keeps
-    // its children inside a half turn, so no child sits behind its own parent.
-    const arc = Math.min(Math.PI * 2, id === root.id ? Math.PI * 2 : Math.max(0.2, kids.length <= 6 ? Math.PI / 2 : Math.PI));
+    // its children inside the arc this rule allows, which is at most a half turn
+    // by default so no child sits behind its own parent.
+    const fan = options.fan ?? defaultFan;
+    const arc = Math.min(Math.PI * 2, id === root.id ? Math.PI * 2 : Math.max(0.2, fan(kids.length)));
     const angles = spread(arc, kids.length, outward);
     const radius = leastRadius(kids.length, angles, [], cardRadius);
-    plans.set(id, { parentId: id, order: kids.map((kid) => kid.id), base: [radius], angles: [angles], scale: 1 });
-    kids.forEach((kid, index) => outwardOf.set(kid.id, angles[index]));
+    setPlan(
+      id,
+      kids.map((kid) => kid.id),
+      angles.map((angle) => ({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius })),
+    );
   };
   for (const id of order) planCluster(id);
+
 
   // ── place, then repair what really overlaps ────────────────────────────────
   const place = () => {
@@ -351,19 +396,14 @@ export function layoutRings(nodes: RadialNode[], options: RadialOptions): Radial
       centers.set(id, center);
       const plan = plans.get(id);
       if (!plan) return;
-      let index_ = 0;
-      plan.base.forEach((base, ring) => {
-        const radius = base * plan.scale;
-        for (const angle of plan.angles[ring]) {
-          const kidId = plan.order[index_];
-          index_ += 1;
-          if (!kidId) continue;
-          const x = center.x + Math.cos(angle) * radius;
-          const y = center.y + Math.sin(angle) * radius;
-          angles.set(kidId, angle);
-          radii.set(kidId, radius);
-          visit(kidId, { x, y });
-        }
+      plan.order.forEach((kidId, index) => {
+        const offset = plan.offsets[index];
+        if (!kidId || !offset) return;
+        const x = center.x + offset.x * plan.scale;
+        const y = center.y + offset.y * plan.scale;
+        angles.set(kidId, Math.atan2(offset.y, offset.x));
+        radii.set(kidId, Math.hypot(offset.x, offset.y) * plan.scale);
+        visit(kidId, { x, y });
       });
     };
     visit(root.id, { x: 0, y: 0 });
