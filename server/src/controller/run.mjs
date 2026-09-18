@@ -691,6 +691,26 @@ export class RunController {
       kind: 'round',
     });
     if (roundVerdict === null) {
+      // The comparison failed, so nothing is known about quality. A level that
+      // must advance still advances: the earliest variant takes the lineage, and
+      // the record says the judgement was missing rather than that it was won.
+      if (this.config.evolution.requireVariant && candidates.length > 0) {
+        const chosen = candidates[0].version;
+        this.#rejectOtherCandidates(candidates.slice(1).map((entry) => entry.version), null, 'The round comparison failed.');
+        this.#setVersionState(chosen.id, 'promoted');
+        this.store.updateRun(run.id, { unchangedRounds: 0 });
+        this.#emit(run.id, 'error', {
+          code: 'comparison_failed',
+          message: 'The round comparison failed, so the earliest variant advanced.',
+          detail: { round, mandate: true },
+        });
+        return {
+          promoted: true,
+          winnerVersionId: chosen.id,
+          candidateIds,
+          note: `Mandate: the round comparison failed, and a level must advance. ${chosen.title} takes the lineage.`,
+        };
+      }
       // The comparison failed, so the work stops here. Close the candidate
       // states instead of leaving them marked as judging.
       this.#rejectOtherCandidates(candidates.map((entry) => entry.version), null, 'The round comparison failed.');
@@ -704,13 +724,22 @@ export class RunController {
       return { interrupted: true, promoted: false, winnerVersionId: parent.id, candidateIds, note: 'The run was paused after the round comparison, so the parent stays.' };
     }
 
-    const finalistVersionId = roundVerdict.winnerVersionId;
+    // The round comparison names the strongest version. When it names the parent,
+    // a level that must advance still sends a variant to the finalist comparison,
+    // so the judge gets to choose between the two of them alone. The record keeps
+    // the fact that the parent was preferred in the first pass.
+    const namedByRound = roundVerdict.winnerVersionId;
+    const mustAdvance = this.config.evolution.requireVariant && candidates.length > 0;
+    const roundPreferredParent = !namedByRound || namedByRound === parent.id;
+    const finalistVersionId = roundPreferredParent && mustAdvance ? candidates[0].version.id : namedByRound;
     this.#emit(run.id, 'run.round', {
       round,
       phase: 'judge',
-      detail: `the round comparison chose ${finalistVersionId ?? 'no candidate'}`,
+      detail: roundPreferredParent && mustAdvance
+        ? `the round comparison preferred the parent, so ${candidates[0].version.id} goes to the finalist comparison`
+        : `the round comparison chose ${namedByRound ?? 'no candidate'}`,
     });
-    if (!finalistVersionId || finalistVersionId === parent.id) {
+    if (!finalistVersionId || (roundPreferredParent && !mustAdvance)) {
       this.#rejectOtherCandidates(candidates.map((entry) => entry.version), null, 'No candidate beat the parent.');
       return {
         promoted: false,
@@ -753,6 +782,24 @@ export class RunController {
       referenceVersionId: parent.id,
     });
     if (primary === null) {
+      // The finalist comparison failed. A level that must advance advances with
+      // the finalist it had already sent to that comparison.
+      if (this.config.evolution.requireVariant && finalist) {
+        this.#rejectOtherCandidates(candidates.filter((entry) => entry.version.id !== finalist.id).map((entry) => entry.version), null, 'The finalist comparison failed.');
+        this.#setVersionState(finalist.id, 'promoted');
+        this.store.updateRun(run.id, { unchangedRounds: 0 });
+        this.#emit(run.id, 'error', {
+          code: 'comparison_failed',
+          message: 'The finalist comparison failed, so the finalist advanced.',
+          detail: { round, mandate: true, finalistVersionId: finalist.id },
+        });
+        return {
+          promoted: true,
+          winnerVersionId: finalist.id,
+          candidateIds,
+          note: `Mandate: the finalist comparison failed, and a level must advance. ${finalist.title} takes the lineage.`,
+        };
+      }
       this.#rejectOtherCandidates(candidates.map((entry) => entry.version), null, 'The finalist comparison failed.');
       return { promoted: false, winnerVersionId: parent.id, candidateIds, note: 'The finalist comparison failed, so the parent stays.' };
     }
@@ -814,6 +861,9 @@ export class RunController {
               tolerance: this.config.archive.qualityTolerance,
             }
           : null,
+      // A level that must advance cannot leave the parent in place: if no
+      // comparison named a variant, one of them still takes the lineage.
+      mustPromote: this.config.evolution.requireVariant ? candidateIds : null,
     });
     const decision = reversedFailed
       ? { winnerVersionId: parent.id, promoted: false, usedTieBreak: false, branch: 'none', reason: 'The reversed comparison did not complete, so the parent stays.' }

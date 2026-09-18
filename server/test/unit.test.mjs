@@ -235,6 +235,90 @@ test('the novelty branch promotes a distinct candidate that the margin would ref
   assert.equal(withoutNovelty.branch, 'none');
 });
 
+test('a level that must advance promotes a variant even when the parent is preferred', () => {
+  const make = (preference, confidence, uncertainty) => ({ verdict: { preference, confidence, uncertainty }, labelToVersion: { A: 'ver_parent', B: 'ver_candidate' }, labels: { ver_parent: 'A', ver_candidate: 'B' } });
+  const candidates = ['ver_candidate', 'ver_other'];
+
+  // The judge prefers the parent in both orders: a variant still takes the lineage.
+  const mandated = decideWinner({
+    primary: make('A', 0.9, 'low'),
+    reversed: make('A', 0.85, 'low'),
+    parentVersionId: 'ver_parent',
+    promoteMargin: 0.15,
+    mustPromote: candidates,
+  });
+  assert.equal(mandated.promoted, true);
+  assert.equal(mandated.winnerVersionId, 'ver_candidate', 'the variant the judge named takes the lineage');
+  assert.equal(mandated.branch, 'mandate');
+  assert.match(mandated.reason, /the judge preferred the parent, but a variant must advance/);
+
+  // No comparison names anything: the earliest variant advances, and says why.
+  const abstained = decideWinner({
+    primary: { verdict: { preference: 'none', confidence: 0, uncertainty: 'high' }, labelToVersion: { A: 'ver_parent' }, labels: { ver_parent: 'A' } },
+    parentVersionId: 'ver_parent',
+    promoteMargin: 0.15,
+    mustPromote: candidates,
+  });
+  assert.equal(abstained.promoted, true);
+  assert.equal(abstained.winnerVersionId, 'ver_candidate');
+  assert.match(abstained.reason, /no comparison named a variant/);
+
+  // A named variant without the margin is still mandated.
+  const underMargin = decideWinner({
+    primary: make('B', 0.05, 'high'),
+    reversed: make('B', 0.04, 'high'),
+    parentVersionId: 'ver_parent',
+    promoteMargin: 0.15,
+    mustPromote: candidates,
+  });
+  assert.equal(underMargin.promoted, true);
+  assert.equal(underMargin.winnerVersionId, 'ver_candidate');
+  assert.equal(underMargin.branch, 'mandate');
+
+  // A plain quality win keeps its own branch, so the record shows the difference.
+  const quality = decideWinner({
+    primary: make('B', 0.8, 'low'),
+    reversed: make('B', 0.75, 'low'),
+    parentVersionId: 'ver_parent',
+    promoteMargin: 0.15,
+    mustPromote: candidates,
+  });
+  assert.equal(quality.branch, 'quality');
+
+  // With no variant to advance, the parent stays and nothing is invented.
+  const nothing = decideWinner({ primary: make('A', 0.9, 'low'), reversed: make('A', 0.9, 'low'), parentVersionId: 'ver_parent', promoteMargin: 0.15, mustPromote: [] });
+  assert.equal(nothing.promoted, false);
+  assert.equal(nothing.winnerVersionId, 'ver_parent');
+
+  // Without the mandate the old rule is untouched.
+  const classic = decideWinner({ primary: make('A', 0.9, 'low'), reversed: make('A', 0.9, 'low'), parentVersionId: 'ver_parent', promoteMargin: 0.15 });
+  assert.equal(classic.promoted, false);
+});
+
+test('a frame identifier with extra words is normalised, not thrown away', () => {
+  // A live run lost a level to "dense-early@600 seed 1337". That names a frame
+  // that WAS sent, so it is normalised.
+  const entries = [{ versionId: 'ver_a', captures: [{ stage: 'dense-early', step: 600, seed: 1337, fileName: 'a.png' }] }];
+  const labels = { ver_a: 'A' };
+  const labelToVersion = { A: 'ver_a' };
+  const base = { label: 'A', detail: 'the trails are dense and even here', uncertainty: 'low', confidence: 0.7, weaknesses: [], distinctiveness: 'low', notes: '', preference: 'A' };
+
+  const tolerated = validateVerdict({ ...base, observations: [{ ...base, frame: 'dense-early@600 seed 1337' }] }, { labelToVersion, entries, labels });
+  assert.equal(tolerated.observations[0].frame, 'dense-early@600', 'the extra words are dropped');
+
+  // A frame that was never sent is still refused.
+  assert.throws(
+    () => validateVerdict({ ...base, observations: [{ ...base, frame: 'late@900' }] }, { labelToVersion, entries, labels }),
+    (error) => error.code === 'judge_response_invalid' && /not sent/.test(error.message),
+  );
+
+  // A frame with no stage and step at all is still refused.
+  assert.throws(
+    () => validateVerdict({ ...base, observations: [{ ...base, frame: 'the third image' }] }, { labelToVersion, entries, labels }),
+    (error) => error.code === 'judge_response_invalid' && /malformed/.test(error.message),
+  );
+});
+
 test('a reversed comparison that never answered keeps the parent instead of throwing', () => {
   // A live run failed with "Cannot read properties of undefined (reading
   // 'preference')" when the reversed comparison did not complete. A missing

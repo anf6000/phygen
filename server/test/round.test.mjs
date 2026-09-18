@@ -84,6 +84,9 @@ async function setup
     artifactsDir: join(dir, 'snapshots'),
     capture: { backend: 'local', captureConcurrency: 2 },
     provider: { driver: 'fake', allowSpend: false },
+    // The classic contract for these tests: the parent may stay. The mandate is
+    // tested on its own below, and it is the default in the shipped settings.
+    evolution: { requireVariant: false, ...(configOverrides.evolution ?? {}) },
     ...configOverrides,
   });
 
@@ -403,6 +406,71 @@ test('an autonomous run with no direction writes its own instruction', async (t)
   const candidates = store.listVersions(run.artworkId).filter((version) => version.round === 1);
   assert.ok(candidates.length > 0, 'a candidate was authored from the written instruction');
   assert.match(round.note, /Chosen by seed/, 'the level one parent is the seed, and the note says so');
+});
+
+test('a level that must advance promotes a variant every time', async (t) => {
+  // The shipped default: the judge picks a variant at every level, so the
+  // lineage moves even when the parent is judged the better artwork.
+  const { store, controller, run, rootVersion, artwork } = await setup(
+    t,
+    { evolutions: 2, variants: 3, evolution: { requireVariant: true } },
+    { protocol: { ...PROTOCOL, pinnedParent: true } },
+  );
+
+  await controller.start(run.id);
+
+  const finished = store.getRun(run.id);
+  assert.equal(finished.state, 'completed');
+  const rounds = store.listRounds(run.id);
+  assert.equal(rounds.length, 2);
+  for (const round of rounds) {
+    assert.equal(round.promoted, true, `level ${round.round} must promote a variant`);
+    assert.notEqual(round.winnerVersionId, round.parentVersionId, `level ${round.round} must not keep the parent`);
+    const winner = store.getVersion(round.winnerVersionId);
+    assert.equal(winner.status, 'promoted');
+    assert.equal(winner.parentId, round.parentVersionId, 'the winner hangs from the level parent');
+  }
+  // Level two runs from level one's winner, so the lineage moved.
+  assert.equal(rounds[1].parentVersionId, rounds[0].winnerVersionId);
+  const promoted = store.listVersions(artwork.id).filter((version) => version.status === 'promoted');
+  assert.ok(promoted.length >= 3, 'the root and both winners are promoted');
+  // Every promotion says why, and a mandated one says it was mandated.
+  for (const round of rounds) assert.ok(round.note.length > 0, 'a promotion without a reason is a fault');
+  void rootVersion;
+});
+
+test('a level advances even when the judge answer cannot be used', async (t) => {
+  // A malformed judge answer is refused, so no comparison names a variant. The
+  // level must still advance: the earliest variant takes the lineage.
+  const { store, controller, run, artwork } = await setup(
+    t,
+    { evolutions: 1, variants: 3, evolution: { requireVariant: true } },
+    { protocol: { ...PROTOCOL, pinnedParent: true } },
+  );
+  // Keep the provider's prototype: a spread would drop every method that lives
+  // on the class, including author, and the candidates would fail to be written.
+  const base = controller.provider;
+  controller.provider = Object.create(base, {
+    judge: {
+      value: async () => ({ text: 'I cannot decide, sorry.', usage: { inputTokens: 10, outputTokens: 5, costUsd: 0, costKnown: true, raw: {} }, model: 'stub', stub: false }),
+    },
+  });
+
+  await controller.start(run.id);
+
+  const round = store.listRounds(run.id).find((entry) => entry.round === 1);
+  assert.equal(
+    round.promoted,
+    true,
+    `the level still advances: ${JSON.stringify({ note: round.note, winner: round.winnerVersionId, parent: round.parentVersionId, run: store.getRun(run.id).state, errors: store.listEvents(run.id).filter((event) => event.type === 'error').map((event) => event.payload?.code) })}`,
+  );
+  assert.notEqual(round.winnerVersionId, round.parentVersionId);
+  assert.match(round.note, /Mandate: the (round|finalist) comparison failed/);
+  const winner = store.getVersion(round.winnerVersionId);
+  assert.equal(winner.status, 'promoted');
+  assert.equal(winner.parentId, round.parentVersionId);
+  const others = store.listVersions(artwork.id).filter((version) => round.candidateIds.includes(version.id) && version.id !== winner.id);
+  assert.ok(others.every((version) => ['rejected', 'failed'].includes(version.status)), 'the rest are closed out');
 });
 
 test('a stop request ends the run without new rounds', async (t) => {
