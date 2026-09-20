@@ -1,7 +1,7 @@
 // Thin API client and the event stream hook.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-import type { AgentRow, ApiError, CostEstimate, Health, Measure, MeasureList, ModelList, ProgressEvent, RecordingStatus, RelationshipsView, Run, RunDetail, Tree, VersionDetail } from './types';
+import type { AgentRow, ApiError, Health, ModelList, ProgressEvent, Run, RunDetail, Tree } from './types';
 
 export class RequestError extends Error {
   readonly code: string;
@@ -38,36 +38,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   health: () => request<Health>('/api/health'),
-  artworks: () => request<{ artworks: { id: string; title: string; packageId: string; rootVersionId: string | null; versionCount: number }[] }>('/api/artworks'),
+  artworks: () =>
+    request<{ artworks: { id: string; title: string; packageId: string; rootVersionId: string | null; versionCount: number }[] }>('/api/artworks'),
   importArtwork: (packagePath: string) =>
     request<{ artwork: { id: string } }>('/api/artworks/import', { method: 'POST', body: JSON.stringify({ packagePath }) }),
   tree: (artworkId: string) => request<Tree>(`/api/artworks/${artworkId}/tree`),
-  version: (versionId: string) => request<VersionDetail>(`/api/versions/${versionId}`),
   agentFeed: (versionId: string) => request<{ rows: AgentRow[] }>(`/api/versions/${versionId}/agent`),
-  estimate: (evolutions: number, model?: string, authorModel?: string, variants?: number) =>
-    request<CostEstimate>(
-      `/api/cost-estimate?evolutions=${evolutions}${variants ? `&variants=${variants}` : ''}${model ? `&model=${encodeURIComponent(model)}` : ''}${authorModel ? `&authorModel=${encodeURIComponent(authorModel)}` : ''}`,
-    ),
   models: () => request<ModelList>('/api/models'),
-  recording: () => request<RecordingStatus>('/api/recording'),
-  setRecording: (runId: string, enabled: boolean) =>
-    request<{ recording: RecordingStatus }>(`/api/runs/${runId}/recording`, { method: 'POST', body: JSON.stringify({ enabled }) }),
   startRun: (body: Record<string, unknown>) => request<{ run: Run }>('/api/runs', { method: 'POST', body: JSON.stringify(body) }),
   run: (runId: string) => request<RunDetail>(`/api/runs/${runId}`),
   runSummary: (runId: string) => request<{ run: Run; active: boolean }>(`/api/runs/${runId}/summary`),
   runs: () => request<{ runs: Run[] }>('/api/runs?limit=20'),
-  control: (runId: string, action: 'pause' | 'resume' | 'stop') => request<{ run: Run }>(`/api/runs/${runId}/${action}`, { method: 'POST', body: '{}' }),
-  measures: () => request<MeasureList>('/api/measures'),
-  relationships: (artworkId: string, measure: string, limit?: number) =>
-    request<RelationshipsView>(
-      `/api/artworks/${artworkId}/relationships?measure=${encodeURIComponent(measure)}${limit ? `&limit=${limit}` : ''}`,
-    ),
-  rebuildRelationships: (artworkId: string, measure: string, limit?: number) =>
-    request<{ run: RelationshipsView['run']; measure: Measure | null }>(`/api/artworks/${artworkId}/relationships`, {
-      method: 'POST',
-      body: JSON.stringify({ measure, limit }),
-    }),
-  cancelAnalysis: (runId: string) => request<{ run: RelationshipsView['run'] }>(`/api/analysis/${runId}/cancel`, { method: 'POST', body: '{}' }),
 };
 
 export interface StreamState {
@@ -78,7 +59,7 @@ export interface StreamState {
 
 /**
  * Subscribe to one run. The stream resumes from the last sequence number it
- * saw, so a reconnect never loses or repeats a node.
+ * saw, so a reconnect never loses or repeats a row.
  */
 export function useRunEvents(runId: string | null): StreamState {
   const [events, setEvents] = useState<ProgressEvent[]>([]);
@@ -103,7 +84,7 @@ export function useRunEvents(runId: string | null): StreamState {
         const parsed = JSON.parse(message.data) as ProgressEvent;
         if (typeof parsed.seq !== 'number' || parsed.seq <= lastSeq.current) return;
         lastSeq.current = parsed.seq;
-        setEvents((current) => [...current, parsed].slice(-500));
+        setEvents((current) => [...current, parsed].slice(-600));
       };
     };
     connect();
@@ -116,40 +97,4 @@ export function useRunEvents(runId: string | null): StreamState {
   }, [runId]);
 
   return { events, lastSeq: lastSeq.current, connected };
-}
-
-/** Poll a value while a condition holds. */
-export function usePolling<T>(load: () => Promise<T>, active: boolean, intervalMs: number, deps: unknown[]): T | null {
-  const [value, setValue] = useState<T | null>(null);
-  const loadRef = useRef(load);
-  loadRef.current = load;
-
-  const reload = useCallback(() => {
-    let cancelled = false;
-    loadRef
-      .current()
-      .then((next) => {
-        if (!cancelled) setValue(next);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!active) return undefined;
-    let stop = reload();
-    const timer = window.setInterval(() => {
-      stop();
-      stop = reload();
-    }, intervalMs);
-    return () => {
-      window.clearInterval(timer);
-      stop();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, intervalMs, reload, ...deps]);
-
-  return value;
 }

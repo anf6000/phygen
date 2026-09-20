@@ -93,32 +93,28 @@ button.primary:focus-visible {
   color: var(--muted);
 }
 
-.row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
+/* ── The app shell ───────────────────────────────────────────────────────── */
 .app {
   display: flex;
   flex-direction: column;
   height: 100%;
 }
 
-/* ── Run bar ─────────────────────────────────────────────────────────────── */
+/* ── Header ──────────────────────────────────────────────────────────────── */
 .bar {
   border-bottom: 1px solid var(--line);
   padding: 10px 12px;
   background: var(--panel);
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  flex-wrap: wrap;
 }
 
 .bar-title {
   display: flex;
   gap: 10px;
   align-items: baseline;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
 }
 
 .bar-form {
@@ -126,6 +122,7 @@ button.primary:focus-visible {
   gap: 8px;
   align-items: flex-end;
   flex-wrap: wrap;
+  margin-left: auto;
 }
 
 .field {
@@ -138,22 +135,12 @@ button.primary:focus-visible {
   color: var(--muted);
 }
 
-.field.wide {
-  flex: 1 1 320px;
+.field.narrow input {
+  width: 80px;
 }
 
 .bar-form select {
-  max-width: 360px;
-}
-
-.bar-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.estimate {
-  margin: 8px 0 0;
-  color: var(--muted);
+  max-width: 420px;
 }
 
 .notice {
@@ -161,6 +148,17 @@ button.primary:focus-visible {
   padding: 6px 8px;
   border: 1px solid var(--line);
   color: var(--muted);
+}
+
+.notice-alert {
+  border-left: 3px solid #a33;
+  background: #fdf2f2;
+  color: #611;
+  font-size: 12px;
+}
+
+.notice-alert code {
+  font-weight: 600;
 }
 
 .alert {
@@ -179,101 +177,104 @@ button.primary:focus-visible {
 
 .alert button {
   margin-left: auto;
-  border: 1px solid var(--line);
 }
 
-/* ── Layout ──────────────────────────────────────────────────────────────── */
+/* ── The chain and the shell ─────────────────────────────────────────────── */
 .main {
   flex: 1;
   display: flex;
+  flex-direction: column;
   min-height: 0;
 }
 
-.tree {
+.chain-area {
   flex: 1;
-  min-width: 0;
-  border-right: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-}
-
-/* The rings are an overview. These controls keep Fit All and Focus reachable
-   however far out the tree reaches, and they say what the rings mean. */
-.tree-wrap {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
   min-height: 0;
+  overflow: auto;
+  background: var(--bg);
 }
 
-.tree-toolbar {
+.timeline {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 6px 8px;
+  gap: 24px;
+  padding: 24px 12px 48px;
+}
+
+.timeline-empty {
+  color: var(--muted);
+  margin: 24px 0;
+}
+
+/* ── One card ────────────────────────────────────────────────────────────── */
+.card {
+  width: 1024px;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+}
+
+.card:hover {
+  border-color: var(--accent);
+}
+
+.card.is-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.card.is-playing {
+  border-color: var(--accent);
+}
+
+.card.is-failed {
+  border-color: #a33;
+}
+
+.card-head {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--line);
-  background: var(--panel);
+  flex-wrap: wrap;
 }
 
-.tree-toolbar button {
-  font: inherit;
-  padding: 2px 8px;
+.card-step {
+  font-weight: 700;
 }
 
-.tree-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--muted, #666);
+.card-title {
+  color: var(--ink);
 }
 
-.tree-note {
-  font-size: 11px;
-  color: var(--muted, #666);
+.card-status {
+  margin-left: auto;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  padding: 0 6px;
 }
 
-/* The run state, stated where the settings are: a paused run used to leave the
-   whole header disabled with no explanation. */
-.run-state {
-  margin: 4px 0 0;
-  padding: 4px 6px;
-  font-size: 12px;
-  border-left: 3px solid var(--accent);
-  background: var(--panel);
+.card-status.status-promoted {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
-/* A stub provider produces work that LOOKS finished and is not. It must not be
-   possible to miss. */
-.notice-alert {
-  border-left-color: #a33;
-  background: #fdf2f2;
-  color: #611;
-  font-size: 12px;
-}
-
-.notice-alert code {
-  font-weight: 600;
-}
-
-/* A card the layout could not separate is a fault, and it says so. */
-.tree-warning {
+.card-status.status-failed {
   color: #a33;
-  font-weight: 600;
+  border-color: #a33;
 }
 
-.tree-wrap .react-flow {
-  flex: 1;
-  min-height: 0;
+.card-live-chip {
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 0 6px;
 }
 
-.vnode-diagnostic {
-  border-style: dashed;
-  opacity: 0.9;
-}
-
-/* A card from a test-double run must not look like real work. */
 .stub-chip {
   padding: 0 4px;
   border: 1px solid #a33;
@@ -284,313 +285,108 @@ button.primary:focus-visible {
   text-transform: uppercase;
 }
 
-/* ── Relationship layer ──────────────────────────────────────────────────── */
-/* A measured relationship is drawn unlike an ancestry line: thinner, purple,
-   and solid. Both layers are solid; width and colour tell them apart. */
-.edge-measured {
-  stroke: #7a5cc6;
-}
-
-.tabs {
-  display: flex;
-  gap: 4px;
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 8px;
-}
-
-.tabs button {
-  font: inherit;
-  padding: 4px 10px;
-  border: 1px solid transparent;
-  border-bottom: none;
-  background: none;
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.tabs button.is-current {
-  border-color: var(--line);
-  background: var(--bg);
-  font-weight: 600;
-}
-
-.relationships section {
-  padding: 8px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.relationships h3 {
-  margin: 0 0 6px;
-  font-size: 13px;
-}
-
-.rel-field {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 12px;
-}
-
-.rel-field select,
-.rel-field input {
-  font: inherit;
-}
-
-.rel-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-}
-
-.rel-direction {
-  font-weight: 600;
-  font-size: 12px;
-}
-
-/* A model measure costs money per pair, so the ceiling is stated before the run. */
-.rel-estimate {
-  font-size: 12px;
-  border-left: 3px solid var(--accent);
-  padding-left: 6px;
-}
-
-.rel-facts {
-  display: grid;
-  grid-template-columns: 110px 1fr;
-  gap: 2px 8px;
-  margin: 8px 0;
-  font-size: 12px;
-}
-
-.rel-facts dt {
-  color: var(--muted, #666);
-}
-
-.rel-facts dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.rel-legend {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-}
-
-.rel-key {
-  display: inline-block;
-  width: 22px;
-  height: 0;
-  border-top: 2px solid var(--ink);
-}
-
-.rel-key-measure {
-  border-top-color: #7a5cc6;
-  border-top-width: 1px;
-}
-
-.rel-table {
+/* The artwork is square, 1024 x 1024. */
+.card-media {
+  position: relative;
   width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-}
-
-.rel-table th,
-.rel-table td {
-  text-align: left;
-  padding: 2px 4px;
+  aspect-ratio: 1 / 1;
+  background: var(--ink);
   border-bottom: 1px solid var(--line);
-  vertical-align: middle;
-}
-
-.rel-table tr.is-selected {
-  background: var(--bg);
-}
-
-.rel-table button {
-  font: inherit;
-  background: none;
-  border: none;
-  color: var(--ink);
-  cursor: pointer;
-  text-align: left;
-}
-
-.rel-pair-button {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.rel-pair-button img,
-.rel-thumb,
-.rel-noimage {
-  width: 28px;
-  height: 28px;
-  object-fit: cover;
-  background: var(--line);
-  display: inline-block;
-}
-
-.rel-thumb-large,
-.rel-compare .rel-noimage {
-  width: 100%;
-  height: 110px;
-  object-fit: cover;
-  background: var(--line);
-  display: block;
-}
-
-/* A missing frame is a labelled placeholder, never a broken image. */
-.thumb-missing {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: repeating-linear-gradient(45deg, var(--line) 0 4px, transparent 4px 8px);
-  color: var(--muted, #666);
-  font-size: 10px;
-  text-align: center;
   overflow: hidden;
 }
 
-.rel-noimage.is-large {
+.card-media img,
+.card-media iframe {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  height: 90px;
-}
-
-.rel-compare {
-  display: flex;
-  gap: 8px;
-}
-
-.rel-compare figure {
-  flex: 1;
-  margin: 0;
-}
-
-.rel-compare img,
-.rel-compare .rel-noimage {
-  width: 100%;
-  height: 110px;
-  object-fit: cover;
-  background: var(--line);
-}
-
-.rel-compare figcaption {
-  font-size: 11px;
-}
-
-
-.panel {
-  width: 400px;
-  overflow: auto;
-  padding: 12px;
-  background: var(--panel);
-}
-
-/* ── Version nodes ───────────────────────────────────────────────────────── */
-.vnode {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  animation: node-in 140ms linear both;
-}
-
-.vnode:hover {
-  border-color: var(--accent);
-}
-
-.vnode.is-selected {
-  border-color: var(--accent);
-  outline: 1px solid var(--accent);
-}
-
-.vnode.on-lineage {
-  border-color: var(--accent);
-}
-
-.vnode-media img {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-  background: var(--ink);
-  border: 1px solid var(--line);
+  height: 100%;
+  border: 0;
   display: block;
+  object-fit: cover;
 }
 
-.vnode-placeholder {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  border: 1px dashed var(--line);
-  background: var(--quiet);
+.card-placeholder {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
+  background: var(--quiet);
   color: var(--muted);
+  text-align: center;
+  padding: 24px;
 }
 
-.vnode-placeholder.is-failed {
-  border-style: solid;
+.card-placeholder.is-failed {
+  border: 2px solid #a33;
+  color: #611;
 }
 
-.vnode-placeholder.is-failed .vnode-placeholder-text {
-  color: var(--accent);
-}
-
-.vnode-placeholder-mark {
+.card-placeholder-mark {
   width: 12px;
   height: 12px;
-  border: 1px solid var(--line);
-  background: var(--panel);
-}
-
-.vnode-placeholder.is-pending .vnode-placeholder-mark {
-  border-color: var(--accent);
+  border: 1px solid var(--accent);
   animation: blink 900ms steps(2, end) infinite;
 }
 
-.vnode-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+/* ── The loading art: a speckle field with one travelling bar ───────────── */
+.loading-art {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  display: block;
 }
 
-.vnode-title {
+/* The field is drawn on a canvas: a thousand marks that each breathe on their
+   own are far cheaper to draw than to animate as SVG children. */
+.la-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* The stage of a working card sits in the corner of the art. */
+.card-stage-label {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
   color: var(--ink);
+  padding: 2px 8px;
+  font-size: 12px;
+  z-index: 1;
 }
 
-.vnode-meta {
-  color: var(--muted);
-}
-
-.vnode-actions {
+.card-quiet {
   display: flex;
-  gap: 6px;
-  align-items: center;
+  gap: 12px;
+  align-items: baseline;
+  padding: 6px 10px;
+  color: var(--muted);
+  font-size: 12px;
   flex-wrap: wrap;
 }
 
-.lineage-chip {
-  border: 1px solid var(--accent);
-  color: var(--accent);
-  padding: 1px 6px;
+.card-changes {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 70%;
 }
 
-@keyframes node-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+.card-numbers {
+  margin-left: auto;
+}
+
+.card-open {
+  font-size: 12px;
+  padding: 1px 8px;
 }
 
 @keyframes blink {
@@ -599,208 +395,101 @@ button.primary:focus-visible {
   }
 }
 
-/* ── React Flow ──────────────────────────────────────────────────────────── */
-.react-flow {
-  background: var(--bg);
-}
-
-/* A drawn line is never a click target: it crosses many cards, and a line that
-   swallows a click makes the canvas feel dead. The cards take every click. */
-.react-flow__edge,
-.react-flow__edge *,
-.react-flow__connectionline {
-  pointer-events: none !important;
-}
-
-
-.react-flow__node {
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--ink);
-}
-
-.react-flow__handle {
-  width: 5px;
-  height: 5px;
-  background: var(--line);
-  border: 1px solid var(--line);
-  min-width: 0;
-  min-height: 0;
-}
-
-.react-flow__controls {
-  border: 1px solid var(--line);
-  background: var(--panel);
-}
-
-.react-flow__controls-button {
-  background: var(--panel);
-  border: none;
-  border-bottom: 1px solid var(--line);
-  color: var(--ink);
-  fill: var(--ink);
-}
-
-.react-flow__controls-button:hover {
-  background: var(--panel);
-  color: var(--accent);
-  fill: var(--accent);
-}
-
-.react-flow__attribution {
-  display: none;
-}
-
-.react-flow__edge-path {
-  stroke-width: 1;
-}
-
-.react-flow__edge.selected .react-flow__edge-path {
-  stroke: var(--accent);
-}
-
-/* ── Detail panel ────────────────────────────────────────────────────────── */
-.detail h2 {
-  margin: 0 0 6px;
-  color: var(--ink);
-}
-
-.detail h3 {
-  margin: 16px 0 6px;
-  color: var(--muted);
-}
-
-.detail p {
-  margin: 4px 0;
-}
-
-.hash {
-  color: var(--muted);
-}
-
-.explanation {
-  white-space: pre-wrap;
-}
-
-.changes,
-.usage,
-.observations {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.changes li,
-.usage li {
-  padding: 3px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.changes li:first-child,
-.usage li:first-child {
+/* ── The drag handle ─────────────────────────────────────────────────────── */
+.split-handle {
+  height: 10px;
   border-top: 1px solid var(--line);
-}
-
-.diff {
-  float: right;
-  color: var(--muted);
-}
-
-.config {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 12px;
-  margin: 0;
-}
-
-.config div {
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  cursor: row-resize;
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  border-bottom: 1px solid var(--line);
+  align-items: center;
+  justify-content: center;
 }
 
-.config dt {
-  color: var(--muted);
+.split-handle:hover .split-grip {
+  background: var(--accent);
 }
 
-.config dd {
-  margin: 0;
+.split-grip {
+  width: 60px;
+  height: 3px;
+  background: var(--line);
 }
 
-.shots {
-  list-style: none;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  padding: 0;
-  margin: 0;
+/* ── The read-only agent shell ───────────────────────────────────────────── */
+.shell-wrap {
+  min-height: 140px;
+  overflow: hidden;
+  display: flex;
 }
 
-.shots img {
-  width: 100%;
-  aspect-ratio: 1;
-  object-fit: cover;
-  background: var(--ink);
-  border: 1px solid var(--line);
-  display: block;
-}
-
-.shots span {
-  color: var(--muted);
-}
-
-.comparison {
-  border-top: 1px solid var(--line);
-  padding-top: 6px;
-  margin-top: 6px;
-}
-
-/* ── Narrow layout ───────────────────────────────────────────────────────── */
-.genlist {
-  list-style: none;
-  padding: 12px;
-  margin: 0;
+.shell {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  overflow: auto;
-  height: 100%;
+  min-height: 0;
+  background: var(--panel);
 }
 
-.genlist button {
+.shell-head {
   display: flex;
   gap: 10px;
-  width: 100%;
-  text-align: left;
-  align-items: center;
-  padding: 6px;
+  align-items: baseline;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--line);
 }
 
-.genlist button.is-selected {
-  border-color: var(--accent);
-  outline: 1px solid var(--accent);
+.shell-label {
+  font-weight: 700;
 }
 
-.genlist img {
-  width: 72px;
-  height: 54px;
-  object-fit: cover;
-  background: var(--ink);
-  border: 1px solid var(--line);
+.shell-note {
+  margin-left: auto;
+  font-size: 12px;
 }
 
-.genlist strong {
-  display: block;
+.shell-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px 16px;
+}
+
+.shell-row {
+  margin: 0 0 4px;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.shell-tag {
+  flex: 0 0 84px;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.shell-reason .shell-text {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.shell-text {
   color: var(--ink);
 }
 
-.genlist .muted {
-  color: var(--muted);
+.shell-tool-line {
+  color: var(--accent);
 }
 
-/* ── Progress strip ──────────────────────────────────────────────────────── */
+.shell-tool .shell-tag {
+  color: var(--accent);
+}
+
+/* ── The status line ─────────────────────────────────────────────────────── */
 .strip {
   display: flex;
   gap: 8px;
@@ -827,8 +516,7 @@ button.primary:focus-visible {
   color: var(--accent);
 }
 
-/* ── Viewers ─────────────────────────────────────────────────────────────── */
-.viewer,
+/* ── The live modal ──────────────────────────────────────────────────────── */
 .live-overlay {
   position: fixed;
   inset: 0;
@@ -842,7 +530,14 @@ button.primary:focus-visible {
   border: 1px solid var(--line);
 }
 
-.viewer header,
+.live-frame {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
 .live-frame header {
   display: flex;
   justify-content: space-between;
@@ -852,442 +547,28 @@ button.primary:focus-visible {
   padding-bottom: 6px;
 }
 
-.viewer.is-full {
-  padding: 0;
-}
-
-.frames {
-  list-style: none;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 8px;
-  padding: 0;
-  margin: 12px 0;
-}
-
-.frames img {
-  width: 100%;
-  background: var(--ink);
-  border: 1px solid var(--line);
-  display: block;
-}
-
-.frames span {
-  color: var(--muted);
-}
-
-.live-frame {
+.live-square {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
   min-height: 0;
-}
-
-.live-frame iframe {
-  flex: 1;
-  width: 100%;
-  border: 1px solid var(--line);
-  background: var(--ink);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .vnode {
-    animation: none;
-  }
-  .vnode-placeholder.is-pending .vnode-placeholder-mark {
-    animation: none;
-  }
-}
-
-/* ── Progress leader and branch target ───────────────────────────────────── */
-.branch-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin: 8px 0 0;
-}
-
-.branch-chip {
-  border: 1px solid var(--accent);
-  color: var(--accent);
-  padding: 1px 6px;
-}
-
-.follow-toggle {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  margin-left: auto;
-}
-
-.vnode-steps {
-  display: flex;
-  gap: 2px;
-}
-
-.vnode-step {
-  flex: 1;
-  height: 4px;
-  border: 1px solid var(--line);
-  background: var(--panel);
-}
-
-.vnode-step.is-passed {
-  background: var(--ink);
-}
-
-.vnode-step.is-current {
-  background: var(--accent);
-  border-color: var(--accent);
-  animation: blink 900ms steps(2, end) infinite;
-}
-
-.vnode-step.is-done {
-  background: var(--ink);
-}
-
-.vnode.is-active {
-  border-color: var(--accent);
-  outline: 1px solid var(--accent);
-}
-
-.active-chip {
-  border: 1px solid var(--accent);
-  color: var(--accent);
-  padding: 1px 6px;
-  animation: blink 900ms steps(2, end) infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .vnode-step.is-current,
-  .active-chip {
-    animation: none;
-  }
-}
-.parent-chip {
-  border: 1px solid var(--ink);
-  color: var(--ink);
-  padding: 1px 6px;
-}
-
-/* ── The agent at work, the live frame, and the decision ─────────────────── */
-.vnode-media {
-  position: relative;
-}
-
-.live-chip {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--accent);
-  padding: 0 4px;
-  animation: blink 700ms steps(2, end) infinite;
-}
-
-.decision {
-  position: absolute;
-  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 3px solid var(--ink);
-  background: var(--panel);
-  animation: slam 120ms steps(3, end) 1 both;
-  letter-spacing: 0.06em;
 }
 
-.decision-winner {
-  border-color: var(--accent);
-  color: var(--accent);
-  font-size: 44px;
-}
-
-.decision-yeeted {
-  font-size: 22px;
-}
-
-@keyframes slam {
-  from {
-    transform: scale(1.6);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-.agent-totals {
-  display: flex;
-  gap: 6px;
-  align-items: baseline;
-  margin: 0 0 6px;
-}
-
-.diff-add {
-  color: var(--ink);
-}
-
-.diff-del {
-  color: var(--muted);
-}
-
-.agent-bars {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 48px;
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 6px;
-}
-
-.agent-bar {
-  flex: 1;
-  min-width: 3px;
-  background: var(--ink);
-  animation: bar-in 140ms steps(2, end) 1 both;
-}
-
-.agent-bar.is-write {
-  background: var(--accent);
-}
-
-@keyframes bar-in {
-  from {
-    transform: scaleY(0);
-  }
-  to {
-    transform: scaleY(1);
-  }
-}
-
-.agent-feed {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  border-top: 1px solid var(--line);
-}
-
-.agent-feed li {
-  display: flex;
-  gap: 6px;
-  align-items: baseline;
-  border-bottom: 1px solid var(--line);
-  padding: 2px 0;
-  animation: row-in 120ms steps(2, end) 1 both;
-}
-
-.agent-feed code {
-  color: var(--accent);
-}
-
-.agent-path {
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agent-delta {
-  margin-left: auto;
-}
-
-.agent-text {
-  margin: 6px 0 0;
-  color: var(--muted);
-  max-height: 4.4em;
-  overflow: hidden;
-}
-
-@keyframes row-in {
-  from {
-    transform: translateX(-6px);
-    opacity: 0;
-  }
-  to {
-    transform: none;
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .decision,
-  .agent-bar,
-  .agent-feed li,
-  .live-chip {
-    animation: none;
-  }
-}
-/* ── The code column and the read head ───────────────────────────────────── */
-.code-stream {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
+.live-square iframe {
+  width: min(100%, 100vh - 80px);
+  aspect-ratio: 1 / 1;
+  height: auto;
   border: 1px solid var(--line);
-  background: var(--panel);
-}
-
-.code-stream canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-.code-line {
-  position: absolute;
-  left: 6%;
   background: var(--ink);
-  transform-origin: left center;
-  animation: line-in 90ms steps(2, end) 1 both;
-}
-
-.code-line.is-new {
-  background: #00a000;
-}
-
-.code-line.is-eaten {
-  background: #d00000;
-  animation: line-out 280ms linear 1 forwards;
-}
-
-@keyframes line-in {
-  from {
-    transform: scaleX(0.2);
-    opacity: 0;
-  }
-  to {
-    transform: none;
-    opacity: 1;
-  }
-}
-
-@keyframes line-out {
-  from {
-    transform: none;
-    opacity: 1;
-  }
-  to {
-    transform: scaleX(0.05);
-    opacity: 0;
-  }
-}
-
-.code-head {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--accent);
-  opacity: 0.9;
-}
-
-.code-cursor {
-  position: absolute;
-  left: 0;
-  top: -3px;
-  width: 6px;
-  height: 8px;
-  background: var(--accent);
-}
-
-.code-stream.is-active .code-head {
-  animation: head-glow 700ms steps(2, end) infinite;
-}
-
-@keyframes head-glow {
-  50% {
-    opacity: 0.35;
-  }
-}
-
-/* ── A border that travels around the node being worked on ───────────────── */
-/* The size must be stated. An SVG is a replaced element, so `width: auto` uses
-   its 300x150 default and ignores the right and bottom insets: the border was
-   then drawn at the wrong size and landed over the card instead of around it. */
-.node-runner {
-  position: absolute;
-  left: -6px;
-  top: -6px;
-  width: calc(100% + 12px);
-  height: calc(100% + 12px);
-  pointer-events: none;
-  z-index: 2;
-  overflow: visible;
-}
-
-.node-runner rect {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 2px;
-  stroke-dasharray: 0.22 0.78;
-  animation: border-run 1.5s linear infinite;
-}
-
-@keyframes border-run {
-  from {
-    stroke-dashoffset: 1;
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-/* A capture being judged gets a line that sweeps over it. */
-.judge-scan {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 2px;
-  background: var(--accent);
-  animation: scan 1.1s linear infinite;
-}
-
-@keyframes scan {
-  from {
-    top: 0;
-  }
-  to {
-    top: 100%;
-  }
-}
-
-/* ── Edges that draw themselves in, and a lineage that breathes ──────────── */
-.edge-lineage,
-.edge-dashed {
-  animation: draw 620ms linear 1 forwards;
-}
-
-@keyframes draw {
-  from {
-    stroke-dashoffset: 1;
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-.edge-lineage {
-  animation: draw 620ms linear 1 forwards, breathe 2.4s linear 620ms infinite;
-}
-
-@keyframes breathe {
-  50% {
-    stroke-width: 4px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* The runner keeps moving: without it nothing shows what is being worked on.
-     The flashing effects stay off. */
-  .judge-scan,
-  .edge-lineage,
-  .edge-dashed {
+  .card-placeholder-mark {
     animation: none;
-    stroke-dashoffset: 0;
   }
+
+  /* A person who prefers less motion still needs to see that a step works. The
+     pixel field drifts at a quarter of its speed; the component reads this
+     preference itself. */
 }
