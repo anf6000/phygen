@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 
 import { RequestError, api, useRunEvents } from './api';
-import { autoplayCardId, playingVersionId, stepLabels } from './chain';
+import { READING_LINE_FRACTION, autoplayCardId, playingVersionId, stepLabels } from './chain';
 import type { AgentRow, Health, ModelList, RunDetail, Tree, TreeNode } from './types';
 import { Timeline } from './components/Timeline';
 import { Shell } from './components/Shell';
@@ -166,7 +166,11 @@ export default function App() {
         const id = element.dataset.version ?? '';
         return { id, top: element.getBoundingClientRect().top - areaTop, playable: playable.has(id) };
       });
-      const next = autoplayCardId(cards.filter((card) => card.id.length > 0), 8);
+      // The line sits a fifth of the artwork's step below the top of the view:
+      // the new artwork starts while the one above is still a fifth visible.
+      const pitch = cards.length > 1 ? Math.abs(cards[1].top - cards[0].top) : 0;
+      const line = pitch > 0 ? pitch * READING_LINE_FRACTION : area.clientHeight * READING_LINE_FRACTION;
+      const next = autoplayCardId(cards.filter((card) => card.id.length > 0), line);
       if (next) setLiveId((current) => (current === next ? current : next));
     };
     const onScroll = () => {

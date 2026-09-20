@@ -179,10 +179,13 @@ The interface is read-only. It has one button.
   players never halve each other's frame rate.
 - Exactly one card plays live, and which one is decided by the SCROLL. The card
   that holds the top of the view plays; scrolling down stops that artwork and
-  starts the next. A card that is still being made cannot play, so the newest
-  finished artwork plays instead — that is what a page shows when it loads during
-  a run. Every other card shows its still frame. A card with no frame yet shows
-  its stage.
+  starts the next. The reading line sits `READING_LINE_FRACTION` (0.2) of the way
+  down the step between two cards, so the new artwork starts while the one above
+  it is still about a fifth visible and the new one is almost all on screen.
+  Measured: at the switch the artwork above still shows 16 percent of its card.
+  A card that is still being made cannot play, so the newest finished artwork
+  plays instead — that is what a page shows when it loads during a run. Every
+  other card shows its still frame. A card with no frame yet shows its stage.
 - A large live view opens from the card.
 - A resizable shell holds the agent log, newest at the bottom. It follows the
   work while a step runs. The reasoning rows are dim, the agent text is normal,

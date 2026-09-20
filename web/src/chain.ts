@@ -31,6 +31,15 @@ export function playingVersionId(nodes: TreeNode[]): string | null {
 }
 
 /**
+ * How much of an artwork still shows when the next one takes over.
+ *
+ * One fifth. The reading line sits at this share of the distance between two
+ * cards, so the artwork above is down to about a fifth of its height and the new
+ * one is almost fully on screen when it starts to play.
+ */
+export const READING_LINE_FRACTION = 0.2;
+
+/**
  * The card that holds the top of the view, and therefore plays live.
  *
  * Cards arrive in display order, newest first. The live card is the lowest one

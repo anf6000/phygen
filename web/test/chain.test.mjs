@@ -3,7 +3,24 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { autoplayCardId, chainOrder, playingVersionId, stepLabels, visibleCardId } from '../src/chain.ts';
+import { READING_LINE_FRACTION, autoplayCardId, chainOrder, playingVersionId, stepLabels, visibleCardId } from '../src/chain.ts';
+
+test('the next artwork starts while the one above is a fifth visible', () => {
+  assert.equal(READING_LINE_FRACTION, 0.2);
+  // The step between two cards: one card, plus the gap the chain leaves.
+  const cardHeight = 1093;
+  const gap = 24;
+  const pitch = cardHeight + gap;
+  const line = pitch * READING_LINE_FRACTION;
+  // The line sits where the next card's top edge arrives, so the artwork above
+  // it still shows what is left of it below the top of the view.
+  const upperVisible = Math.max(0, line - gap);
+  const share = upperVisible / cardHeight;
+  assert.ok(Math.abs(share - 0.2) < 0.03, `the upper artwork shows ${(share * 100).toFixed(0)}%, not about 20%`);
+  // The new artwork takes over as it comes on screen: at least its top half.
+  const viewHeight = 1000;
+  assert.ok((viewHeight - line) / cardHeight > 0.7, 'the new artwork must be nearly all on screen');
+});
 
 function node(id, generation, status, createdAt) {
   return {
