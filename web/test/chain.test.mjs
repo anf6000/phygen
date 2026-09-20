@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { chainOrder, playingVersionId, stepLabels } from '../src/chain.ts';
+import { autoplayCardId, chainOrder, playingVersionId, stepLabels, visibleCardId } from '../src/chain.ts';
 
 function node(id, generation, status, createdAt) {
   return {
@@ -50,6 +50,54 @@ test('the newest promoted version plays, and every other version does not', () =
   // A chain with nothing promoted has no playing version.
   assert.equal(playingVersionId([node('only', 0, 'failed', '2026-01-01T00:00:00.000Z')]), null);
   assert.equal(playingVersionId([]), null);
+});
+
+test('the card at the top of the view plays live', () => {
+  // Cards are 1024 px tall in the chain, newest first.
+  const cards = [
+    { id: 'step3', top: 0 },
+    { id: 'step2', top: 1060 },
+    { id: 'step1', top: 2120 },
+    { id: 'root', top: 3180 },
+  ];
+
+  // A page that has just loaded: the newest card plays.
+  assert.equal(visibleCardId(cards, 0), 'step3');
+  assert.equal(visibleCardId(cards, 30), 'step3');
+
+  // Scrolling down stops one and starts the next.
+  assert.equal(visibleCardId(cards, 1060), 'step2');
+  assert.equal(visibleCardId(cards, 1800), 'step2');
+  assert.equal(visibleCardId(cards, 2120), 'step1');
+  assert.equal(visibleCardId(cards, 4000), 'root');
+
+  // An empty chain has no live card, and a view above every card keeps the newest.
+  assert.equal(visibleCardId([], 0), null);
+  assert.equal(visibleCardId(cards, -500), 'step3');
+});
+
+test('a card that is still being made cannot play, so the newest finished one does', () => {
+  // The newest card is the step the run is working on: no snapshot yet.
+  const cards = [
+    { id: 'step6', top: 0, playable: false },
+    { id: 'step5', top: 1060, playable: true },
+    { id: 'step4', top: 2120, playable: true },
+    { id: 'root', top: 3180, playable: true },
+  ];
+  // A page that has just loaded: the newest artwork plays, because the card at
+  // the top of the view has nothing to show yet.
+  assert.equal(autoplayCardId(cards, 8), 'step5');
+
+  // Scrolling to a card that can play makes THAT card play.
+  assert.equal(autoplayCardId(cards, 2120), 'step4');
+  assert.equal(autoplayCardId(cards, 3200), 'root');
+
+  // While the view sits on the working card, the newest finished one plays.
+  assert.equal(autoplayCardId(cards, 400), 'step5');
+
+  // A chain with nothing playable plays nothing, and an empty chain is safe.
+  assert.equal(autoplayCardId(cards.map((card) => ({ ...card, playable: false })), 8), null);
+  assert.equal(autoplayCardId([], 0), null);
 });
 
 test('two attempts at one step never carry the same name', () => {

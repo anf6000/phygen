@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 
 import { RequestError, api, useRunEvents } from './api';
-import { playingVersionId, stepLabels } from './chain';
+import { autoplayCardId, playingVersionId, stepLabels } from './chain';
 import type { AgentRow, Health, ModelList, RunDetail, Tree, TreeNode } from './types';
 import { Timeline } from './components/Timeline';
 import { Shell } from './components/Shell';
@@ -143,30 +143,70 @@ export default function App() {
   const nodes = tree?.nodes ?? [];
   // A failed step is not part of the chain the interface shows.
   const shownNodes = useMemo(() => nodes.filter((node) => node.status !== 'failed'), [nodes]);
-  const playingId = useMemo(() => playingVersionId(shownNodes), [shownNodes]);
+  const newestId = useMemo(() => playingVersionId(shownNodes), [shownNodes]);
   const labels = useMemo(() => stepLabels(shownNodes), [shownNodes]);
+  const chainRef = useRef<HTMLDivElement>(null);
+
+  // ── scroll autoplay ───────────────────────────────────────────────────────
+  // One artwork plays at a time: the card that holds the top of the view. On
+  // load that is the newest card, and scrolling down stops one and starts the
+  // next.
+  const [liveId, setLiveId] = useState<string | null>(null);
+  const playingId = liveId ?? newestId;
+
+  useEffect(() => {
+    const area = chainRef.current;
+    if (!area) return undefined;
+    const playable = new Set(shownNodes.filter((node) => node.status === 'promoted').map((node) => node.id));
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const areaTop = area.getBoundingClientRect().top;
+      const cards = [...area.querySelectorAll<HTMLElement>('.card[data-version]')].map((element) => {
+        const id = element.dataset.version ?? '';
+        return { id, top: element.getBoundingClientRect().top - areaTop, playable: playable.has(id) };
+      });
+      const next = autoplayCardId(cards.filter((card) => card.id.length > 0), 8);
+      if (next) setLiveId((current) => (current === next ? current : next));
+    };
+    const onScroll = () => {
+      if (frame === 0) frame = window.requestAnimationFrame(measure);
+    };
+    measure();
+    area.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      if (frame !== 0) window.cancelAnimationFrame(frame);
+      area.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [shownNodes]);
   const activeVersionId = tree?.activeVersionIds[0] ?? null;
   const feedVersionId = selected ?? activeVersionId ?? playingId;
   const feedVersion = useMemo(() => nodes.find((node) => node.id === feedVersionId) ?? null, [nodes, feedVersionId]);
 
   // The shell shows the stored rows of the selected step, and the live rows of
-  // the working step. One sequence number means one row.
+  // the working step. One sequence number means one row. The fetch waits a
+  // moment, because scrolling can move the live card through many steps.
   useEffect(() => {
     if (!feedVersionId) {
       setStoredRows([]);
       return undefined;
     }
     let cancelled = false;
-    void api
-      .agentFeed(feedVersionId)
-      .then((feed) => {
-        if (!cancelled) setStoredRows(feed.rows);
-      })
-      .catch(() => {
-        if (!cancelled) setStoredRows([]);
-      });
+    const timer = window.setTimeout(() => {
+      void api
+        .agentFeed(feedVersionId)
+        .then((feed) => {
+          if (!cancelled) setStoredRows(feed.rows);
+        })
+        .catch(() => {
+          if (!cancelled) setStoredRows([]);
+        });
+    }, 250);
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [feedVersionId]);
 
@@ -290,7 +330,7 @@ export default function App() {
       ) : null}
 
       <main className="main" ref={mainRef}>
-        <div className="chain-area">
+        <div className="chain-area" ref={chainRef}>
           <Timeline
             nodes={nodes}
             activeVersionIds={tree?.activeVersionIds ?? []}

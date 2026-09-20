@@ -50,6 +50,7 @@ export function ArtworkCard({ node, label, stage, playing, livePaused, selected,
   return (
     <article
       className={classes.join(' ')}
+      data-version={node.id}
       onClick={() => onSelect(node.id)}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {

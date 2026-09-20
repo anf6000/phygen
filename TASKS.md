@@ -74,7 +74,7 @@ Checks:
 ```bash
 cd server && npm test       # 39 controller, step loop, and storage tests
 cd threejs && npm test      # 57 artwork tests
-cd web && npm test          # 11 chain-order, label, playing-version, and pixel-motion tests
+cd web && npm test          # 13 chain-order, label, autoplay, and pixel-motion tests
 cd threejs && npm run validate
 cd web && npm run build
 cd server && node tools/snapshot-report.mjs            # snapshot integrity report
@@ -177,9 +177,12 @@ The interface is read-only. It has one button.
 - Exactly one live player runs at a time. While the large live view is open, the
   card behind it shows its still frame and its chip reads `paused`, so the two
   players never halve each other's frame rate.
-- Exactly one card plays live: the newest promoted version. Every other card
-  shows its still frame. A card with no frame yet shows its stage, and a failed
-  card shows its reason.
+- Exactly one card plays live, and which one is decided by the SCROLL. The card
+  that holds the top of the view plays; scrolling down stops that artwork and
+  starts the next. A card that is still being made cannot play, so the newest
+  finished artwork plays instead — that is what a page shows when it loads during
+  a run. Every other card shows its still frame. A card with no frame yet shows
+  its stage.
 - A large live view opens from the card.
 - A resizable shell holds the agent log, newest at the bottom. It follows the
   work while a step runs. The reasoning rows are dim, the agent text is normal,
@@ -190,9 +193,10 @@ The interface is read-only. It has one button.
 - A slim status line shows the state, `step X of Y`, the spend, the provider, and
   whether the stream is live.
 
-The playing rule lives in `web/src/chain.ts`, and `web/test/chain.test.mjs`
-tests it: the newest version with status `promoted` plays, and a failed or
-working version never plays.
+The playing rules live in `web/src/chain.ts`, and `web/test/chain.test.mjs` tests
+them: `visibleCardId` picks the card at the reading line, `autoplayCardId` picks
+the one that plays there, and `playingVersionId` names the newest finished
+artwork for the initial state.
 
 ## Layout
 
