@@ -6,7 +6,6 @@
 //
 // The estimate is computed from a token model, not from a guess:
 //   - text tokens ≈ characters / 4
-//   - one image token ≈ (width × height) / 750
 //   - an author session also writes files, so it gets an output allowance
 // When a price is missing, the configured bounds apply instead.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -14,16 +13,11 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 const CACHE_TTL_MS = 60 * 60 * 1000;
-const IMAGE_TOKENS_PER_PIXEL = 1 / 750;
 const CHARS_PER_TOKEN = 4;
 
 function price(perToken) {
   const value = Number.parseFloat(perToken);
   return Number.isFinite(value) ? Math.round(value * 1e6 * 1e6) / 1e6 : 0;
-}
-
-export function estimateImageTokens({ width, height }) {
-  return Math.max(1, Math.ceil((width * height) * IMAGE_TOKENS_PER_PIXEL));
 }
 
 export class ModelCatalog {
@@ -118,87 +112,57 @@ export class ModelCatalog {
   }
 
   /**
-   * Tokens and dollars for one run.
+   * Tokens and dollars for one run. Every step makes one author call, and each
+   * call may need one bounded repair, so the estimate counts author calls only.
    *
    * @param {object} options
    * @param {number} options.evolutions
-   * @param {number} options.candidatesPerRound
-   * @param {object} options.protocol
    * @param {string} options.authorModel
-   * @param {string} options.judgeModel
    * @param {number} options.authorPromptTokens  measured from a real prompt
-   * @param {number} options.judgePromptTokens
-   * @param {number} options.imagesPerJudgeCall
+   * @param {number} options.authorOutputTokens
    */
   estimateRun({
     evolutions,
-    candidatesPerRound,
-    protocol,
     authorModel,
-    judgeModel,
     // Measured: the base system prompt alone costs about 4500 input tokens, and
     // an author session reads files across several turns.
     authorPromptTokens = 12000,
-    judgePromptTokens = 6000,
     authorOutputTokens = 6000,
-    judgeOutputTokens = 1200,
-    imagesPerJudgeCall = 12,
   }) {
-    const rounds = Math.max(1, evolutions);
-    const candidates = Math.max(1, candidatesPerRound);
-    const perRoundJudgeCalls = candidates + 1 + (protocol?.tieBreak === false ? 0 : 1) + 1;
-    const authorCalls = rounds * candidates;
-    const repairCalls = rounds * candidates * this.config.evolution.repairAttempts;
-    const judgeCalls = rounds * perRoundJudgeCalls;
-
-    const imageTokens = estimateImageTokens(protocol?.viewport ?? this.config.evolution.viewport) * imagesPerJudgeCall;
-    const authorTokens = {
+    const steps = Math.max(1, evolutions);
+    const repairCalls = steps * this.config.evolution.repairAttempts;
+    const tokens = {
       input: authorPromptTokens,
       output: authorOutputTokens,
-      calls: authorCalls + repairCalls,
-    };
-    const judgeTokens = {
-      input: judgePromptTokens + imageTokens,
-      output: judgeOutputTokens,
-      calls: judgeCalls,
+      calls: steps + repairCalls,
     };
 
-    const priceOf = (modelId) => this.models.get(modelId) ?? null;
-    const author = priceOf(authorModel);
-    const judge = priceOf(judgeModel);
-    const costOf = (model, tokens) =>
-      model === null ? null : (tokens.input * tokens.calls * model.priceInUsdPerMTok + tokens.output * tokens.calls * model.priceOutUsdPerMTok) / 1e6;
+    const author = this.models.get(authorModel) ?? null;
+    const costUsd =
+      author === null
+        ? null
+        : (tokens.input * tokens.calls * author.priceInUsdPerMTok + tokens.output * tokens.calls * author.priceOutUsdPerMTok) / 1e6;
+    const priced = costUsd !== null;
 
-    const authorUsd = costOf(author, authorTokens);
-    const judgeUsd = costOf(judge, judgeTokens);
-    const priced = authorUsd !== null && judgeUsd !== null;
-
-    const estimateUsd = priced ? authorUsd + judgeUsd : null;
     const safety = this.config.models.safetyFactor;
     const boundUsd = priced
-      ? Math.max(estimateUsd * safety, 0.02)
-      : (authorCalls + repairCalls) * this.config.cost.authorCallUsd + judgeCalls * this.config.cost.judgeCallUsd;
+      ? Math.max(costUsd * safety, 0.02)
+      : tokens.calls * this.config.cost.authorCallUsd;
 
     return {
-      evolutions: rounds,
-      candidatesPerRound: candidates,
-      authorCalls: authorTokens.calls,
-      judgeCalls: judgeTokens.calls,
-      imagesPerJudgeCall,
+      evolutions: steps,
+      authorCalls: tokens.calls,
       tokens: {
-        authorInputPerCall: authorTokens.input,
-        authorOutputPerCall: authorTokens.output,
-        judgeInputPerCall: judgeTokens.input,
-        judgeOutputPerCall: judgeTokens.output,
-        totalInput: authorTokens.input * authorTokens.calls + judgeTokens.input * judgeTokens.calls,
-        totalOutput: authorTokens.output * authorTokens.calls + judgeTokens.output * judgeTokens.calls,
+        authorInputPerCall: tokens.input,
+        authorOutputPerCall: tokens.output,
+        totalInput: tokens.input * tokens.calls,
+        totalOutput: tokens.output * tokens.calls,
       },
-      estimateUsd: estimateUsd === null ? null : round6(estimateUsd),
+      estimateUsd: costUsd === null ? null : round6(costUsd),
       boundUsd: round6(boundUsd),
       safetyFactor: safety,
       pricingSource: priced ? 'catalog' : 'configured',
       authorModel: { id: authorModel, known: Boolean(author), priceInUsdPerMTok: author?.priceInUsdPerMTok ?? null, priceOutUsdPerMTok: author?.priceOutUsdPerMTok ?? null },
-      judgeModel: { id: judgeModel, known: Boolean(judge), priceInUsdPerMTok: judge?.priceInUsdPerMTok ?? null, priceOutUsdPerMTok: judge?.priceOutUsdPerMTok ?? null },
       note: priced
         ? 'The estimate uses catalog prices and an estimated token count. Provider usage is authoritative.'
         : 'No catalog price is available, so the estimate uses configured conservative bounds.',

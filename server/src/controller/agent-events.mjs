@@ -4,15 +4,17 @@
 // Pi emits, in JSON mode:
 //   tool_execution_start  the tool name and its arguments
 //   tool_execution_end    the result and whether it failed
-//   message_update        the assistant text as it arrives
+//   message_update        the assistant text and reasoning as they arrive
+//   message_end           the final message of one model answer
 //   turn_start, turn_end  one model turn
 //
-// The feed keeps one row per tool call, with the file and the line change, and a
-// short text ticker. Nothing here reads the file system: the arguments hold the
-// difference.
+// The feed keeps one row per tool call, with the file and the line change, the
+// reasoning rows, and the assistant text. Reasoning stays separate from the
+// answer, and each row holds a cap, so one row cannot flood the stream.
+// Nothing here reads the file system: the arguments hold the difference.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TEXT_LIMIT = 160;
+const TEXT_LIMIT = 4000;
 
 /** Lines added and removed by one edit pair. */
 function lineDelta(before, after) {
@@ -83,6 +85,31 @@ export function describeTool({ toolName, args }) {
   return describe;
 }
 
+const REASONING_TYPES = new Set(['reasoning', 'thinking', 'redacted_thinking']);
+
+/**
+ * Readable text for the shell. The provider marks attached frames with
+ * `<file name="…">` tags, which are noise and hold a local path.
+ */
+export function cleanText(value) {
+  return String(value ?? '')
+    .replace(/<file\b[^>]*>/gi, '')
+    .replace(/<\/file>/gi, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .trim();
+}
+
+/** The reasoning content blocks of one message, joined. */
+export function reasoningFromMessage(message) {
+  const content = message?.content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter((block) => block && REASONING_TYPES.has(block.type))
+    .map((block) => block.text ?? block.thinking ?? '')
+    .join('')
+    .trim();
+}
+
 /** The assistant text a `message_update` carries, if any. */
 export function textFromUpdate(event) {
   const candidates = [
@@ -129,9 +156,32 @@ export function feedRows(event, versionId) {
     ];
   }
   if (event.type === 'message_update') {
+    const reasoning = reasoningFromMessage(event.message);
+    if (reasoning.length > 0) return [{ versionId, kind: 'reason', text: reasoning.slice(-TEXT_LIMIT) }];
     const text = textFromUpdate(event);
     if (text.length === 0) return [];
-    return [{ versionId, kind: 'text', text: text.slice(-TEXT_LIMIT) }];
+    const readable = cleanText(text);
+    if (readable.length === 0) return [];
+    return [{ versionId, kind: 'text', text: readable.slice(-TEXT_LIMIT) }];
+  }
+  if (event.type === 'message_end') {
+    // The final message holds the answer, and may also hold reasoning. Report
+    // both, so the answer is visible even when the provider streams no deltas.
+    const rows = [];
+    const reasoning = reasoningFromMessage(event.message);
+    if (reasoning.length > 0) rows.push({ versionId, kind: 'reason', text: reasoning.slice(-TEXT_LIMIT) });
+    const content = event.message?.content;
+    const text = Array.isArray(content)
+      ? content
+          .filter((block) => block && (block.type === 'text' || block.type === 'output_text'))
+          .map((block) => block.text ?? '')
+          .join('')
+          .trim()
+      : typeof content === 'string'
+        ? content.trim()
+        : '';
+    if (text.length > 0) rows.push({ versionId, kind: 'text', text: cleanText(text).slice(-TEXT_LIMIT) });
+    return rows;
   }
   if (event.type === 'turn_end') {
     const usage = event.message?.usage ?? event.usage ?? null;

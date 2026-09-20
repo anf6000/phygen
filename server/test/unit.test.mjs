@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { loadConfig } from '../src/config.mjs';
+import { titleFromExplanation } from '../src/controller/run.mjs';
 import { Store } from '../src/db.mjs';
 import { EventBus } from '../src/events.mjs';
 import { Budget, BudgetError } from '../src/budget.mjs';
@@ -12,7 +13,6 @@ import { canTransition, transition } from '../src/state.mjs';
 import { isTransientProviderError } from '../src/providers/index.mjs';
 import { extractJson } from '../src/providers/json.mjs';
 import { lineStats, reviewEdits } from '../src/artwork/workspace.mjs';
-import { assignLabels, decideWinner, validateVerdict, MAX_COMPARISON_ENTRIES } from '../src/judge/protocol.mjs';
 
 async function tempDir(t) {
   const dir = await mkdtemp(join(tmpdir(), 'phygen-unit-'));
@@ -26,13 +26,42 @@ function makeStore(t) {
   return store;
 }
 
+test('a card title comes from the agent answer, not from the step number', () => {
+  // A bullet and a path label are removed.
+  assert.equal(
+    titleFromExplanation('- src/physarum.js: added a wind field to the simulation.', 3),
+    'added a wind field to the simulation.',
+  );
+  // A line of code is skipped in favour of a sentence.
+  assert.equal(
+    titleFromExplanation('const x = 1;\nThe trail now spreads wider.', 4),
+    'The trail now spreads wider.',
+  );
+  // "Files changed" is a list, not a title.
+  assert.equal(titleFromExplanation('Files changed: config.json', 5), 'Step 5');
+  // A bare path, or a heading with no content, is not a title either.
+  assert.equal(titleFromExplanation('src/physarum.js\nA damped turn now holds the direction.', 5), 'A damped turn now holds the direction.');
+  assert.equal(titleFromExplanation('Files I changed:\nThe trail spreads wider.', 5), 'The trail spreads wider.');
+  // A long prose line is cut.
+  const long = 'The trail now spreads wider across the frame and holds its structure for much longer than before.';
+  assert.ok(long.length > 72);
+  const cut = titleFromExplanation(long, 6);
+  assert.equal(cut.length, 72);
+  assert.match(cut, /\.\.\.$/);
+  // An empty answer falls back to the step number.
+  assert.equal(titleFromExplanation('', 7), 'Step 7');
+  assert.equal(titleFromExplanation(null, 8), 'Step 8');
+  assert.equal(titleFromExplanation('short', 9), 'Step 9');
+});
+
 test('the run state machine rejects an illegal transition', () => {
   assert.equal(transition('run', 'queued', 'running'), 'running');
   assert.equal(canTransition('run', 'running', 'paused'), true);
   assert.throws(() => transition('run', 'completed', 'running'), (error) => error.code === 'state_transition_invalid');
   assert.throws(() => transition('run', 'running', 'dancing'), (error) => error.code === 'state_invalid');
-  assert.equal(canTransition('version', 'judging', 'promoted'), true);
+  assert.equal(canTransition('version', 'capturing', 'promoted'), true);
   assert.equal(canTransition('version', 'promoted', 'capturing'), false);
+  assert.equal(canTransition('version', 'authoring', 'judging'), false, 'there is no judging stage');
 });
 
 test('the budget reserves before a request and charges the real cost', (t) => {
@@ -44,7 +73,6 @@ test('the budget reserves before a request and charges the real cost', (t) => {
   const run = store.createRun({
     artworkId: artwork.id,
     rootVersionId: 'ver_root',
-    direction: 'test',
     evolutionsRequested: 1,
     limitUsd: 1,
     protocol: {},
@@ -58,9 +86,9 @@ test('the budget reserves before a request and charges the real cost', (t) => {
   assert.equal(committed.costSource, 'provider');
   assert.equal(store.getRun(run.id).spentUsd, 0.12);
 
-  budget.reserve(run, 0.3, 'judge:1');
-  const bound = budget.commit(run.id, 'judge:1', { reportedUsd: 0, boundUsd: 0.2 });
-  assert.equal(bound.charged, 0.2);
+  budget.reserve(run, 0.15, 'repair:1');
+  const bound = budget.commit(run.id, 'repair:1', { reportedUsd: 0, boundUsd: 0.15 });
+  assert.equal(bound.charged, 0.15);
   assert.equal(bound.costSource, 'bound');
 });
 
@@ -70,21 +98,22 @@ test('the budget refuses a reservation above the limit', (t) => {
   const events = new EventBus(store);
   const budget = new Budget({ store, events, config });
   const artwork = store.createArtwork({ packageId: 'p', title: 't', contractVersion: '1.0.0', packagePath: 'threejs' });
-  const run = store.createRun({ artworkId: artwork.id, rootVersionId: 'v', direction: 'd', evolutionsRequested: 1, limitUsd: 0.5, protocol: {}, costBoundUsd: 0.5 });
+  const run = store.createRun({ artworkId: artwork.id, rootVersionId: 'v', evolutionsRequested: 1, limitUsd: 0.5, protocol: {}, costBoundUsd: 0.5 });
   budget.reserve(run, 0.4, 'a');
   assert.throws(() => budget.reserve(store.getRun(run.id), 0.4, 'b'), (error) => error instanceof BudgetError && error.code === 'budget_exceeded');
 });
 
-test('the cost bound grows with the evolution count', (t) => {
+test('the cost bound grows with the step count, one author call per step', (t) => {
   const config = loadConfig();
   const store = makeStore(t);
   const budget = new Budget({ store, events: new EventBus(store), config });
-  const one = budget.boundFor({ evolutions: 1, candidatesPerRound: 3, protocol: { tieBreak: true } });
-  const three = budget.boundFor({ evolutions: 3, candidatesPerRound: 3, protocol: { tieBreak: true } });
-  assert.equal(three.boundUsd, one.boundUsd * 3);
-  // author calls include the one bounded repair attempt per candidate
-  assert.equal(one.authorCalls, 6);
-  assert.equal(one.judgeCalls, 6);
+  const one = budget.boundFor({ evolutions: 1, authorModel: 'unknown-model' });
+  const three = budget.boundFor({ evolutions: 3, authorModel: 'unknown-model' });
+  assert.equal(three.authorCalls, one.authorCalls * 3);
+  // the bound holds three times the dollars, to six decimal places
+  assert.equal(three.boundUsd, Math.round(one.boundUsd * 3 * 1e6) / 1e6);
+  // author calls include the one bounded repair attempt per step
+  assert.equal(one.authorCalls, 2);
 });
 
 test('the event log replays after a sequence number', (t) => {
@@ -101,6 +130,22 @@ test('the event log replays after a sequence number', (t) => {
   assert.equal(events.since('run_1', 0).length, 3);
 });
 
+test('the agent feed keeps the NEWEST rows, so a long run still shows its step', (t) => {
+  const store = makeStore(t);
+  for (let index = 0; index < 25; index++) {
+    store.appendEvent('run_long', 'agent', { versionId: `ver_${index}`, kind: 'text', text: `row ${index}` });
+  }
+  const page = store.listEventsByType('run_long', 'agent', 5);
+  assert.equal(page.length, 5);
+  // The page holds the last five rows, in order.
+  assert.deepEqual(
+    page.map((event) => event.payload.text),
+    ['row 20', 'row 21', 'row 22', 'row 23', 'row 24'],
+  );
+  // And a page larger than the log returns the whole log.
+  assert.equal(store.listEventsByType('run_long', 'agent', 100).length, 25);
+});
+
 test('line statistics count added and removed lines', () => {
   assert.deepEqual(lineStats('a\nb\nc', 'a\nb\nc'), { added: 0, removed: 0 });
   assert.deepEqual(lineStats('a\nb\nc', 'a\nx\nb\nc'), { added: 1, removed: 0 });
@@ -109,7 +154,6 @@ test('line statistics count added and removed lines', () => {
 });
 
 test('the edit surface rejects a change to a protected file', async (t) => {
-  const { mkdir } = await import('node:fs/promises');
   const original = await tempDir(t);
   const workspace = await tempDir(t);
   const manifest = {
@@ -132,213 +176,6 @@ test('the edit surface rejects a change to a protected file', async (t) => {
   assert.deepEqual(allowed.violations, []);
   assert.deepEqual(allowed.changed, ['config.json']);
   assert.equal(allowed.changes[0].added, 1);
-});
-
-test('a malformed judge answer is rejected', () => {
-  const entries = [{ versionId: 'v1', captures: [{ stage: 'early', step: 10 }] }, { versionId: 'v2', captures: [{ stage: 'early', step: 10 }] }];
-  const { labelToVersion, labels } = assignLabels(entries);
-  const [labelA, labelB] = Object.keys(labelToVersion);
-  const good = {
-    observations: [
-      { label: labelA, frame: 'early@10', detail: 'A clear radial structure with even spacing.' },
-      { label: labelB, frame: 'early@10', detail: 'A dense field with no clear direction.' },
-    ],
-    preference: labelA,
-    weaknesses: ['the edges are soft'],
-    uncertainty: 'low',
-    confidence: 0.7,
-  };
-  assert.equal(validateVerdict(good, { labelToVersion, entries, labels }).preference, labelA);
-
-  assert.throws(() => validateVerdict({ ...good, preference: 'Z' }, { labelToVersion, entries, labels }), (error) => error.code === 'judge_response_invalid');
-  assert.throws(() => validateVerdict({ ...good, uncertainty: 'maybe' }, { labelToVersion, entries, labels }), (error) => error.code === 'judge_response_invalid');
-  assert.throws(() => validateVerdict({ ...good, confidence: 4 }, { labelToVersion, entries, labels }), (error) => error.code === 'judge_response_invalid');
-  assert.throws(
-    () => validateVerdict({ ...good, observations: [good.observations[0]] }, { labelToVersion, entries, labels }),
-    (error) => error.code === 'judge_response_invalid',
-  );
-  assert.throws(
-    () => validateVerdict({ ...good, observations: [{ ...good.observations[0], frame: 'late@99' }, good.observations[1]] }, { labelToVersion, entries, labels }),
-    (error) => error.code === 'judge_response_invalid',
-  );
-});
-
-test('the winner decision keeps the parent when the comparisons disagree', () => {
-  const make = (preference, confidence, uncertainty) => ({ verdict: { preference, confidence, uncertainty }, labelToVersion: { A: 'ver_parent', B: 'ver_candidate' }, labels: { ver_parent: 'A', ver_candidate: 'B' } });
-  const agree = decideWinner({ primary: make('B', 0.8, 'low'), reversed: make('B', 0.7, 'low'), parentVersionId: 'ver_parent', promoteMargin: 0.15 });
-  assert.equal(agree.promoted, true);
-  assert.equal(agree.winnerVersionId, 'ver_candidate');
-
-  const disagree = decideWinner({ primary: make('B', 0.8, 'low'), reversed: make('A', 0.8, 'low'), parentVersionId: 'ver_parent', promoteMargin: 0.15 });
-  assert.equal(disagree.promoted, false);
-
-  const weak = decideWinner({ primary: make('B', 0.05, 'high'), reversed: make('B', 0.06, 'high'), parentVersionId: 'ver_parent', promoteMargin: 0.15 });
-  assert.equal(weak.promoted, false);
-
-  const tie = decideWinner({
-    primary: make('B', 0.8, 'low'),
-    reversed: make('A', 0.8, 'low'),
-    tieBreak: make('B', 0.6, 'medium'),
-    parentVersionId: 'ver_parent',
-    promoteMargin: 0.15,
-  });
-  assert.equal(tie.promoted, true);
-  assert.equal(tie.usedTieBreak, true);
-});
-
-test('the novelty branch promotes a distinct candidate that the margin would refuse', () => {
-  const make = (preference, confidence, uncertainty) => ({ verdict: { preference, confidence, uncertainty }, labelToVersion: { A: 'ver_parent', B: 'ver_candidate' }, labels: { ver_parent: 'A', ver_candidate: 'B' } });
-  const novelty = { candidateVersionId: 'ver_candidate', distance: 0.62, floor: 0.35, tolerance: 0.1 };
-
-  // A clear quality win still promotes through the quality branch, with novelty unused.
-  const clear = decideWinner({ primary: make('B', 0.8, 'low'), reversed: make('B', 0.7, 'low'), parentVersionId: 'ver_parent', promoteMargin: 0.15, novelty });
-  assert.equal(clear.branch, 'quality');
-  assert.equal(clear.promoted, true);
-
-  // A preference too weak to permit promotion now permits it when the candidate is distinct.
-  const weakButNovel = decideWinner({ primary: make('B', 0.06, 'high'), reversed: make('B', 0.05, 'high'), parentVersionId: 'ver_parent', promoteMargin: 0.15, novelty });
-  assert.equal(weakButNovel.promoted, true);
-  assert.equal(weakButNovel.branch, 'novelty');
-  assert.equal(weakButNovel.winnerVersionId, 'ver_candidate');
-  assert.match(weakButNovel.reason, /novel at 0\.62/);
-
-  // The same weak preference keeps the parent when the candidate is a near copy.
-  const weakAndClose = decideWinner({
-    primary: make('B', 0.06, 'high'),
-    reversed: make('B', 0.05, 'high'),
-    parentVersionId: 'ver_parent',
-    promoteMargin: 0.15,
-    novelty: { ...novelty, distance: 0.1 },
-  });
-  assert.equal(weakAndClose.promoted, false);
-  assert.equal(weakAndClose.branch, 'none');
-
-  // A parent that wins weakly is within tolerance, so a distinct candidate takes the lineage.
-  const parentWonWeakly = decideWinner({ primary: make('A', 0.08, 'high'), reversed: make('A', 0.05, 'high'), parentVersionId: 'ver_parent', promoteMargin: 0.15, novelty });
-  assert.equal(parentWonWeakly.promoted, true);
-  assert.equal(parentWonWeakly.branch, 'novelty');
-  assert.equal(parentWonWeakly.winnerVersionId, 'ver_candidate');
-
-  // A parent that wins clearly is never overridden by novelty.
-  const parentWonClearly = decideWinner({ primary: make('A', 0.9, 'low'), reversed: make('A', 0.85, 'low'), parentVersionId: 'ver_parent', promoteMargin: 0.15, novelty });
-  assert.equal(parentWonClearly.promoted, false);
-  assert.equal(parentWonClearly.branch, 'none');
-
-  // A disagreement is not evidence that the candidate is good, so novelty cannot act on it.
-  const disagreement = decideWinner({ primary: make('B', 0.9, 'low'), reversed: make('A', 0.9, 'low'), parentVersionId: 'ver_parent', promoteMargin: 0.15, novelty });
-  assert.equal(disagreement.promoted, false);
-  assert.equal(disagreement.novelty.distance, 0.62, 'the numbers are recorded even when the branch does not fire');
-
-  // Without novelty the behaviour is exactly as before.
-  const withoutNovelty = decideWinner({ primary: make('B', 0.06, 'high'), reversed: make('B', 0.05, 'high'), parentVersionId: 'ver_parent', promoteMargin: 0.15 });
-  assert.equal(withoutNovelty.promoted, false);
-  assert.equal(withoutNovelty.branch, 'none');
-});
-
-test('a level that must advance promotes a variant even when the parent is preferred', () => {
-  const make = (preference, confidence, uncertainty) => ({ verdict: { preference, confidence, uncertainty }, labelToVersion: { A: 'ver_parent', B: 'ver_candidate' }, labels: { ver_parent: 'A', ver_candidate: 'B' } });
-  const candidates = ['ver_candidate', 'ver_other'];
-
-  // The judge prefers the parent in both orders: a variant still takes the lineage.
-  const mandated = decideWinner({
-    primary: make('A', 0.9, 'low'),
-    reversed: make('A', 0.85, 'low'),
-    parentVersionId: 'ver_parent',
-    promoteMargin: 0.15,
-    mustPromote: candidates,
-  });
-  assert.equal(mandated.promoted, true);
-  assert.equal(mandated.winnerVersionId, 'ver_candidate', 'the variant the judge named takes the lineage');
-  assert.equal(mandated.branch, 'mandate');
-  assert.match(mandated.reason, /the judge preferred the parent, but a variant must advance/);
-
-  // No comparison names anything: the earliest variant advances, and says why.
-  const abstained = decideWinner({
-    primary: { verdict: { preference: 'none', confidence: 0, uncertainty: 'high' }, labelToVersion: { A: 'ver_parent' }, labels: { ver_parent: 'A' } },
-    parentVersionId: 'ver_parent',
-    promoteMargin: 0.15,
-    mustPromote: candidates,
-  });
-  assert.equal(abstained.promoted, true);
-  assert.equal(abstained.winnerVersionId, 'ver_candidate');
-  assert.match(abstained.reason, /no comparison named a variant/);
-
-  // A named variant without the margin is still mandated.
-  const underMargin = decideWinner({
-    primary: make('B', 0.05, 'high'),
-    reversed: make('B', 0.04, 'high'),
-    parentVersionId: 'ver_parent',
-    promoteMargin: 0.15,
-    mustPromote: candidates,
-  });
-  assert.equal(underMargin.promoted, true);
-  assert.equal(underMargin.winnerVersionId, 'ver_candidate');
-  assert.equal(underMargin.branch, 'mandate');
-
-  // A plain quality win keeps its own branch, so the record shows the difference.
-  const quality = decideWinner({
-    primary: make('B', 0.8, 'low'),
-    reversed: make('B', 0.75, 'low'),
-    parentVersionId: 'ver_parent',
-    promoteMargin: 0.15,
-    mustPromote: candidates,
-  });
-  assert.equal(quality.branch, 'quality');
-
-  // With no variant to advance, the parent stays and nothing is invented.
-  const nothing = decideWinner({ primary: make('A', 0.9, 'low'), reversed: make('A', 0.9, 'low'), parentVersionId: 'ver_parent', promoteMargin: 0.15, mustPromote: [] });
-  assert.equal(nothing.promoted, false);
-  assert.equal(nothing.winnerVersionId, 'ver_parent');
-
-  // Without the mandate the old rule is untouched.
-  const classic = decideWinner({ primary: make('A', 0.9, 'low'), reversed: make('A', 0.9, 'low'), parentVersionId: 'ver_parent', promoteMargin: 0.15 });
-  assert.equal(classic.promoted, false);
-});
-
-test('a frame identifier with extra words is normalised, not thrown away', () => {
-  // A live run lost a level to "dense-early@600 seed 1337". That names a frame
-  // that WAS sent, so it is normalised.
-  const entries = [{ versionId: 'ver_a', captures: [{ stage: 'dense-early', step: 600, seed: 1337, fileName: 'a.png' }] }];
-  const labels = { ver_a: 'A' };
-  const labelToVersion = { A: 'ver_a' };
-  const base = { label: 'A', detail: 'the trails are dense and even here', uncertainty: 'low', confidence: 0.7, weaknesses: [], distinctiveness: 'low', notes: '', preference: 'A' };
-
-  const tolerated = validateVerdict({ ...base, observations: [{ ...base, frame: 'dense-early@600 seed 1337' }] }, { labelToVersion, entries, labels });
-  assert.equal(tolerated.observations[0].frame, 'dense-early@600', 'the extra words are dropped');
-
-  // A frame that was never sent is still refused.
-  assert.throws(
-    () => validateVerdict({ ...base, observations: [{ ...base, frame: 'late@900' }] }, { labelToVersion, entries, labels }),
-    (error) => error.code === 'judge_response_invalid' && /not sent/.test(error.message),
-  );
-
-  // A frame with no stage and step at all is still refused.
-  assert.throws(
-    () => validateVerdict({ ...base, observations: [{ ...base, frame: 'the third image' }] }, { labelToVersion, entries, labels }),
-    (error) => error.code === 'judge_response_invalid' && /malformed/.test(error.message),
-  );
-});
-
-test('a reversed comparison that never answered keeps the parent instead of throwing', () => {
-  // A live run failed with "Cannot read properties of undefined (reading
-  // 'preference')" when the reversed comparison did not complete. A missing
-  // verdict must read as no opinion.
-  const primary = { verdict: { preference: 'B', confidence: 0.8, uncertainty: 'low' }, labelToVersion: { A: 'ver_parent', B: 'ver_candidate' }, labels: { ver_parent: 'A', ver_candidate: 'B' } };
-  const decision = decideWinner({ primary, reversed: null, parentVersionId: 'ver_parent', promoteMargin: 0.15 });
-  assert.equal(decision.promoted, false);
-  assert.equal(decision.winnerVersionId, 'ver_parent');
-  assert.match(decision.reason, /reversed comparison did not complete/);
-  assert.equal(decision.branch, 'none');
-
-  // A comparison with no verdict at all is an abstention, not a crash.
-  const abstained = decideWinner({
-    primary: { verdict: { preference: 'none', confidence: 0, uncertainty: 'high' }, labelToVersion: { A: 'ver_parent' }, labels: { ver_parent: 'A' } },
-    reversed: undefined,
-    parentVersionId: 'ver_parent',
-    promoteMargin: 0.15,
-  });
-  assert.equal(abstained.promoted, false);
-  assert.equal(abstained.winnerVersionId, 'ver_parent');
 });
 
 test('a json object is found inside prose and a code fence', () => {
@@ -370,38 +207,29 @@ test('a fault that a second try can clear is recognised', () => {
   assert.equal(isTransientProviderError(new Error('status: 502')), true);
 });
 
-test('a comparison holds a parent and all eight supported variants', () => {
-  assert.equal(MAX_COMPARISON_ENTRIES, 9);
-  const entries = Array.from({ length: 9 }, (_, index) => ({ versionId: `v${index}` }));
-  const { labels, labelToVersion } = assignLabels(entries);
-  assert.equal(Object.keys(labelToVersion).length, 9);
-  assert.deepEqual(Object.values(labels).sort(), ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']);
-  assert.throws(() => assignLabels([...entries, { versionId: 'v9' }]), (error) => error.code === 'too_many_entries');
-});
-
-test('a run is refused before its records exist when it cannot be afforded or judged', (t) => {
+test('a run is refused before its records exist when it cannot be afforded', (t) => {
   const store = makeStore(t);
   const events = new EventBus(store);
 
   const capped = loadConfig({ cost: { maxRunUsd: 1, maxRounds: 0, maxCallsPerRun: 0 } });
   const budget = new Budget({ store, events, config: capped });
   assert.throws(
-    () => budget.assertAdmission({ evolutions: 2, variants: 3, limitUsd: 0.5, boundUsd: 2 }),
+    () => budget.assertAdmission({ evolutions: 2, limitUsd: 0.5, boundUsd: 2 }),
     (error) => error instanceof BudgetError && error.code === 'budget_exceeded',
   );
   assert.throws(
-    () => budget.assertAdmission({ evolutions: 2, variants: 3, limitUsd: 0, boundUsd: 2 }),
+    () => budget.assertAdmission({ evolutions: 2, limitUsd: 0, boundUsd: 2 }),
     (error) => error.code === 'budget_exceeded',
   );
   assert.equal(store.listRuns(10).length, 0, 'the check never writes a record');
 
   // A run with no per-run limit and no ceiling is admitted.
   const open = new Budget({ store, events, config: loadConfig({ cost: { maxRunUsd: 0, maxRounds: 0, maxCallsPerRun: 0 } }) });
-  assert.equal(open.assertAdmission({ evolutions: 2, variants: 3, limitUsd: 0, boundUsd: 5 }), true);
+  assert.equal(open.assertAdmission({ evolutions: 2, limitUsd: 0, boundUsd: 5 }), true);
 
-  const roundLimited = new Budget({ store, events, config: loadConfig({ cost: { maxRounds: 1, maxRunUsd: 0, maxCallsPerRun: 0 } }) });
+  const stepLimited = new Budget({ store, events, config: loadConfig({ cost: { maxRounds: 1, maxRunUsd: 0, maxCallsPerRun: 0 } }) });
   assert.throws(
-    () => roundLimited.assertAdmission({ evolutions: 3, variants: 2, limitUsd: 0, boundUsd: 0 }),
+    () => stepLimited.assertAdmission({ evolutions: 3, limitUsd: 0, boundUsd: 0 }),
     (error) => error.code === 'round_limit_reached',
   );
 });
@@ -412,22 +240,20 @@ test('a startup configuration that cannot run is refused by name', () => {
     (error) => error.code === 'config_invalid' && /stepSchedule/.test(error.message),
   );
   assert.throws(
-    () => loadConfig({ evolution: { stepSchedule: [1800, 600, 3600] } }),
+    () => loadConfig({ evolution: { stepSchedule: [3600, 600] } }),
     (error) => error.code === 'config_invalid' && /PHYGEN_STEP_SCHEDULE/.test(error.message),
-  );
-  assert.throws(
-    () => loadConfig({ evolution: { stepSchedule: [600, 1800] } }),
-    (error) => error.code === 'config_invalid' && /same length/.test(error.message),
-  );
-  assert.throws(
-    () => loadConfig({ evolution: { variants: 9 } }),
-    (error) => error.code === 'config_invalid',
   );
   assert.throws(
     () => loadConfig({ evolution: { seeds: [] } }),
     (error) => error.code === 'config_invalid',
   );
-  assert.equal(loadConfig().evolution.variants, 3);
+  const config = loadConfig();
+  assert.equal(config.evolution.authorConcurrency, 1);
+  assert.equal(config.evolution.seeds.length, 1);
+  assert.equal(config.evolution.frameRoles.length, config.evolution.stepSchedule.length);
+  assert.equal(config.provider.authorThinking, 'high');
+  assert.match(config.provider.authorModel, /^deepseek\//);
+  assert.equal(config.dataDir.endsWith('data-evolve'), true);
 });
 
 test('records survive a store reopen', async (t) => {
@@ -451,21 +277,22 @@ test('records survive a store reopen', async (t) => {
     parentId: root.id,
     generation: 1,
     title: 'Child',
-    status: 'rejected',
+    status: 'promoted',
     sourceHash: 'hash2',
     snapshotPath: join(dir, 'snap2'),
     configuration: { num: 2 },
   });
+  const failed = first.updateVersion(child.id, { status: 'failed', errorCode: 'package_invalid', errorMessage: 'broken' });
+  assert.equal(failed.errorCode, 'package_invalid');
   first.close();
 
   const second = new Store(path);
   const reopened = second.getArtwork(artwork.id);
   assert.equal(reopened.rootVersionId, root.id);
   assert.equal(second.getVersion(child.id).parentId, root.id);
+  assert.equal(second.getVersion(child.id).errorCode, 'package_invalid');
   const lineage = second.lineage(child.id);
   assert.deepEqual(lineage.map((version) => version.id), [root.id, child.id]);
   assert.deepEqual(second.listVersions(artwork.id).length, 2);
   second.close();
 });
-
-

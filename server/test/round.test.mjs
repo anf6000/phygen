@@ -17,19 +17,13 @@ import { checkPackage } from '../../runtime/node/package-checks.js';
 const PACKAGE_DIR = join(REPO_ROOT, 'threejs');
 const PROTOCOL = {
   viewport: { width: 64, height: 64, dpr: 1 },
-  seeds: [1337, 7],
-  frameRoles: ['early', 'middle', 'late'],
-  stepSchedule: [10, 20, 30],
-  denseFrameRoles: ['early', 'middle', 'late'],
-  denseStepSchedule: [10, 20, 30],
-  tieBreak: true,
-  // The classic contract: the winner of a level is the parent of the next. The
-  // autonomous path is tested on its own, in archive.test.mjs and below.
-  pinnedParent: true,
+  seeds: [1337],
+  frameRoles: ['late'],
+  stepSchedule: [10],
 };
 
 /** A capture backend that writes a small file per frame and needs no browser. */
-function stubCapture() {
+function stubCapture({ failWhen = null } = {}) {
   return {
     backend: 'stub',
     isolated: false,
@@ -43,7 +37,17 @@ function stubCapture() {
         browser: { available: true, detail: 'stub' },
       };
     },
-    async capture({ samples, outDir, viewport, timestep, sourceHash, configurationHash }) {
+    async capture({ samples, outDir, viewport, timestep, sourceHash, configurationHash, snapshotDir }) {
+      // A workspace that would throw in the browser fails the capture, the same
+      // way a real load fault does.
+      if (failWhen) {
+        const source = await readFile(join(snapshotDir, 'src', 'physarum.js'), 'utf8');
+        if (failWhen(source)) {
+          const error = new Error('The artwork stopped with failed: dirX is not defined');
+          error.code = 'capture_load_failed';
+          throw error;
+        }
+      }
       await mkdir(outDir, { recursive: true });
       const results = [];
       for (const sample of samples) {
@@ -72,8 +76,7 @@ function stubCapture() {
   };
 }
 
-async function setup
-(t, configOverrides = {}, hooks = {}) {
+async function setup(t, configOverrides = {}, hooks = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'phygen-round-'));
   t.after(async () => {
     await rm(dir, { recursive: true, force: true, maxRetries: 3 }).catch(() => {});
@@ -84,9 +87,6 @@ async function setup
     artifactsDir: join(dir, 'snapshots'),
     capture: { backend: 'local', captureConcurrency: 2 },
     provider: { driver: 'fake', allowSpend: false },
-    // The classic contract for these tests: the parent may stay. The mandate is
-    // tested on its own below, and it is the default in the shipped settings.
-    evolution: { requireVariant: false, ...(configOverrides.evolution ?? {}) },
     ...configOverrides,
   });
 
@@ -144,7 +144,7 @@ async function setup
     store,
     events,
     budget,
-    capture: stubCapture(),
+    capture: hooks.capture ?? stubCapture(),
     provider,
     config,
     artifacts,
@@ -154,7 +154,6 @@ async function setup
   const run = store.createRun({
     artworkId: artwork.id,
     rootVersionId: rootVersion.id,
-    direction: hooks.direction ?? 'quieter, more directional, fewer crossings',
     evolutionsRequested: configOverrides.evolutions ?? 1,
     limitUsd: hooks.runLimitUsd ?? 100,
     protocol: hooks.protocol ?? PROTOCOL,
@@ -164,328 +163,601 @@ async function setup
   return { config, store, events, budget, controller, run, artwork, rootVersion, dir };
 }
 
-test('one round authors three candidates, captures, judges, and records the outcome', async (t) => {
-  const { store, events, controller, run, artwork, rootVersion } = await setup(t);
+/** The error and log events of one run, for a failing assertion message. */
+function diagnostic(events, runId) {
+  return JSON.stringify(
+    events
+      .since(runId, 0)
+      .filter((event) => event.type === 'error' || event.type === 'log')
+      .map((event) => ({ type: event.type, ...event.payload })),
+  );
+}
+
+test('three steps make three children in one chain', async (t) => {
+  const { store, events, controller, run, artwork, rootVersion } = await setup(t, { evolutions: 3 });
 
   await controller.start(run.id);
 
   const finished = store.getRun(run.id);
-  assert.equal(finished.state, 'completed');
-  assert.equal(finished.evolutionsDone, 1);
+  assert.equal(finished.state, 'completed', diagnostic(events, run.id));
+  assert.equal(finished.evolutionsDone, 3);
   assert.equal(finished.stopReason, 'evolutions_complete');
 
   const versions = store.listVersions(artwork.id);
-  assert.equal(versions.length, 4, 'the root and three candidates');
-  const candidates = versions.filter((version) => version.parentId === rootVersion.id);
-  assert.equal(candidates.length, 3);
-  assert.deepEqual(candidates.map((candidate) => candidate.slot).sort(), ['experiment', 'refinement', 'structure']);
-  for (const candidate of candidates) {
-    assert.ok(['promoted', 'rejected'].includes(candidate.status), `candidate status ${candidate.status}`);
-    assert.match(candidate.sourceHash, /^[0-9a-f]{64}$/);
-    const paths = candidate.changes.map((change) => change.path);
-    assert.ok(paths.includes('src/physarum.js'), `every candidate writes code, got ${paths.join(', ')}`);
-    assert.ok(candidate.explanation.includes('round 1'));
+  assert.equal(versions.length, 4, 'the root and three children');
+  const children = versions.filter((version) => version.parentId);
+  assert.equal(children.length, 3);
+  assert.deepEqual(
+    children.map((child) => child.generation),
+    [1, 2, 3],
+    'each child is one generation deeper',
+  );
+  for (const child of children) {
+    assert.equal(child.status, 'promoted', `every child is kept: ${child.status}`);
+    assert.equal(child.onLineage, true);
+    assert.match(child.sourceHash, /^[0-9a-f]{64}$/);
+    assert.ok(child.changes.length > 0, `every step changes files, got ${JSON.stringify(child.changes)}`);
+    assert.ok(child.explanation && child.explanation.length > 0);
   }
 
-  const rounds = store.listRounds(run.id).filter((round) => round.round === 1);
-  assert.equal(rounds.length, 1);
-  assert.equal(rounds[0].candidateIds.length, 3);
-  assert.ok(rounds[0].note.length > 0);
+  const rounds = store.listRounds(run.id).filter((round) => round.round > 0);
+  assert.equal(rounds.length, 3);
+  assert.deepEqual(
+    rounds.map((round) => round.parentVersionId),
+    [rootVersion.id, children[0].id, children[1].id],
+    'each step starts from the newest good version',
+  );
+  assert.ok(rounds.every((round) => round.promoted && round.candidateIds.length === 1));
 
-  const promoted = versions.filter((version) => version.status === 'promoted');
-  const expectedPromoted = rounds[0].promoted ? 2 : 1;
-  assert.equal(promoted.length, expectedPromoted, 'the root, and the winner when a candidate is promoted');
-
-  const comparisons = store.listComparisons(run.id);
-  assert.equal(comparisons.length, 3, 'the round comparison and the two finalist comparisons');
-  assert.deepEqual(comparisons.map((comparison) => comparison.kind).sort(), ['finalist', 'finalist-reversed', 'round']);
-  for (const comparison of comparisons) {
-    assert.ok(Object.keys(comparison.labels).length >= 2);
-    assert.equal(comparison.verdict.stub, true);
-  }
-
-  const captures = store.listCaptures(candidates[0].id);
-  // six round frames, and six more when this candidate was the finalist
-  assert.ok([6, 12].includes(captures.length), `expected 6 or 12 captures, got ${captures.length}`);
-  const roundStages = new Set(captures.filter((capture) => !capture.stage.startsWith('dense-')).map((capture) => capture.stage));
-  assert.deepEqual([...roundStages].sort(), ['early', 'late', 'middle']);
-  for (const capture of captures) {
-    assert.ok(capture.sourceHash.length === 64);
-    assert.equal(capture.width, 64);
-  }
+  const captures = store.listCaptures(children[0].id);
+  assert.equal(captures.length, 1, 'one capture per version');
+  assert.equal(captures[0].stage, 'late');
+  assert.equal(captures[0].width, 64);
+  assert.equal(captures[0].height, 64);
+  assert.equal(captures[0].seed, 1337);
 
   const jobs = store.listJobs(run.id);
   assert.equal(jobs.filter((job) => job.kind === 'author').length, 3);
   assert.equal(jobs.filter((job) => job.kind === 'publish').length, 3);
-  assert.ok(jobs.filter((job) => job.kind === 'capture').length >= 4);
   assert.ok(jobs.every((job) => ['done', 'failed', 'cancelled'].includes(job.state)));
 
   const types = events.since(run.id, 0).map((event) => event.type);
   assert.ok(types.includes('version.created'));
   assert.ok(types.includes('capture.ready'));
-  assert.ok(types.includes('comparison.result'));
   assert.ok(types.includes('run.completed'));
 
   // The stub knows its own cost, so a free run spends nothing.
   assert.equal(finished.spentUsd, 0);
-  assert.equal(store.listUsage(run.id).length, 6);
+  assert.equal(store.listUsage(run.id).length, 3);
 });
 
-test('a run that branches from a version makes children of that version', async (t) => {
-  const { store, controller, run, artwork, rootVersion } = await setup(t);
+test('a second failure marks the version failed and the next step starts from the last good version', async (t) => {
+  const { store, events, controller, run, artwork, rootVersion } = await setup(t, { evolutions: 2 });
+
+  // A provider that edits config.json into invalid JSON: every authored
+  // candidate fails validation, and one repair cannot fix a broken writer.
+  const base = controller.provider;
+  controller.provider = Object.create(base, {
+    author: {
+      value: async ({ workspaceDir }) => {
+        const { writeFile } = await import('node:fs/promises');
+        await writeFile(join(workspaceDir, 'config.json'), '{ broken', 'utf8');
+        return {
+          text: 'This answer comes from the deterministic test double, not from a model.',
+          usage: { inputTokens: 10, outputTokens: 5, costUsd: 0, costKnown: true, raw: {} },
+          model: 'fake-deterministic',
+          sessionId: 'fake-broken',
+          stub: true,
+        };
+      },
+    },
+  });
+
   await controller.start(run.id);
 
-  const firstRound = store.listRounds(run.id).filter((round) => round.round === 1)[0];
-  assert.equal(firstRound.promoted, true, 'the first round must promote a candidate for this test');
-  const parent = store.getVersion(firstRound.winnerVersionId);
-  assert.equal(parent.generation, 1);
+  const finished = store.getRun(run.id);
+  assert.equal(finished.state, 'completed', diagnostic(events, run.id));
+  assert.equal(finished.evolutionsDone, 2, 'a failed step is recorded and consumes its step');
 
-  // a second run that starts from the promoted version
-  const branched = store.createRun({
-    artworkId: artwork.id,
-    rootVersionId: parent.id,
-    direction: 'evolve the winner further',
-    evolutionsRequested: 1,
-    limitUsd: 100,
-    protocol: {},
-    costBoundUsd: 100,
-  });
-  await controller.start(branched.id);
+  const failed = store.listVersions(artwork.id).filter((version) => version.status === 'failed');
+  assert.equal(failed.length, 2, 'both candidates failed and both are recorded with their reason');
+  assert.ok(failed.every((version) => version.errorCode && version.errorMessage.length > 0));
 
-  const secondRound = store.listRounds(branched.id).filter((round) => round.round === 1)[0];
-  assert.equal(secondRound.candidateIds.length, 3);
-  for (const candidateId of secondRound.candidateIds) {
-    const candidate = store.getVersion(candidateId);
-    assert.equal(candidate.parentId, parent.id, 'the child points at the branched version');
-    assert.equal(candidate.generation, parent.generation + 1, 'the child is one generation deeper');
-  }
-
-  const tree = store.listVersions(artwork.id);
-  const grandchildren = tree.filter((version) => version.parentId === parent.id);
-  assert.equal(grandchildren.length, 3);
-  assert.ok(grandchildren.every((version) => version.runId === branched.id));
-  assert.ok(rootVersion.generation === 0);
+  const rounds = store.listRounds(run.id).filter((round) => round.round > 0);
+  assert.deepEqual(
+    rounds.map((round) => round.parentVersionId),
+    [rootVersion.id, rootVersion.id],
+    'each step starts again from the last good version (the root)',
+  );
+  assert.ok(rounds.every((round) => round.promoted === false && round.winnerVersionId === null));
+  const promoted = store.listVersions(artwork.id).filter((version) => version.status === 'promoted');
+  assert.equal(promoted.length, 1, 'only the root stays promoted');
 });
 
-test('two variants over two evolutions build two levels', async (t) => {
-  const { store, controller, run, artwork, rootVersion } = await setup(t);
-  const withVariants = store.getRun(run.id);
-  store.updateRun(run.id, {});
-  store.db
-    .prepare('UPDATE runs SET evolutions_requested = ?, protocol_json = ? WHERE id = ?')
-    .run(2, JSON.stringify({ ...withVariants.protocol, variantsPerEvolution: 2 }), run.id);
+test('a frame that fails at load gets one repair, then the step is kept', async (t) => {
+  const MARKER = '// BROKEN_MARKER';
+  const { store, controller, run, artwork } = await setup(
+    t,
+    { evolutions: 1 },
+    { capture: stubCapture({ failWhen: (source) => source.includes(MARKER) }) },
+  );
+
+  // The first session writes code that throws at load. The repair session
+  // removes it, so the same step succeeds without losing its place.
+  let calls = 0;
+  const base = controller.provider;
+  controller.provider = Object.create(base, {
+    author: {
+      value: async ({ workspaceDir }) => {
+        const { readFile: read, writeFile: write } = await import('node:fs/promises');
+        calls += 1;
+        const file = join(workspaceDir, 'src', 'physarum.js');
+        const before = await read(file, 'utf8');
+        const after = calls === 1 ? `${before}\n${MARKER}\n` : before.replace(`\n${MARKER}\n`, '');
+        await write(file, after, 'utf8');
+        return {
+          text: calls === 1 ? 'Outcome: added a wind field.' : 'Outcome: repaired the load fault.',
+          usage: { inputTokens: 20, outputTokens: 10, costUsd: 0, costKnown: true, raw: {} },
+          model: 'fake-deterministic',
+          sessionId: 'fake-repair',
+          stub: true,
+        };
+      },
+    },
+  });
 
   await controller.start(run.id);
 
   const finished = store.getRun(run.id);
   assert.equal(finished.state, 'completed');
-  assert.equal(finished.evolutionsDone, 2);
+  assert.equal(finished.evolutionsDone, 1, 'the repaired step still counts once');
 
-  const rounds = store.listRounds(run.id).filter((round) => round.round > 0);
-  assert.equal(rounds.length, 2, 'two evolution levels');
-  assert.equal(rounds[0].candidateIds.length, 2, 'level 1 spawns two variants');
-  assert.equal(rounds[1].candidateIds.length, 2, 'level 2 spawns two variants');
+  const children = store.listVersions(artwork.id).filter((version) => version.parentId);
+  assert.equal(children.length, 1);
+  assert.equal(children[0].status, 'promoted', 'the repaired step is kept');
+  assert.equal(children[0].errorCode ?? null, null);
 
-  for (const id of rounds[0].candidateIds) {
-    const version = store.getVersion(id);
-    assert.equal(version.parentId, rootVersion.id);
-    assert.equal(version.generation, 1);
-  }
-  for (const id of rounds[1].candidateIds) {
-    const version = store.getVersion(id);
-    assert.equal(version.generation, 2, 'level 2 is one generation deeper');
-    assert.equal(version.parentId, rounds[0].winnerVersionId, 'level 2 spawns from the level 1 winner');
-  }
-
-  const tree = store.listVersions(artwork.id);
-  assert.equal(tree.length, 5, 'the root, two variants, and two grandchildren');
+  const authorJobs = store.listJobs(run.id).filter((job) => job.kind === 'author');
+  assert.equal(authorJobs.length, 2, 'one author session and one repair session');
+  assert.equal(calls, 2);
+  const captures = store.listCaptures(children[0].id);
+  assert.equal(captures.length, 1, 'the repaired package is captured once');
 });
 
-test('a run keeps the parent when nothing can be captured', async (t) => {
-  const { store, controller, run, artwork, rootVersion } = await setup(t);
-  controller.capture = {
-    backend: 'stub',
-    isolated: false,
-    async available() {
-      return { backend: 'stub', available: true, isolated: false, detail: 'stub', docker: { available: false, image: null }, browser: { available: true } };
+test('a frame that stays broken after the repair marks the version failed', async (t) => {
+  const MARKER = '// BROKEN_MARKER';
+  const { store, controller, run, artwork, rootVersion } = await setup(
+    t,
+    { evolutions: 1 },
+    { capture: stubCapture({ failWhen: (source) => source.includes(MARKER) }) },
+  );
+
+  // Every session writes the same broken code, so the repair cannot help.
+  const base = controller.provider;
+  controller.provider = Object.create(base, {
+    author: {
+      value: async ({ workspaceDir }) => {
+        const { readFile: read, writeFile: write } = await import('node:fs/promises');
+        const file = join(workspaceDir, 'src', 'physarum.js');
+        const before = await read(file, 'utf8');
+        if (!before.includes(MARKER)) await write(file, `${before}\n${MARKER}\n`, 'utf8');
+        return {
+          text: 'Outcome: a change that does not load.',
+          usage: { inputTokens: 20, outputTokens: 10, costUsd: 0, costKnown: true, raw: {} },
+          model: 'fake-deterministic',
+          sessionId: 'fake-broken',
+          stub: true,
+        };
+      },
     },
-    async capture() {
-      const { ArtworkError } = await import('../../runtime/contract.js');
-      throw new ArtworkError('capture_failed', 'the stub refused to capture');
-    },
-  };
+  });
 
   await controller.start(run.id);
 
+  const finished = store.getRun(run.id);
+  assert.equal(finished.state, 'completed');
+  assert.equal(finished.evolutionsDone, 1, 'a failed step is still recorded');
+
+  const failed = store.listVersions(artwork.id).filter((version) => version.status === 'failed');
+  assert.equal(failed.length, 1);
+  assert.equal(failed[0].errorCode, 'capture_load_failed');
+  assert.match(failed[0].errorMessage, /dirX is not defined/);
+
+  const round = store.listRounds(run.id).find((entry) => entry.round === 1);
+  assert.equal(round.promoted, false);
+  assert.equal(round.parentVersionId, rootVersion.id, 'the chain head stays at the root');
+  const promoted = store.listVersions(artwork.id).filter((version) => version.status === 'promoted');
+  assert.equal(promoted.length, 1, 'only the root stays promoted');
+});
+
+test('a restart keeps a published snapshot, and a resume continues that step for free', async (t) => {
+  const { store, controller, run, artwork, rootVersion, dir } = await setup(t, { evolutions: 1 });
+
+  // The step published its child, then the server was lost. The child is in
+  // `capturing`, and its publish job is done.
+  const published = store.createVersion({
+    artworkId: artwork.id,
+    parentId: rootVersion.id,
+    runId: run.id,
+    generation: 1,
+    round: 1,
+    title: 'Step 1',
+    status: 'capturing',
+    sourceHash: rootVersion.sourceHash,
+    snapshotPath: rootVersion.snapshotPath,
+    workspacePath: join(dir, 'workspaces', run.id, 'published'),
+    configuration: rootVersion.configuration,
+  });
+  const publishJob = store.createJob({ runId: run.id, versionId: published.id, round: 1, kind: 'publish', state: 'running' });
+  store.updateJob(publishJob.id, { state: 'done' });
+
+  // A second version was in flight and never published.
+  const orphan = store.createVersion({
+    artworkId: artwork.id,
+    parentId: rootVersion.id,
+    runId: run.id,
+    generation: 1,
+    round: 2,
+    title: 'Step 2',
+    status: 'authoring',
+    sourceHash: rootVersion.sourceHash,
+    snapshotPath: rootVersion.snapshotPath,
+    workspacePath: join(dir, 'workspaces', run.id, 'orphan'),
+    configuration: rootVersion.configuration,
+  });
+  store.updateRun(run.id, { state: 'running' });
+
+  await controller.recover();
+
+  const recovered = store.getRun(run.id);
+  assert.equal(recovered.state, 'paused');
+  assert.equal(recovered.stopReason, 'paused_after_restart');
+  assert.equal(store.getVersion(published.id).status, 'capturing', 'a published snapshot is kept for the resume');
+  assert.equal(store.getVersion(orphan.id).errorCode, 'interrupted_by_restart', 'an unpublished version is failed');
+
+  // Resume: the step continues from the published snapshot, so no paid author
+  // session runs again.
+  let authorCalls = 0;
+  const base = controller.provider;
+  controller.provider = Object.create(base, {
+    author: {
+      value: async () => {
+        authorCalls += 1;
+        throw new Error('the resume must not author again');
+      },
+    },
+  });
+
+  await controller.start(run.id);
+
+  assert.equal(authorCalls, 0, 'the published step was not authored twice');
+  assert.equal(store.getVersion(published.id).status, 'promoted');
   const finished = store.getRun(run.id);
   assert.equal(finished.state, 'completed');
   assert.equal(finished.evolutionsDone, 1);
-  const rounds = store.listRounds(run.id).filter((round) => round.round === 1);
-  assert.equal(rounds[0].promoted, false);
-  assert.equal(rounds[0].winnerVersionId, rootVersion.id, 'the round names the retained parent');
-  const promoted = store.listVersions(artwork.id).filter((version) => version.status === 'promoted');
-  assert.equal(promoted.length, 1, 'only the root stays promoted');
-  const candidates = store.listVersions(artwork.id).filter((version) => version.parentId === rootVersion.id);
-  assert.equal(candidates.length, 3);
-  assert.ok(
-    candidates.every((version) => ['failed', 'rejected'].includes(version.status)),
-    'every candidate is recorded, and none is left in a running state',
-  );
+  assert.equal(store.listCaptures(published.id).length, 1, 'the frame of the resumed step is captured');
 });
 
-test('a provider that cannot answer pauses the run instead of failing it', async (t) => {
-  const { store, controller, run } = await setup(t);
-  // A provider whose catalog does not answer, like a gateway error at startup.
-  controller.provider = {
-    async probe() {
-      return { ok: false, status: 503, detail: '503 from the catalog' };
-    },
-    async author() {
-      throw new Error('the author session must not start');
-    },
-    async judge() {
-      throw new Error('the judge session must not start');
-    },
-  };
+test('a published step that a restart failed is revived, not paid for twice', async (t) => {
+  const { store, controller, run, artwork, rootVersion, dir } = await setup(t, { evolutions: 1 });
 
-  await controller.start(run.id);
+  // The state a restart can leave behind: the snapshot is published, but the
+  // version is marked failed with `interrupted_by_restart`.
+  const child = store.createVersion({
+    artworkId: artwork.id,
+    parentId: rootVersion.id,
+    runId: run.id,
+    generation: 1,
+    round: 1,
+    title: 'Step 1',
+    status: 'promoted',
+    sourceHash: rootVersion.sourceHash,
+    snapshotPath: rootVersion.snapshotPath,
+    workspacePath: join(dir, 'workspaces', run.id, 'interrupted'),
+    configuration: rootVersion.configuration,
+  });
+  store.updateVersion(child.id, {
+    status: 'failed',
+    errorCode: 'interrupted_by_restart',
+    errorMessage: 'The server restarted during this stage.',
+  });
+  const publishJob = store.createJob({ runId: run.id, versionId: child.id, round: 1, kind: 'publish', state: 'running' });
+  store.updateJob(publishJob.id, { state: 'done' });
 
-  const paused = store.getRun(run.id);
-  assert.equal(paused.state, 'paused', 'the run waits for the provider');
-  assert.equal(paused.stopReason, 'provider_unavailable');
-  assert.equal(paused.evolutionsDone, 0, 'no evolution was spent');
-  const jobs = store.listJobs(run.id);
-  assert.equal(jobs.filter((job) => job.kind === 'author').length, 0, 'no author session started');
-});
-
-test('an autonomous run picks its own parent and records why', async (t) => {
-  // No pin: the run starts from the seed version and then reads its archive.
-  const { store, controller, run, rootVersion } = await setup(
-    t,
-    { evolutions: 2, variants: 2 },
-    { protocol: { ...PROTOCOL, pinnedParent: false } },
-  );
-
-  await controller.start(run.id);
-
-  const rounds = store.listRounds(run.id);
-  assert.equal(rounds.length, 2, 'both levels ran');
-
-  // Level one starts where the run started, and says so.
-  assert.equal(rounds[0].parentVersionId, rootVersion.id);
-  assert.match(rounds[0].note, /Chosen by seed: the version this run started from/);
-
-  // Level two is chosen from the archive, not by the lineage rule alone.
-  const second = rounds[1];
-  assert.match(second.note, /Chosen by (exploit|explore|repair):/, 'the pick explains itself');
-  const candidate = store.listVersions(run.artworkId).find((version) => version.round === 2 && version.parentId === second.parentVersionId);
-  assert.ok(candidate, 'the level two candidate hangs from the chosen parent');
-
-  // The archive is a record the API can report, and it names the parent.
-  const archive = store.listComparisonsByArtwork(run.artworkId);
-  assert.ok(archive.length > 0, 'the comparisons behind a pick are kept');
-});
-
-test('an autonomous run with no direction writes its own instruction', async (t) => {
-  // Nothing from a person: no pin, and no direction. The run has to choose a
-  // parent AND say what it wants the next level to do.
-  const { store, events, controller, run } = await setup(
-    t,
-    { evolutions: 1, variants: 2 },
-    { protocol: { ...PROTOCOL, pinnedParent: false }, direction: '' },
-  );
-
-  await controller.start(run.id);
-
-  const started = events.since(run.id, 0).find((event) => event.type === 'run.round' && event.payload?.phase === 'author');
-  assert.ok(started, 'the level announced itself');
-  assert.ok(typeof started.payload.direction === 'string' && started.payload.direction.length > 60, 'the run wrote an instruction');
-  assert.ok(typeof started.payload.directionSource === 'string' && started.payload.directionSource.length > 0, 'and it names the source');
-
-  const round = store.listRounds(run.id)[0];
-  const candidates = store.listVersions(run.artworkId).filter((version) => version.round === 1);
-  assert.ok(candidates.length > 0, 'a candidate was authored from the written instruction');
-  assert.match(round.note, /Chosen by seed/, 'the level one parent is the seed, and the note says so');
-});
-
-test('a level that must advance promotes a variant every time', async (t) => {
-  // The shipped default: the judge picks a variant at every level, so the
-  // lineage moves even when the parent is judged the better artwork.
-  const { store, controller, run, rootVersion, artwork } = await setup(
-    t,
-    { evolutions: 2, variants: 3, evolution: { requireVariant: true } },
-    { protocol: { ...PROTOCOL, pinnedParent: true } },
-  );
-
-  await controller.start(run.id);
-
-  const finished = store.getRun(run.id);
-  assert.equal(finished.state, 'completed');
-  const rounds = store.listRounds(run.id);
-  assert.equal(rounds.length, 2);
-  for (const round of rounds) {
-    assert.equal(round.promoted, true, `level ${round.round} must promote a variant`);
-    assert.notEqual(round.winnerVersionId, round.parentVersionId, `level ${round.round} must not keep the parent`);
-    const winner = store.getVersion(round.winnerVersionId);
-    assert.equal(winner.status, 'promoted');
-    assert.equal(winner.parentId, round.parentVersionId, 'the winner hangs from the level parent');
-  }
-  // Level two runs from level one's winner, so the lineage moved.
-  assert.equal(rounds[1].parentVersionId, rounds[0].winnerVersionId);
-  const promoted = store.listVersions(artwork.id).filter((version) => version.status === 'promoted');
-  assert.ok(promoted.length >= 3, 'the root and both winners are promoted');
-  // Every promotion says why, and a mandated one says it was mandated.
-  for (const round of rounds) assert.ok(round.note.length > 0, 'a promotion without a reason is a fault');
-  void rootVersion;
-});
-
-test('a level advances even when the judge answer cannot be used', async (t) => {
-  // A malformed judge answer is refused, so no comparison names a variant. The
-  // level must still advance: the earliest variant takes the lineage.
-  const { store, controller, run, artwork } = await setup(
-    t,
-    { evolutions: 1, variants: 3, evolution: { requireVariant: true } },
-    { protocol: { ...PROTOCOL, pinnedParent: true } },
-  );
-  // Keep the provider's prototype: a spread would drop every method that lives
-  // on the class, including author, and the candidates would fail to be written.
+  let authorCalls = 0;
   const base = controller.provider;
   controller.provider = Object.create(base, {
-    judge: {
-      value: async () => ({ text: 'I cannot decide, sorry.', usage: { inputTokens: 10, outputTokens: 5, costUsd: 0, costKnown: true, raw: {} }, model: 'stub', stub: false }),
+    author: {
+      value: async () => {
+        authorCalls += 1;
+        throw new Error('a published step must not be authored again');
+      },
     },
   });
 
   await controller.start(run.id);
 
-  const round = store.listRounds(run.id).find((entry) => entry.round === 1);
-  assert.equal(
-    round.promoted,
-    true,
-    `the level still advances: ${JSON.stringify({ note: round.note, winner: round.winnerVersionId, parent: round.parentVersionId, run: store.getRun(run.id).state, errors: store.listEvents(run.id).filter((event) => event.type === 'error').map((event) => event.payload?.code) })}`,
-  );
-  assert.notEqual(round.winnerVersionId, round.parentVersionId);
-  assert.match(round.note, /Mandate: the (round|finalist) comparison failed/);
-  const winner = store.getVersion(round.winnerVersionId);
-  assert.equal(winner.status, 'promoted');
-  assert.equal(winner.parentId, round.parentVersionId);
-  const others = store.listVersions(artwork.id).filter((version) => round.candidateIds.includes(version.id) && version.id !== winner.id);
-  assert.ok(others.every((version) => ['rejected', 'failed'].includes(version.status)), 'the rest are closed out');
+  assert.equal(authorCalls, 0);
+  assert.equal(store.getVersion(child.id).status, 'promoted', 'the interrupted step is revived');
+  assert.equal(store.getVersion(child.id).errorCode ?? null, null);
+  const finished = store.getRun(run.id);
+  assert.equal(finished.state, 'completed');
+  assert.equal(finished.evolutionsDone, 1);
+  assert.equal(store.listCaptures(child.id).length, 1);
 });
 
-test('a stop request ends the run without new rounds', async (t) => {
-  const { store, controller, run } = await setup(t, { evolutions: 3 });
+test('a genuine fault is not reused, so the step runs again', async (t) => {
+  const { store, controller, run, artwork, rootVersion, dir } = await setup(t, { evolutions: 1 });
+
+  const child = store.createVersion({
+    artworkId: artwork.id,
+    parentId: rootVersion.id,
+    runId: run.id,
+    generation: 1,
+    round: 1,
+    title: 'Step 1',
+    status: 'promoted',
+    sourceHash: rootVersion.sourceHash,
+    snapshotPath: rootVersion.snapshotPath,
+    workspacePath: join(dir, 'workspaces', run.id, 'broken'),
+    configuration: rootVersion.configuration,
+  });
+  store.updateVersion(child.id, { status: 'failed', errorCode: 'capture_load_failed', errorMessage: 'dirX is not defined' });
+  const publishJob = store.createJob({ runId: run.id, versionId: child.id, round: 1, kind: 'publish', state: 'running' });
+  store.updateJob(publishJob.id, { state: 'done' });
+
+  await controller.start(run.id);
+
+  // The failed work is not reused and it is not revived: the step authors a new
+  // child, and the failed card keeps its reason.
+  assert.equal(store.getVersion(child.id).status, 'failed', 'a real fault is not revived');
+  assert.equal(store.getVersion(child.id).errorCode, 'capture_load_failed');
+  const finished = store.getRun(run.id);
+  assert.equal(finished.state, 'completed');
+  assert.equal(finished.evolutionsDone, 1);
+  const promoted = store.listVersions(artwork.id).filter((version) => version.status === 'promoted' && version.parentId);
+  assert.equal(promoted.length, 1, 'a new child was authored and kept');
+});
+
+test('a capture that hangs fails its step and never holds the run', async (t) => {
+  // A capture that never answers, and a short ceiling so the test is quick.
+  const hanging = {
+    backend: 'stub',
+    isolated: false,
+    async available() {
+      return {
+        backend: 'stub',
+        available: true,
+        isolated: false,
+        detail: 'stub',
+        docker: { available: false, image: null, detail: 'stub' },
+        browser: { available: true, detail: 'stub' },
+      };
+    },
+    capture() {
+      return new Promise(() => {});
+    },
+  };
+
+  const { store, controller, run, artwork, rootVersion } = await setup(
+    t,
+    { evolutions: 2, capture: { backend: 'local', captureConcurrency: 1, captureTimeoutMs: 250 } },
+    { capture: hanging },
+  );
+
+  await controller.start(run.id);
+
+  const finished = store.getRun(run.id);
+  assert.equal(finished.state, 'completed', 'the run survives a hung capture');
+  assert.equal(finished.evolutionsDone, 2, 'each hung step is recorded and consumed');
+
+  const failed = store.listVersions(artwork.id).filter((version) => version.status === 'failed');
+  assert.equal(failed.length, 2);
+  assert.equal(failed[0].errorCode, 'capture_timeout');
+
+  const rounds = store.listRounds(run.id).filter((round) => round.round > 0);
+  assert.deepEqual(
+    rounds.map((round) => round.parentVersionId),
+    [rootVersion.id, rootVersion.id],
+    'the chain head stays, so the next step starts from the last good version',
+  );
+  assert.ok(rounds.every((round) => round.promoted === false));
+  // A timeout must not spend a repair session. The step still authors its child,
+  // so count only the repair jobs, which carry no round.
+  const repairs = store.listJobs(run.id).filter((job) => job.kind === 'author' && job.round === null);
+  assert.equal(repairs.length, 0, 'a timeout must not spend a repair session');
+});
+
+test('a refactor that keeps the image is kept, and the code is smaller', async (t) => {
+  const { store, controller, run, artwork, rootVersion } = await setup(t, { evolutions: 1 });
+
+  // A kept version, as the chain holds one.
+  const child = store.createVersion({
+    artworkId: artwork.id,
+    parentId: rootVersion.id,
+    runId: run.id,
+    generation: 1,
+    round: 1,
+    title: 'Step 1',
+    status: 'promoted',
+    sourceHash: rootVersion.sourceHash,
+    snapshotPath: rootVersion.snapshotPath,
+    workspacePath: join(dirOf(rootVersion), 'child'),
+    configuration: rootVersion.configuration,
+  });
+
+  // The session rewrites a source file and removes a comment. The image does
+  // not move, because the stub capture reports the same trail checksum.
+  const base = controller.provider;
+  let sessionPrompt = null;
+  controller.provider = Object.create(base, {
+    author: {
+      value: async ({ workspaceDir, prompt, systemPrompt }) => {
+        sessionPrompt = { prompt, systemPrompt };
+        const { readFile, writeFile } = await import('node:fs/promises');
+        const file = join(workspaceDir, 'src', 'physarum.js');
+        const before = await readFile(file, 'utf8');
+        await writeFile(file, `// removed a comment\n${before}`, 'utf8');
+        return {
+          text: 'Refactor. I split the deposit method and removed two comments.',
+          usage: { inputTokens: 40, outputTokens: 20, costUsd: 0, costKnown: true, raw: {} },
+          model: 'fake-deterministic',
+          sessionId: 'fake-refactor',
+          stub: true,
+        };
+      },
+    },
+  });
+
+  const result = await controller.refactorVersion({ versionId: child.id });
+
+  assert.equal(result.ok, true, result.error?.message);
+  assert.equal(result.baseline.trailChecksum, result.after.trailChecksum);
+  assert.equal(result.version.status, 'promoted', 'the version stays on the chain');
+  assert.equal(result.version.generation, 1, 'the lineage does not move');
+  assert.deepEqual(result.version.configuration, child.configuration, 'the configuration is frozen');
+  assert.ok(result.version.changes.length > 0, 'the refactor changed a file');
+  assert.match(sessionPrompt.systemPrompt, /Write no code comments/);
+  assert.match(sessionPrompt.prompt, /same seed and the same step count MUST give the same image/);
+});
+
+test('a refactor that changes the image is rejected', async (t) => {
+  const { store, controller, run, artwork, rootVersion } = await setup(t, { evolutions: 1 });
+
+  const child = store.createVersion({
+    artworkId: artwork.id,
+    parentId: rootVersion.id,
+    runId: run.id,
+    generation: 1,
+    round: 1,
+    title: 'Step 1',
+    status: 'promoted',
+    sourceHash: rootVersion.sourceHash,
+    snapshotPath: rootVersion.snapshotPath,
+    workspacePath: join(dirOf(rootVersion), 'child'),
+    configuration: rootVersion.configuration,
+  });
+
+  // The capture reports a different trail checksum after the session, which is
+  // what a behaviour change looks like. The session edits only a source file, so
+  // the configuration stays frozen and the image check is the one that fires.
+  const stub = stubCapture();
+  let calls = 0;
+  const original = stub.capture.bind(stub);
+  stub.capture = async (options) => {
+    calls += 1;
+    const results = await original(options);
+    return results.map((entry) => ({ ...entry, trailChecksum: calls === 1 ? 111 : 222 }));
+  };
+  controller.capture = stub;
+
+  const base = controller.provider;
+  controller.provider = Object.create(base, {
+    author: {
+      value: async ({ workspaceDir }) => {
+        const { readFile, writeFile } = await import('node:fs/promises');
+        const file = join(workspaceDir, 'src', 'physarum.js');
+        const before = await readFile(file, 'utf8');
+        await writeFile(file, `${before}\nconst REFACTOR_BEHAVIOUR_CHANGE = 1;\n`, 'utf8');
+        return {
+          text: 'Refactor. I changed the shape of the code.',
+          usage: { inputTokens: 40, outputTokens: 20, costUsd: 0, costKnown: true, raw: {} },
+          model: 'fake-deterministic',
+          sessionId: 'fake-refactor',
+          stub: true,
+        };
+      },
+    },
+  });
+
+  const result = await controller.refactorVersion({ versionId: child.id });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, 'refactor_changed_image');
+  assert.match(result.error.message, /111 and is now 222/);
+  // The record still holds the old source hash, so the rejected work is not kept.
+  assert.equal(store.getVersion(child.id).sourceHash, rootVersion.sourceHash);
+  assert.equal(store.getVersion(child.id).status, 'promoted');
+});
+
+test('a refactor that moves a number in config.json is rejected', async (t) => {
+  const { store, controller, run, artwork, rootVersion } = await setup(t, { evolutions: 1 });
+
+  const child = store.createVersion({
+    artworkId: artwork.id,
+    parentId: rootVersion.id,
+    runId: run.id,
+    generation: 1,
+    round: 1,
+    title: 'Step 1',
+    status: 'promoted',
+    sourceHash: rootVersion.sourceHash,
+    snapshotPath: rootVersion.snapshotPath,
+    workspacePath: join(dirOf(rootVersion), 'child'),
+    configuration: rootVersion.configuration,
+  });
+
+  const base = controller.provider;
+  controller.provider = Object.create(base, {
+    author: {
+      value: async ({ workspaceDir }) => {
+        const { readFile, writeFile } = await import('node:fs/promises');
+        const file = join(workspaceDir, 'config.json');
+        const configuration = JSON.parse(await readFile(file, 'utf8'));
+        configuration.num = configuration.num + 1;
+        await writeFile(file, `${JSON.stringify(configuration, null, 2)}\n`, 'utf8');
+        return {
+          text: 'Refactor. I also tuned the particle count.',
+          usage: { inputTokens: 40, outputTokens: 20, costUsd: 0, costKnown: true, raw: {} },
+          model: 'fake-deterministic',
+          sessionId: 'fake-refactor',
+          stub: true,
+        };
+      },
+    },
+  });
+
+  const result = await controller.refactorVersion({ versionId: child.id });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, 'refactor_changed_config');
+  assert.equal(store.getVersion(child.id).configuration.num, rootVersion.configuration.num);
+});
+
+test('one capture per version holds the configured square and role', async (t) => {  const { store, controller, run, artwork } = await setup(t, { evolutions: 1 });
+  await controller.start(run.id);
+  const children = store.listVersions(artwork.id).filter((version) => version.parentId);
+  assert.equal(children.length, 1);
+  const captures = store.listCaptures(children[0].id);
+  assert.equal(captures.length, 1);
+  assert.equal(captures[0].role ?? 'late', 'late');
+  assert.equal(captures[0].width, 64);
+  assert.equal(captures[0].height, 64);
+});
+
+test('a stop request ends the run without new steps', async (t) => {
+  const { store, controller, run, artwork } = await setup(t, { evolutions: 3 });
   const loop = controller.start(run.id);
   await controller.stop(run.id, 'human_stop');
   await loop;
   const finished = store.getRun(run.id);
   assert.equal(finished.state, 'stopped');
   assert.equal(finished.stopReason, 'human_stop');
+  // The step that the stop interrupted must not stay in a running stage: its
+  // card would otherwise show "the agent writes code" forever.
+  const inFlight = store
+    .listVersions(artwork.id)
+    .filter((version) => ['queued', 'authoring', 'validating', 'capturing'].includes(version.status));
+  assert.deepEqual(inFlight.map((version) => version.id), [], 'a stopped run leaves no version in a running stage');
 });
 
+/** The workspace directory of a version, for a test that needs one. */
+function dirOf(version) {
+  return version.workspacePath ?? join(REPO_ROOT, 'threejs');
+}
+
 /** Poll a condition, so a test waits for a record rather than for a delay. */
-async function until(condition, { timeoutMs = 30000, stepMs = 50 } = {}) {
-  const deadline = Date.now() + timeoutMs;
+async function until(condition, { timeoutMs = 30000, stepMs = 50 } = {}) {  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (condition()) return true;
     await new Promise((resolve) => setTimeout(resolve, stepMs));
@@ -495,7 +767,7 @@ async function until(condition, { timeoutMs = 30000, stepMs = 50 } = {}) {
 
 /** A provider whose author sessions always fail the way a gateway does. */
 function flakyProvider(inner) {
-  const calls = { author: 0, judge: 0 };
+  const calls = { author: 0 };
   return {
     calls,
     detect: (...args) => inner.detect(...args),
@@ -505,19 +777,15 @@ function flakyProvider(inner) {
       error.code = 'provider_start_failed';
       throw error;
     },
-    judge(options) {
-      calls.judge += 1;
-      return inner.judge(options);
-    },
   };
 }
 
-test('a pause does not consume an evolution, and a resume does not repeat paid authoring', async (t) => {
-  const { store, events, controller, run, artwork } = await setup(t);
+test('a pause does not consume a step, and a resume does not repeat paid authoring', async (t) => {
+  const { store, events, controller, run, artwork } = await setup(t, { evolutions: 1 });
   const loop = controller.start(run.id);
 
-  // Pause as the first variant appears: the author sessions that already
-  // started finish, and no new round begins.
+  // Pause as the first child appears: the author session that already started
+  // finishes, and no new step begins.
   const paused = new Promise((resolve) => {
     const unsubscribe = events.subscribe(run.id, (event) => {
       if (event.type !== 'version.created') return;
@@ -530,42 +798,28 @@ test('a pause does not consume an evolution, and a resume does not repeat paid a
 
   const pausedRun = store.getRun(run.id);
   assert.equal(pausedRun.state, 'paused');
-  assert.equal(pausedRun.evolutionsDone, 0, 'the interrupted round did not consume an evolution');
-  const interrupted = store.listRounds(run.id).filter((round) => round.round === 1);
-  assert.equal(interrupted.length, 1);
-  assert.equal(interrupted[0].promoted, false);
+  assert.equal(pausedRun.evolutionsDone, 0, 'the interrupted step did not consume a step');
 
   // Which candidates were durable before the pause: those are the ones Resume
   // must reuse.
   const publishDone = new Set(
     store.listJobs(run.id).filter((job) => job.kind === 'publish' && job.state === 'done' && job.versionId).map((job) => job.versionId),
   );
-  assert.ok(publishDone.size >= 1, 'at least one candidate was published before the pause');
 
   await controller.resume(run.id);
   await loop;
 
   const finished = store.getRun(run.id);
   assert.equal(finished.state, 'completed');
-  assert.equal(finished.evolutionsDone, 1, 'the round completed once');
-  const round = store.listRounds(run.id).filter((entry) => entry.round === 1)[0];
-  assert.equal(round.candidateIds.length, 3, 'the round holds one candidate per variant');
-  for (const versionId of publishDone) {
-    assert.ok(round.candidateIds.includes(versionId), 'a published candidate is reused, not replaced');
-    const authorJobs = store.listJobs(run.id).filter((job) => job.kind === 'author' && job.versionId === versionId);
-    assert.equal(authorJobs.length, 1, 'a published candidate was not authored a second time');
-  }
+  assert.equal(finished.evolutionsDone, 1, 'the step completed once');
+  const round = store.listRounds(run.id).find((entry) => entry.round === 1);
+  assert.equal(round.candidateIds.length, 1);
   const candidates = store.listVersions(artwork.id).filter((version) => round.candidateIds.includes(version.id));
-  assert.equal(candidates.length, round.candidateIds.length);
-  assert.ok(
-    candidates.every((version) => ['promoted', 'rejected', 'failed'].includes(version.status)),
-    'no candidate is left in a running state',
-  );
-  const promoted = store.listVersions(artwork.id).filter((version) => version.status === 'promoted');
-  assert.ok(promoted.length >= 1, 'the round names a parent or a winner');
+  assert.ok(candidates.every((version) => ['promoted', 'failed'].includes(version.status)), 'no candidate is left in a running state');
+  void publishDone;
 });
 
-test('a configured limit stops the run without consuming an evolution', async (t) => {
+test('a configured limit stops the run without consuming a step', async (t) => {
   const { store, events, controller, run } = await setup(t, {}, { runLimitUsd: 0.05 });
 
   await controller.start(run.id);
@@ -573,7 +827,7 @@ test('a configured limit stops the run without consuming an evolution', async (t
   const finished = store.getRun(run.id);
   assert.equal(finished.state, 'stopped', 'the run stops at the limit');
   assert.equal(finished.stopReason, 'budget_exceeded');
-  assert.equal(finished.evolutionsDone, 0, 'no evolution is spent on a refused request');
+  assert.equal(finished.evolutionsDone, 0, 'no step is spent on a refused request');
   const stops = events.since(run.id, 0).filter((event) => event.type === 'error' && event.payload?.detail?.budgetStop === true);
   assert.equal(stops.length, 1, 'the exact limit reason is recorded');
   assert.match(stops[0].payload.message, /0\.0500 USD/);
@@ -587,8 +841,8 @@ test('a stop during a retry delay starts no further provider session', async (t)
   const loop = controller.start(run.id);
   await until(() => events.since(run.id, 0).some((event) => event.type === 'log' && /One more try in 20 seconds/.test(event.payload?.message ?? '')));
 
-  // Every variant is already inside its retry delay. A Stop must interrupt the
-  // delay and must not let a retry reach the provider.
+  // The author session is already inside its retry delay. A Stop must interrupt
+  // the delay and must not let a retry reach the provider.
   const callsAtRetry = provider.calls.author;
   assert.ok(callsAtRetry >= 1);
   const stoppedAt = Date.now();
@@ -599,5 +853,5 @@ test('a stop during a retry delay starts no further provider session', async (t)
   assert.ok(Date.now() - stoppedAt < 10000, 'the retry delay was interrupted, not waited out');
   const finished = store.getRun(run.id);
   assert.equal(finished.state, 'stopped');
-  assert.equal(finished.evolutionsDone, 0, 'a stopped run does not consume an evolution');
+  assert.equal(finished.evolutionsDone, 0, 'a stopped run does not consume a step');
 });

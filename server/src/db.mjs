@@ -29,10 +29,8 @@ CREATE TABLE IF NOT EXISTS versions (
   run_id TEXT,
   generation INTEGER NOT NULL DEFAULT 0,
   round INTEGER,
-  slot TEXT,
   title TEXT NOT NULL,
   status TEXT NOT NULL,
-  direction TEXT,
   source_hash TEXT NOT NULL,
   snapshot_path TEXT NOT NULL,
   workspace_path TEXT,
@@ -49,7 +47,6 @@ CREATE TABLE IF NOT EXISTS runs (
   id TEXT PRIMARY KEY,
   artwork_id TEXT NOT NULL,
   root_version_id TEXT NOT NULL,
-  direction TEXT NOT NULL,
   evolutions_requested INTEGER NOT NULL,
   evolutions_done INTEGER NOT NULL DEFAULT 0,
   state TEXT NOT NULL,
@@ -59,7 +56,6 @@ CREATE TABLE IF NOT EXISTS runs (
   reserved_usd REAL NOT NULL DEFAULT 0,
   calls INTEGER NOT NULL DEFAULT 0,
   tokens INTEGER NOT NULL DEFAULT 0,
-  unchanged_rounds INTEGER NOT NULL DEFAULT 0,
   protocol_json TEXT NOT NULL,
   cost_bound_usd REAL NOT NULL,
   created_at TEXT NOT NULL,
@@ -83,7 +79,6 @@ CREATE TABLE IF NOT EXISTS jobs (
   run_id TEXT NOT NULL,
   version_id TEXT,
   round INTEGER,
-  slot TEXT,
   kind TEXT NOT NULL,
   state TEXT NOT NULL,
   attempts INTEGER NOT NULL DEFAULT 0,
@@ -114,31 +109,6 @@ CREATE TABLE IF NOT EXISTS captures (
   meta_json TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS comparisons (
-  id TEXT PRIMARY KEY,
-  run_id TEXT NOT NULL,
-  round INTEGER NOT NULL,
-  kind TEXT NOT NULL,
-  order_json TEXT NOT NULL,
-  labels_json TEXT NOT NULL,
-  verdict_json TEXT NOT NULL,
-  winner_version_id TEXT,
-  confidence REAL,
-  uncertainty TEXT,
-  judge_session TEXT,
-  source_hash TEXT,
-  created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS evaluations (
-  id TEXT PRIMARY KEY,
-  run_id TEXT NOT NULL,
-  round INTEGER NOT NULL,
-  version_id TEXT NOT NULL,
-  comparison_id TEXT,
-  outcome TEXT NOT NULL,
-  note TEXT,
-  created_at TEXT NOT NULL
-);
 CREATE TABLE IF NOT EXISTS usage (
   id TEXT PRIMARY KEY,
   run_id TEXT,
@@ -161,51 +131,11 @@ CREATE TABLE IF NOT EXISTS events (
   payload_json TEXT NOT NULL,
   PRIMARY KEY (run_id, seq)
 );
--- Measurement records. These are NOT ancestry: a row here says "these two
--- versions were compared with this measure", and nothing about parent links.
-CREATE TABLE IF NOT EXISTS analysis_runs (
-  id TEXT PRIMARY KEY,
-  artwork_id TEXT NOT NULL,
-  measure TEXT NOT NULL,
-  state TEXT NOT NULL,
-  revision TEXT,
-  params_json TEXT NOT NULL DEFAULT '{}',
-  progress_json TEXT NOT NULL DEFAULT '{}',
-  error_code TEXT,
-  error_message TEXT,
-  started_at TEXT,
-  finished_at TEXT,
-  created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS pair_measurements (
-  id TEXT PRIMARY KEY,
-  analysis_run_id TEXT NOT NULL,
-  artwork_id TEXT NOT NULL,
-  measure TEXT NOT NULL,
-  version_a TEXT NOT NULL,
-  version_b TEXT NOT NULL,
-  pair_key TEXT NOT NULL,
-  outcome TEXT NOT NULL,
-  score REAL,
-  band TEXT,
-  evidence_json TEXT NOT NULL DEFAULT '{}',
-  source_hash_a TEXT,
-  source_hash_b TEXT,
-  configuration_hash_a TEXT,
-  configuration_hash_b TEXT,
-  error_code TEXT,
-  error_message TEXT,
-  created_at TEXT NOT NULL,
-  UNIQUE (analysis_run_id, measure, pair_key)
-);
 CREATE INDEX IF NOT EXISTS idx_versions_artwork ON versions (artwork_id);
 CREATE INDEX IF NOT EXISTS idx_versions_parent ON versions (parent_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_run ON jobs (run_id);
 CREATE INDEX IF NOT EXISTS idx_captures_version ON captures (version_id);
 CREATE INDEX IF NOT EXISTS idx_usage_run ON usage (run_id);
-CREATE INDEX IF NOT EXISTS idx_analysis_artwork ON analysis_runs (artwork_id, measure, created_at);
-CREATE INDEX IF NOT EXISTS idx_pairs_lookup ON pair_measurements (artwork_id, measure, pair_key);
-CREATE INDEX IF NOT EXISTS idx_pairs_run ON pair_measurements (analysis_run_id);
 `;
 
 function json(value) {
@@ -292,10 +222,8 @@ export class Store {
       runId: version.runId ?? null,
       generation: version.generation ?? 0,
       round: version.round ?? null,
-      slot: version.slot ?? null,
       title: version.title,
       status: version.status,
-      direction: version.direction ?? null,
       sourceHash: version.sourceHash,
       snapshotPath: version.snapshotPath,
       workspacePath: version.workspacePath ?? null,
@@ -308,9 +236,10 @@ export class Store {
     };
     this.db
       .prepare(
-        `INSERT INTO versions (id, artwork_id, parent_id, run_id, generation, round, slot, title, status, direction,
-           source_hash, snapshot_path, workspace_path, configuration_json, changes_json, explanation, on_lineage, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO versions (id, artwork_id, parent_id, run_id, generation, round, title, status,
+           source_hash, snapshot_path, workspace_path, configuration_json, changes_json, explanation,
+           on_lineage, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         record.id,
@@ -319,10 +248,8 @@ export class Store {
         record.runId,
         record.generation,
         record.round,
-        record.slot,
         record.title,
         record.status,
-        record.direction,
         record.sourceHash,
         record.snapshotPath,
         record.workspacePath,
@@ -350,7 +277,7 @@ export class Store {
       .prepare(
         `UPDATE versions SET status = ?, title = ?, configuration_json = ?, changes_json = ?, explanation = ?,
            on_lineage = ?, error_code = ?, error_message = ?, source_hash = ?, snapshot_path = ?, workspace_path = ?,
-           generation = ?, round = ?, slot = ?, parent_id = ?, updated_at = ?
+           generation = ?, round = ?, parent_id = ?, updated_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -367,7 +294,6 @@ export class Store {
         next.workspacePath,
         next.generation,
         next.round ?? null,
-        next.slot ?? null,
         next.parentId ?? null,
         next.updatedAt,
         id,
@@ -406,7 +332,6 @@ export class Store {
       id: run.id ?? newId('run'),
       artworkId: run.artworkId,
       rootVersionId: run.rootVersionId,
-      direction: run.direction,
       evolutionsRequested: run.evolutionsRequested,
       evolutionsDone: 0,
       state: run.state ?? 'queued',
@@ -416,7 +341,6 @@ export class Store {
       reservedUsd: 0,
       calls: 0,
       tokens: 0,
-      unchangedRounds: 0,
       protocol: run.protocol,
       costBoundUsd: run.costBoundUsd,
       createdAt: nowIso(),
@@ -426,16 +350,15 @@ export class Store {
     };
     this.db
       .prepare(
-        `INSERT INTO runs (id, artwork_id, root_version_id, direction, evolutions_requested, evolutions_done, state,
-           limit_usd, spent_usd, reserved_usd, calls, tokens, unchanged_rounds, protocol_json, cost_bound_usd,
+        `INSERT INTO runs (id, artwork_id, root_version_id, evolutions_requested, evolutions_done, state,
+           limit_usd, spent_usd, reserved_usd, calls, tokens, protocol_json, cost_bound_usd,
            created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 0, ?, ?, 0, 0, 0, 0, 0, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, 0, ?, ?, 0, 0, 0, 0, ?, ?, ?, ?)`,
       )
       .run(
         record.id,
         record.artworkId,
         record.rootVersionId,
-        record.direction,
         record.evolutionsRequested,
         record.state,
         record.limitUsd,
@@ -454,7 +377,7 @@ export class Store {
     this.db
       .prepare(
         `UPDATE runs SET state = ?, stop_reason = ?, evolutions_done = ?, spent_usd = ?, reserved_usd = ?,
-           calls = ?, tokens = ?, unchanged_rounds = ?, updated_at = ?, started_at = ?, finished_at = ?
+           calls = ?, tokens = ?, updated_at = ?, started_at = ?, finished_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -465,7 +388,6 @@ export class Store {
         next.reservedUsd,
         next.calls,
         next.tokens,
-        next.unchangedRounds,
         next.updatedAt,
         next.startedAt ?? null,
         next.finishedAt ?? null,
@@ -486,7 +408,7 @@ export class Store {
   /** Runs that a restart must recover: not terminal. */
   listActiveRuns() {
     return this.db
-      .prepare("SELECT * FROM runs WHERE state IN ('queued','running','paused','stopping') ORDER BY created_at")
+      .prepare("SELECT * FROM runs WHERE state IN ('queued','running','stopping') ORDER BY created_at")
       .all()
       .map(runFromRow);
   }
@@ -537,7 +459,6 @@ export class Store {
       runId: job.runId,
       versionId: job.versionId ?? null,
       round: job.round ?? null,
-      slot: job.slot ?? null,
       kind: job.kind,
       state: job.state ?? 'queued',
       attempts: job.attempts ?? 0,
@@ -547,15 +468,14 @@ export class Store {
     };
     this.db
       .prepare(
-        `INSERT INTO jobs (id, run_id, version_id, round, slot, kind, state, attempts, payload_json, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO jobs (id, run_id, version_id, round, kind, state, attempts, payload_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         record.id,
         record.runId,
         record.versionId,
         record.round,
-        record.slot,
         record.kind,
         record.state,
         record.attempts,
@@ -673,282 +593,6 @@ export class Store {
     return newest;
   }
 
-  // ── comparisons and evaluations ───────────────────────────────────────────
-  createComparison(comparison) {
-    const record = {
-      id: comparison.id ?? newId('cmp'),
-      runId: comparison.runId,
-      round: comparison.round,
-      kind: comparison.kind,
-      order: comparison.order,
-      labels: comparison.labels,
-      verdict: comparison.verdict,
-      winnerVersionId: comparison.winnerVersionId ?? null,
-      confidence: comparison.confidence ?? null,
-      uncertainty: comparison.uncertainty ?? null,
-      judgeSession: comparison.judgeSession ?? null,
-      sourceHash: comparison.sourceHash ?? null,
-      createdAt: nowIso(),
-    };
-    this.db
-      .prepare(
-        `INSERT INTO comparisons (id, run_id, round, kind, order_json, labels_json, verdict_json, winner_version_id,
-           confidence, uncertainty, judge_session, source_hash, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        record.id,
-        record.runId,
-        record.round,
-        record.kind,
-        json(record.order),
-        json(record.labels),
-        json(record.verdict),
-        record.winnerVersionId,
-        record.confidence,
-        record.uncertainty,
-        record.judgeSession,
-        record.sourceHash,
-        record.createdAt,
-      );
-    return { ...record, createdAt: record.createdAt };
-  }
-
-  listComparisons(runId) {
-    return this.db
-      .prepare('SELECT * FROM comparisons WHERE run_id = ? ORDER BY created_at')
-      .all(runId)
-      .map((row) => ({
-        id: row.id,
-        runId: row.run_id,
-        round: row.round,
-        kind: row.kind,
-        order: parseJson(row.order_json, []),
-        labels: parseJson(row.labels_json, {}),
-        verdict: parseJson(row.verdict_json, {}),
-        winnerVersionId: row.winner_version_id,
-        confidence: row.confidence,
-        uncertainty: row.uncertainty,
-        judgeSession: row.judge_session,
-        sourceHash: row.source_hash,
-        createdAt: row.created_at,
-      }));
-  }
-
-  /**
-   * Every comparison of one artwork, across all of its runs. The archive policy
-   * needs the whole voting record of a version, not only the run that made it.
-   */
-  listComparisonsByArtwork(artworkId) {
-    return this.db
-      .prepare(
-        `SELECT c.* FROM comparisons c JOIN runs r ON r.id = c.run_id
-         WHERE r.artwork_id = ? ORDER BY c.created_at`,
-      )
-      .all(artworkId)
-      .map((row) => ({
-        id: row.id,
-        runId: row.run_id,
-        round: row.round,
-        kind: row.kind,
-        order: parseJson(row.order_json, []),
-        labels: parseJson(row.labels_json, {}),
-        verdict: parseJson(row.verdict_json, {}),
-        winnerVersionId: row.winner_version_id,
-        confidence: row.confidence,
-        uncertainty: row.uncertainty,
-        judgeSession: row.judge_session,
-        sourceHash: row.source_hash,
-        createdAt: row.created_at,
-      }));
-  }
-
-  createEvaluation(evaluation) {
-    const record = { id: evaluation.id ?? newId('ev'), createdAt: nowIso(), ...evaluation };
-    this.db
-      .prepare(
-        `INSERT INTO evaluations (id, run_id, round, version_id, comparison_id, outcome, note, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        record.id,
-        record.runId,
-        record.round,
-        record.versionId,
-        record.comparisonId ?? null,
-        record.outcome,
-        record.note ?? null,
-        record.createdAt,
-      );
-    return record;
-  }
-
-  // ── measurements ──────────────────────────────────────────────────────────
-
-  createAnalysisRun(entry) {
-    const record = {
-      id: entry.id ?? newId('ana'),
-      artworkId: entry.artworkId,
-      measure: entry.measure,
-      state: entry.state ?? 'queued',
-      revision: entry.revision ?? null,
-      params: entry.params ?? {},
-      progress: entry.progress ?? {},
-      errorCode: entry.errorCode ?? null,
-      errorMessage: entry.errorMessage ?? null,
-      startedAt: entry.startedAt ?? null,
-      finishedAt: entry.finishedAt ?? null,
-      createdAt: nowIso(),
-    };
-    this.db
-      .prepare(
-        `INSERT INTO analysis_runs (id, artwork_id, measure, state, revision, params_json, progress_json,
-           error_code, error_message, started_at, finished_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        record.id,
-        record.artworkId,
-        record.measure,
-        record.state,
-        record.revision,
-        json(record.params),
-        json(record.progress),
-        record.errorCode,
-        record.errorMessage,
-        record.startedAt,
-        record.finishedAt,
-        record.createdAt,
-      );
-    return record;
-  }
-
-  getAnalysisRun(id) {
-    const row = this.db.prepare('SELECT * FROM analysis_runs WHERE id = ?').get(id);
-    return row ? analysisRunFromRow(row) : null;
-  }
-
-  /** The newest measurement run of one measure for one artwork. */
-  latestAnalysisRun(artworkId, measure) {
-    const row = this.db
-      .prepare('SELECT * FROM analysis_runs WHERE artwork_id = ? AND measure = ? ORDER BY created_at DESC, rowid DESC LIMIT 1')
-      .get(artworkId, measure);
-    return row ? analysisRunFromRow(row) : null;
-  }
-
-  listAnalysisRuns(artworkId) {
-    return this.db
-      .prepare('SELECT * FROM analysis_runs WHERE artwork_id = ? ORDER BY created_at DESC, rowid DESC')
-      .all(artworkId)
-      .map(analysisRunFromRow);
-  }
-
-  updateAnalysisRun(id, patch) {
-    const current = this.getAnalysisRun(id);
-    if (!current) return null;
-    const next = { ...current, ...patch };
-    this.db
-      .prepare(
-        `UPDATE analysis_runs SET state = ?, revision = ?, progress_json = ?, error_code = ?, error_message = ?,
-           started_at = ?, finished_at = ? WHERE id = ?`,
-      )
-      .run(
-        next.state,
-        next.revision ?? null,
-        json(next.progress ?? {}),
-        next.errorCode ?? null,
-        next.errorMessage ?? null,
-        next.startedAt ?? null,
-        next.finishedAt ?? null,
-        id,
-      );
-    return this.getAnalysisRun(id);
-  }
-
-  /** A state that a restart left behind. Nothing is resumed automatically. */
-  listUnfinishedAnalysisRuns() {
-    return this.db
-      .prepare("SELECT * FROM analysis_runs WHERE state IN ('queued', 'running')")
-      .all()
-      .map(analysisRunFromRow);
-  }
-
-  upsertPairMeasurement(entry) {
-    const record = {
-      id: entry.id ?? newId('pm'),
-      analysisRunId: entry.analysisRunId,
-      artworkId: entry.artworkId,
-      measure: entry.measure,
-      versionA: entry.versionA,
-      versionB: entry.versionB,
-      pairKey: entry.pairKey,
-      outcome: entry.outcome ?? 'ok',
-      score: entry.score ?? null,
-      band: entry.band ?? null,
-      evidence: entry.evidence ?? {},
-      sourceHashA: entry.sourceHashA ?? null,
-      sourceHashB: entry.sourceHashB ?? null,
-      configurationHashA: entry.configurationHashA ?? null,
-      configurationHashB: entry.configurationHashB ?? null,
-      errorCode: entry.errorCode ?? null,
-      errorMessage: entry.errorMessage ?? null,
-      createdAt: nowIso(),
-    };
-    this.db
-      .prepare(
-        `INSERT INTO pair_measurements (id, analysis_run_id, artwork_id, measure, version_a, version_b, pair_key,
-           outcome, score, band, evidence_json, source_hash_a, source_hash_b, configuration_hash_a,
-           configuration_hash_b, error_code, error_message, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (analysis_run_id, measure, pair_key) DO UPDATE SET
-           outcome = excluded.outcome, score = excluded.score, band = excluded.band, evidence_json = excluded.evidence_json,
-           source_hash_a = excluded.source_hash_a, source_hash_b = excluded.source_hash_b,
-           configuration_hash_a = excluded.configuration_hash_a, configuration_hash_b = excluded.configuration_hash_b,
-           error_code = excluded.error_code, error_message = excluded.error_message`,
-      )
-      .run(
-        record.id,
-        record.analysisRunId,
-        record.artworkId,
-        record.measure,
-        record.versionA,
-        record.versionB,
-        record.pairKey,
-        record.outcome,
-        record.score,
-        record.band,
-        json(record.evidence),
-        record.sourceHashA,
-        record.sourceHashB,
-        record.configurationHashA,
-        record.configurationHashB,
-        record.errorCode,
-        record.errorMessage,
-        record.createdAt,
-      );
-    return record;
-  }
-
-  listPairMeasurements(analysisRunId, { limit = 2000 } = {}) {
-    return this.db
-      .prepare('SELECT * FROM pair_measurements WHERE analysis_run_id = ? ORDER BY score ASC, pair_key ASC LIMIT ?')
-      .all(analysisRunId, limit)
-      .map(pairMeasurementFromRow);
-  }
-
-  /** Reuse a measurement when both versions still hold the same evidence. */
-  findReusablePairMeasurement({ artworkId, measure, pairKey, sourceHashA, sourceHashB, configurationHashA, configurationHashB }) {
-    const row = this.db
-      .prepare(
-        `SELECT * FROM pair_measurements
-         WHERE artwork_id = ? AND measure = ? AND pair_key = ? AND outcome = 'ok'
-           AND source_hash_a = ? AND source_hash_b = ? AND configuration_hash_a = ? AND configuration_hash_b = ?
-         ORDER BY created_at DESC LIMIT 1`,
-      )
-      .get(artworkId, measure, pairKey, sourceHashA, sourceHashB, configurationHashA, configurationHashB);
-    return row ? pairMeasurementFromRow(row) : null;
-  }
-
   // ── usage ─────────────────────────────────────────────────────────────────
   createUsage(entry) {
     const record = {
@@ -1012,6 +656,22 @@ export class Store {
     return costs;
   }
 
+  /** One query for the tokens of every version of an artwork. */
+  usageTokensByArtwork(artworkId) {
+    const rows = this.db
+      .prepare(
+        `SELECT u.version_id AS version_id, SUM(u.input_tokens + u.output_tokens) AS tokens
+         FROM usage u
+         JOIN versions v ON v.id = u.version_id
+         WHERE v.artwork_id = ?
+         GROUP BY u.version_id`,
+      )
+      .all(artworkId);
+    const tokens = new Map();
+    for (const row of rows) tokens.set(row.version_id, row.tokens ?? 0);
+    return tokens;
+  }
+
   // ── events ────────────────────────────────────────────────────────────────
   appendEvent(runId, type, payload) {
     const row = this.db.prepare('SELECT COALESCE(MAX(seq), 0) AS seq FROM events WHERE run_id = ?').get(runId);
@@ -1023,10 +683,19 @@ export class Store {
     return { seq, type, at, runId, payload };
   }
 
-  /** Stored events of one type, oldest first. */
+  /**
+   * The NEWEST events of one type, oldest first.
+   *
+   * A long run holds far more rows than one page. The newest are the ones that
+   * matter: the working step is always at the end of the log.
+   */
   listEventsByType(runId, type, limit = 2000) {
     return this.db
-      .prepare('SELECT * FROM events WHERE run_id = ? AND type = ? ORDER BY seq LIMIT ?')
+      .prepare(
+        `SELECT * FROM (
+           SELECT * FROM events WHERE run_id = ? AND type = ? ORDER BY seq DESC LIMIT ?
+         ) ORDER BY seq`,
+      )
       .all(runId, type, limit)
       .map((row) => ({
         seq: row.seq,
@@ -1056,46 +725,6 @@ export class Store {
   }
 }
 
-function analysisRunFromRow(row) {
-  return {
-    id: row.id,
-    artworkId: row.artwork_id,
-    measure: row.measure,
-    state: row.state,
-    revision: row.revision,
-    params: parseJson(row.params_json, {}),
-    progress: parseJson(row.progress_json, {}),
-    errorCode: row.error_code,
-    errorMessage: row.error_message,
-    startedAt: row.started_at,
-    finishedAt: row.finished_at,
-    createdAt: row.created_at,
-  };
-}
-
-function pairMeasurementFromRow(row) {
-  return {
-    id: row.id,
-    analysisRunId: row.analysis_run_id,
-    artworkId: row.artwork_id,
-    measure: row.measure,
-    versionA: row.version_a,
-    versionB: row.version_b,
-    pairKey: row.pair_key,
-    outcome: row.outcome,
-    score: row.score,
-    band: row.band,
-    evidence: parseJson(row.evidence_json, {}),
-    sourceHashA: row.source_hash_a,
-    sourceHashB: row.source_hash_b,
-    configurationHashA: row.configuration_hash_a,
-    configurationHashB: row.configuration_hash_b,
-    errorCode: row.error_code,
-    errorMessage: row.error_message,
-    createdAt: row.created_at,
-  };
-}
-
 function artworkFromRow(row) {
   return {
     id: row.id,
@@ -1117,10 +746,8 @@ function versionFromRow(row) {
     runId: row.run_id,
     generation: row.generation,
     round: row.round,
-    slot: row.slot,
     title: row.title,
     status: row.status,
-    direction: row.direction,
     sourceHash: row.source_hash,
     snapshotPath: row.snapshot_path,
     workspacePath: row.workspace_path,
@@ -1140,7 +767,6 @@ function runFromRow(row) {
     id: row.id,
     artworkId: row.artwork_id,
     rootVersionId: row.root_version_id,
-    direction: row.direction,
     evolutionsRequested: row.evolutions_requested,
     evolutionsDone: row.evolutions_done,
     state: row.state,
@@ -1150,7 +776,6 @@ function runFromRow(row) {
     reservedUsd: row.reserved_usd,
     calls: row.calls,
     tokens: row.tokens,
-    unchangedRounds: row.unchanged_rounds,
     protocol: parseJson(row.protocol_json, {}),
     costBoundUsd: row.cost_bound_usd,
     createdAt: row.created_at,
@@ -1166,7 +791,6 @@ function jobFromRow(row) {
     runId: row.run_id,
     versionId: row.version_id,
     round: row.round,
-    slot: row.slot,
     kind: row.kind,
     state: row.state,
     attempts: row.attempts,

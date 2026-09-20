@@ -1,46 +1,35 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // run.mjs — the run controller.
 //
-// The controller owns budgets, round counts, selection rules, and job state.
-// Agents never enforce their own limits.
+// The controller owns budgets, step counts, and job state. Agents never
+// enforce their own limits.
 //
-// One round is:
-//   plan 3 candidates → author each in its own workspace → review the edits →
-//   validate the package → publish a snapshot → capture parent and candidates →
-//   judge the images → capture dense frames for the finalist → compare the
-//   finalist against the parent in a fresh session with the order reversed →
-//   promote, or keep the parent.
+// One step is:
+//   read the chain head → create the child row → copy the parent package into
+//   its workspace → run one author session with the fixed instruction and the
+//   last three frames attached → review the edits → validate the package →
+//   publish the snapshot → capture one late square frame → promote the child.
+//
+// The child is always kept: no judge, no comparison, no variants. A technical
+// failure gets one repair session; a second failure marks the version failed,
+// the chain head stays, and the next step starts from the last good version.
 // ─────────────────────────────────────────────────────────────────────────────
-import { mkdir, readFile, rm, stat } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { readFile, rm, stat } from 'node:fs/promises';
+import { join } from 'node:path';
 
 import { ArtworkError } from '../../../runtime/contract.js';
 import { validateConfiguration } from '../../../runtime/config.js';
 import { checkPackage, walkPackage } from '../../../runtime/node/package-checks.js';
 
-import { mapLimit, newId, nowIso, sha256Hex, sleep, stableStringify, truncate, unique } from '../util.mjs';
+import { newId, nowIso, sha256Hex, sleep, stableStringify, truncate } from '../util.mjs';
 import { canTransition, isTerminal, transition } from '../state.mjs';
 import { BudgetError } from '../budget.mjs';
-import { measurePair } from '../analysis/relationships.mjs';
-import { archiveStalled, buildArchive, pickParents } from './archive.mjs';
-import { recordedWeaknesses, unexploredAxes, writeDirection } from './direction.mjs';
 import { copyPackage, publishSnapshot, reviewEdits } from '../artwork/workspace.mjs';
 import { assertSourceMode, decideSourceMode, isLocalHost } from '../capture/index.mjs';
 import { isTransientProviderError } from '../providers/index.mjs';
-import { extractJson } from '../providers/json.mjs';
-import {
-  JUDGE_SYSTEM_PROMPT,
-  assignLabels,
-  buildJudgePrompt,
-  decideWinner,
-  validateVerdict,
-  verdictsAgree,
-  JudgeError,
-} from '../judge/protocol.mjs';
-import { AUTHOR_SYSTEM_PROMPT, buildAuthorPrompt, buildRepairPrompt } from './prompts.mjs';
+import { EVOLVE_SYSTEM_PROMPT, REFACTOR_SYSTEM_PROMPT, STEP_INSTRUCTION, buildEvolvePrompt, buildRefactorPrompt, buildRepairPrompt } from './prompts.mjs';
 import { feedRows } from './agent-events.mjs';
 import { WorkspaceReader } from './workspace-reader.mjs';
-import { planRound } from './plan.mjs';
 
 const CAPTURE_TIMESTEP = 8;
 const LEASE_MS = 120000;
@@ -48,19 +37,63 @@ const LEASE_MS = 120000;
 /** A limit that stops admission. These end the run; they do not fail a candidate. */
 const BUDGET_STOP_CODES = new Set(['budget_exceeded', 'request_limit_reached', 'token_limit_reached', 'round_limit_reached', 'time_limit_reached']);
 
-/**
- * A failure that happened before the provider accepted a request. It cannot
- * have been billed, so the round may keep the parent and continue.
- */
-const PRE_REQUEST_CODES = new Set(['spend_not_allowed', 'image_missing', 'cancelled', 'session_cancelled', 'aborted', 'provider_disabled']);
-
 export function isBudgetStop(error) {
   return error instanceof BudgetError || (error?.code !== undefined && BUDGET_STOP_CODES.has(error.code));
 }
 
-/** A stored capture, in the shape the capture backend returns. */
-function asCaptureResult(capture) {
-  return {
+/**
+ * A wall-clock ceiling around one capture. A capture backend that hangs must
+ * never hold the run: the step fails, the chain head stays, and the next step
+ * continues.
+ */
+function withCaptureCeiling(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new ArtworkError('capture_timeout', `The capture did not finish within ${Math.round(ms / 1000)} seconds`, { limitMs: ms }));
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+/**
+ * A short title for one step, taken from the agent answer. The step number is
+ * already on the card, so the title carries the change instead of repeating it.
+ * @param {string} text  the agent answer
+ * @param {number} step  the CHAIN position, which is what the card shows
+ */
+export function titleFromExplanation(text, step) {
+  const fallback = `Step ${step}`;
+  for (const raw of String(text ?? '').split('\n')) {
+    let line = raw
+      .replace(/^#+\s*/, '')
+      .replace(/[*_`]/g, '')
+      .trim();
+    // An answer often starts with a bullet, a number, or a path label.
+    line = line.replace(/^[-•\d.)\s]+/, '').trim();
+    line = line.replace(/^(src\/[\w./-]+|config\.json)\s*:\s*/i, '').trim();
+    if (line.length < 12) continue;
+    // A line of code, a bare path, or a heading with no content is not a title.
+    if (/[{};]|=>|\bconst\b|\bfunction\b/.test(line)) continue;
+    if (/^[\w./-]+$/.test(line)) continue;
+    if (line.endsWith(':')) continue;
+    if (/^files?\b/i.test(line)) continue;
+    return line.length > 72 ? `${line.slice(0, 69)}...` : line;
+  }
+  return fallback;
+}
+
+/**
+ * A stored capture, in the shape the capture backend returns. */
+function asCaptureResult(capture) {  return {
     id: capture.id,
     stage: capture.stage,
     seed: capture.seed,
@@ -142,7 +175,7 @@ export class RunController {
     }
   }
 
-  /** Pause stops new tasks. The current bounded task finishes. */
+  /** Pause stops new steps. The current bounded step finishes. */
   async pause(runId) {
     const run = this.store.getRun(runId);
     if (!run) throw new ArtworkError('run_not_found', `No run ${runId}`);
@@ -184,12 +217,22 @@ export class RunController {
   /**
    * After a restart, never repeat a paid request whose outcome is unknown.
    * Runs that were in flight pause, and their running jobs become failed.
+   *
+   * A version whose snapshot was already PUBLISHED is durable work: it is kept
+   * as it is, so a resume can continue that step without paying for it again. A
+   * version that was not published is failed, because its outcome is unknown.
    */
   async recover() {
     const recovered = [];
     const failures = [];
     for (const run of this.store.listActiveRuns()) {
       try {
+        const published = new Set(
+          this.store
+            .listJobs(run.id)
+            .filter((job) => job.kind === 'publish' && job.state === 'done' && job.versionId)
+            .map((job) => job.versionId),
+        );
         for (const job of this.store.listJobs(run.id)) {
           if (job.state === 'running' || job.state === 'queued') {
             this.store.updateJob(job.id, {
@@ -200,9 +243,23 @@ export class RunController {
           }
         }
         for (const version of this.store.listVersions(run.artworkId)) {
-          if (version.runId === run.id && ['queued', 'authoring', 'validating', 'capturing', 'judging'].includes(version.status)) {
-            this.store.updateVersion(version.id, { status: 'failed', errorCode: 'interrupted_by_restart', errorMessage: 'The server restarted during this stage. A new candidate replaces it.' });
+          if (version.runId !== run.id) continue;
+          if (!['queued', 'authoring', 'validating', 'capturing'].includes(version.status)) continue;
+          if (published.has(version.id)) {
+            // The snapshot is immutable and its step can continue on resume.
+            this.#emit(run.id, 'version.state', {
+              versionId: version.id,
+              status: version.status,
+              detail: 'the server restarted, and this published snapshot is kept for the resume',
+            });
+            continue;
           }
+          this.store.updateVersion(version.id, {
+            status: 'failed',
+            errorCode: 'interrupted_by_restart',
+            errorMessage: 'The server restarted during this stage. The next step starts from the last good version.',
+          });
+          this.#emit(run.id, 'version.state', { versionId: version.id, status: 'failed', detail: 'interrupted_by_restart' });
         }
         // A run that was stopping has nothing left to stop.
         const target = run.state === 'stopping' ? 'stopped' : 'paused';
@@ -231,8 +288,8 @@ export class RunController {
   // ── the loop ──────────────────────────────────────────────────────────────
 
   async #loop(runId) {
-    let run = this.store.getRun(runId);
     try {
+      let run = this.store.getRun(runId);
       run = this.#setRunState(runId, 'running', { startedAt: run.startedAt ?? nowIso(), stopReason: null });
       this.logger('info', `Run ${runId} started: ${run.evolutionsRequested} evolution(s)`);
 
@@ -259,31 +316,24 @@ export class RunController {
           return;
         }
 
-        // A configured limit stops admission. It must not consume an evolution
+        // A configured limit stops admission. It must not consume a step
         // and it must not look like a candidate fault.
         this.budget.assertRunLimits(run);
 
         const round = run.evolutionsDone + 1;
-        const { parent, pick, archive } = this.#parentForLevel(run, round);
-        const direction = this.#directionForLevel({ run, parent, pick, archive });
+        const parent = this.#chainHead(run);
         this.#emit(runId, 'run.round', {
           round,
           phase: 'author',
           parentVersionId: parent.id,
-          role: pick?.role ?? null,
-          detail: pick ? `chosen by ${pick.role}: ${pick.reason}` : null,
-          direction: direction.text,
-          directionSource: direction.source,
+          detail: parent.generation === 0 ? 'the chain is empty, so this step starts from the root' : `step ${round} evolves ${parent.title}`,
         });
-        this.logger(
-          'info',
-          `Run ${runId} round ${round}: parent ${parent.id}${pick ? ` (${pick.role}: ${pick.reason})` : ''}, direction from ${direction.source}`,
-        );
+        this.logger('info', `Run ${runId} step ${round}: parent ${parent.id} (${parent.title})`);
 
-        const outcome = await this.#runRound({ run, round, parent, direction });
+        const outcome = await this.#runStep({ run, round, parent });
 
-        // An interrupted round is recorded, but it does not consume an
-        // evolution: Resume continues the same round from what is durable.
+        // An interrupted step is recorded, but it does not consume an
+        // evolution: Resume continues the same step from what is durable.
         if (outcome.interrupted) {
           this.store.upsertRound({
             runId,
@@ -295,34 +345,20 @@ export class RunController {
             note: outcome.note,
           });
           this.#emit(runId, 'run.round', { round, phase: 'interrupted', note: outcome.note, candidateIds: outcome.candidateIds ?? [] });
-          this.logger('info', `Run ${runId} round ${round} was interrupted: ${outcome.note}`);
+          this.logger('info', `Run ${runId} step ${round} was interrupted: ${outcome.note}`);
           continue;
         }
 
-        const state = this.store.getRun(runId);
-        const next = this.store.updateRun(runId, {
-          evolutionsDone: state.evolutionsDone + 1,
-          unchangedRounds: outcome.promoted ? 0 : state.unchangedRounds + 1,
-        });
-        // A resumed round keeps the earlier candidate set in the record.
-        const previousRound = this.store.listRounds(runId).find((entry) => entry.round === round);
-        // The note says who was chosen and why, then what the judge decided. A
-        // recorded pick that cannot be explained afterwards is not acceptable.
-        const choice = pick ? `Chosen by ${pick.role}: ${pick.reason}.` : null;
-        const note = [choice, outcome.note].filter(Boolean).join(' ');
+        this.store.updateRun(runId, { evolutionsDone: run.evolutionsDone + 1 });
         this.store.upsertRound({
           runId,
           round,
           parentVersionId: parent.id,
-          candidateIds: unique([...(previousRound?.candidateIds ?? []), ...outcome.candidateIds]),
+          candidateIds: outcome.candidateIds,
           winnerVersionId: outcome.winnerVersionId,
           promoted: outcome.promoted,
-          note,
+          note: outcome.note,
         });
-        for (const candidateId of outcome.candidateIds) {
-          if (candidateId === outcome.winnerVersionId) continue;
-          this.store.createEvaluation({ runId, round, versionId: candidateId, outcome: 'rejected', note });
-        }
         this.#emit(runId, 'run.round', {
           round,
           phase: 'done',
@@ -330,8 +366,7 @@ export class RunController {
           winnerVersionId: outcome.winnerVersionId,
           note: outcome.note,
         });
-        this.logger('info', `Run ${runId} round ${round} finished: ${outcome.promoted ? `promoted ${outcome.winnerVersionId}` : 'parent retained'}`);
-        void next;
+        this.logger('info', `Run ${runId} step ${round} finished: ${outcome.promoted ? `promoted ${outcome.winnerVersionId}` : `failed: ${outcome.note}`}`);
       }
     } catch (error) {
       const context = this.active.get(runId);
@@ -344,10 +379,14 @@ export class RunController {
           });
           this.#emit(runId, 'run.completed', { state: stopped.state, stopReason: stopped.stopReason, evolutionsDone: stopped.evolutionsDone });
         }
+        // The step that the Stop interrupted is NOT terminal. Close it, or its
+        // card would stay on "the agent writes code" forever.
+        this.#terminateVersions(runId, 'The run stopped during this stage.');
+        await this.#cleanupRun(runId);
         return;
       }
       // A configured limit stopped admission. Stop the run with the exact
-      // reason and keep the remaining evolutions unused.
+      // reason and keep the remaining steps unused.
       if (isBudgetStop(error)) {
         const current = this.store.getRun(runId);
         if (!['stopped', 'completed', 'failed'].includes(current.state)) {
@@ -366,18 +405,17 @@ export class RunController {
         return;
       }
       // A provider that is unavailable is not the fault of the work. Pause the
-      // run so a person can resume it when the provider answers again, instead
-      // of failing the job and losing the remaining evolutions.
+      // run so it can be resumed when the provider answers again, instead of
+      // failing the job and losing the remaining steps.
       if (error?.code === 'provider_unavailable') {
         const current = this.store.getRun(runId);
         if (!['stopped', 'completed', 'failed'].includes(current.state)) {
-          const paused = this.#setRunState(runId, 'paused', { stopReason: 'provider_unavailable' });
+          this.#setRunState(runId, 'paused', { stopReason: 'provider_unavailable' });
           this.#emit(runId, 'log', {
             level: 'warn',
             message: `The run paused because the provider did not answer: ${error.message} Resume it when the provider is back.`,
           });
           this.logger('warn', `Run ${runId} paused: ${error.message}`);
-          void paused;
         }
         return;
       }
@@ -403,10 +441,9 @@ export class RunController {
   }
 
   /** A finished run keeps its records, but not its temporary directories. */
-  async #cleanupRun(runId) {    if (!this.config.evolution.cleanupWorkspaces) return;
-    for (const dir of [join(this.config.dataDir, 'workspaces', runId), join(this.config.dataDir, 'judge', runId)]) {
-      await rm(dir, { recursive: true, force: true }).catch(() => {});
-    }
+  async #cleanupRun(runId) {
+    if (!this.config.evolution.cleanupWorkspaces) return;
+    await rm(join(this.config.dataDir, 'workspaces', runId), { recursive: true, force: true }).catch(() => {});
     this.logger('info', `Run ${runId}: removed the temporary workspaces`);
   }
 
@@ -426,10 +463,19 @@ export class RunController {
     return closed;
   }
 
-  #lineageHead(run) {
-    const rounds = this.store.listRounds(run.id).filter((round) => round.promoted && round.winnerVersionId);
-    if (rounds.length === 0) return this.store.getVersion(run.rootVersionId);
-    return this.store.getVersion(rounds[rounds.length - 1].winnerVersionId);
+  /**
+   * The head of the chain: the newest version with status `promoted`. The
+   * records are ordered by generation, so the last promoted version is the
+   * newest. The root version takes over when the chain holds nothing else.
+   */
+  #chainHead(run) {
+    const versions = this.store.listVersions(run.artworkId);
+    const promoted = versions.filter((version) => version.status === 'promoted');
+    const head = promoted[promoted.length - 1];
+    if (head) return head;
+    const root = this.store.getVersion(run.rootVersionId) ?? this.store.getVersion(run.artwork?.rootVersionId ?? '');
+    if (root) return root;
+    throw new ArtworkError('version_not_found', 'This artwork has no promoted version to evolve');
   }
 
   /** The versions of one run whose snapshot publish job completed. */
@@ -443,449 +489,259 @@ export class RunController {
   }
 
   /**
-   * The parent of one level, and why it was chosen.
+   * Refactor one version: the code changes shape, the artwork does not.
    *
-   * A PINNED run follows the promoted lineage: the winner of the last level is
-   * the parent of the next, which is what the system always did. An AUTONOMOUS
-   * run reads its archive and picks: exploit the best, explore the furthest,
-   * repair the weakest, one level at a time. Level one always uses the version
-   * the run started from, so a run begins where the seed says, and only then
-   * takes over.
+   * The acceptance test is the artwork itself. A frame is captured from the
+   * published snapshot before the session runs, and again after it, at the same
+   * seed and step. The refactor is kept only when the trail checksum is
+   * unchanged: a refactor that changes the image is a behaviour change, and it
+   * is rejected.
    */
-  #parentForLevel(run, round) {
-    const seed = this.#lineageHead(run);
-    if (run.protocol?.pinnedParent) return { parent: seed, pick: null, archive: null };
-    if (round <= 1) {
-      return { parent: seed, pick: { role: 'seed', kind: 'refinement', reason: 'the version this run started from' }, archive: null };
+  async refactorVersion({ versionId }) {
+    const version = this.store.getVersion(versionId);
+    if (!version) throw new ArtworkError('version_not_found', `No version ${versionId}`);
+    if (version.status !== 'promoted') throw new ArtworkError('version_state_invalid', `Only a kept version can be refactored (${versionId} is ${version.status})`);
+    const parent = version.parentId ? this.store.getVersion(version.parentId) : null;
+    if (!parent) throw new ArtworkError('version_not_found', `Version ${versionId} has no parent to review against`);
+    const run = this.store.getRun(version.runId ?? '') ?? this.#latestRunForArtwork(version.artworkId);
+    if (!run) throw new ArtworkError('run_not_found', `Version ${versionId} has no run to record the refactor against`);
+    const context = this.#artworkContext(version.artworkId);
+
+    // 1. The baseline: the artwork as it is, before any edit.
+    this.#emit(run.id, 'log', { level: 'info', message: `Refactoring ${version.title}: capturing the baseline frame` });
+    const baseline = await this.#captureForCheck({ run, version, label: 'baseline' });
+
+    // 2. The session works on a copy of the version's own package.
+    const workspaceDir = join(this.config.dataDir, 'workspaces', run.id, `${versionId}-refactor`);
+    await copyPackage(this.artifacts.snapshotDirFor(version), workspaceDir);
+    const failure = new ArtworkError('refactor_failed', 'A refactor has no failure to repair.');
+    const ran = await this.#repair({
+      run,
+      versionId,
+      workspaceDir,
+      failure,
+      systemPrompt: REFACTOR_SYSTEM_PROMPT,
+      prompt: buildRefactorPrompt({ manifest: context.manifest, configuration: version.configuration }),
+      label: 'refactor',
+    });
+    if (!ran) throw new ArtworkError('refactor_failed', 'The refactor session did not finish');
+
+    // 3. The edits must stay inside the manifest, and the package must be valid.
+    const reviewed = await this.#validateCandidate({ run, versionId, workspaceDir, context, parent, phase: 'after-repair' });
+    if (!reviewed.ok) {
+      return { ok: false, version: this.store.getVersion(versionId), error: reviewed.error, baseline };
     }
-    const versions = this.store.listVersions(run.artworkId);
-    const byId = new Map(versions.map((version) => [version.id, version]));
-    const comparisons = this.store.listComparisonsByArtwork(run.artworkId);
-    const distance = (a, b) => this.#configurationDistance(a, b) ?? 1;
-    const archive = buildArchive({
-      versions,
-      comparisons,
-      distance,
-      size: this.config.archive.size,
-      noveltyFloor: this.config.archive.noveltyFloor,
-      qualityFloor: this.config.archive.qualityFloor,
-    });
-    if (archive.members.length === 0) return { parent: seed, pick: null, archive: null };
-    const picks = pickParents({
-      archive,
-      variants: 3,
-      stalled: archiveStalled({ unchangedLevels: run.unchangedRounds, redirectAfter: 2 }),
-      distance,
-    });
-    const pick = picks.length > 0 ? picks[(Math.max(1, round) - 1) % picks.length] : null;
-    const parent = pick ? byId.get(pick.versionId) ?? null : null;
-    if (!parent) return { parent: seed, pick: null, archive };
-    return { parent, pick, archive };
-  }
 
-  /**
-   * The instruction for one level.
-   *
-   * A direction a person wrote is used as it is. When the run has none, it writes
-   * one from the records: what the judge said was wrong, which configuration axes
-   * the archive has moved least, and whether the archive has stalled. The source
-   * of the text is recorded with it, so an autonomous direction is never a mystery.
-   */
-  #directionForLevel({ run, parent, pick, archive }) {
-    const written = String(run.direction ?? '').trim();
-    if (written.length >= 3) return { text: written, source: 'the person who started the run', evidence: {} };
-    const comparisons = this.store.listComparisonsByArtwork(run.artworkId);
-    const lineage = [parent.id, ...(parent.parentId ? [parent.parentId] : [])];
-    const weaknesses = recordedWeaknesses(comparisons, lineage);
-    const members = archive?.members?.map((member) => member.version) ?? [parent];
-    const axes = unexploredAxes(members, 4);
-    const stalled = archiveStalled({ unchangedLevels: run.unchangedRounds, redirectAfter: 2 });
-    const direction = writeDirection({
-      role: pick?.role ?? 'exploit',
-      kind: pick?.kind ?? 'refinement',
-      parent,
-      weaknesses,
-      axes,
-      stalled,
-    });
-    return direction;
-  }
+    // 4. The configuration is frozen: a refactor must not move a number.
+    if (sha256Hex(stableStringify(reviewed.configuration)) !== sha256Hex(stableStringify(version.configuration))) {
+      const error = new ArtworkError('refactor_changed_config', 'The refactor changed config.json. A refactor must not move a number.');
+      this.#emit(run.id, 'error', { code: error.code, message: error.message, detail: { versionId } });
+      return { ok: false, version: this.store.getVersion(versionId), error, baseline };
+    }
 
-  /** The configuration distance between two versions, or null when unknown. */
-  #configurationDistance(a, b) {
-    const left = this.store.getVersion(a);
-    const right = this.store.getVersion(b);
-    if (!left || !right) return null;
+    // 5. Publish the refactored package, then check the artwork itself.
+    let published;
+    await this.#withJob({ run, round: version.round, kind: 'publish', versionId }, async () => {
+      published = await publishSnapshot({
+        workspaceDir,
+        snapshotRoot: this.config.artifactsDir,
+        artworkId: context.manifest.id,
+        packageHash: reviewed.packageHash,
+      });
+    });
+    const candidate = { ...version, snapshotPath: published.path, sourceHash: reviewed.packageHash, configuration: reviewed.configuration };
+    let after;
     try {
-      const result = measurePair({ measure: 'configuration', a: left, b: right });
-      return typeof result.score === 'number' ? result.score : null;
-    } catch {
-      return null;
+      after = await this.#captureForCheck({ run, version: candidate, label: 'after' });
+    } catch (error) {
+      if (isBudgetStop(error) || this.#stopping(run.id)) throw error;
+      return { ok: false, version: this.store.getVersion(versionId), error, baseline };
     }
+
+    if (baseline.trailChecksum !== after.trailChecksum) {
+      const error = new ArtworkError(
+        'refactor_changed_image',
+        `The refactor changed the image: the trail checksum was ${baseline.trailChecksum} and is now ${after.trailChecksum}.`,
+        { before: baseline.trailChecksum, after: after.trailChecksum },
+      );
+      this.#emit(run.id, 'error', { code: error.code, message: error.message, detail: { versionId } });
+      return { ok: false, version: this.store.getVersion(versionId), error, baseline };
+    }
+
+    // 6. Keep it. The snapshot path, the source hash, and the changes move; the
+    //    artwork, the configuration, and the lineage stay.
+    const updated = this.store.updateVersion(versionId, {
+      sourceHash: reviewed.packageHash,
+      snapshotPath: published.path,
+      configuration: reviewed.configuration,
+      changes: reviewed.changes,
+      workspacePath: workspaceDir,
+      explanation: truncate(`Refactor. ${after.title ?? ''}`.trim(), 4000),
+      errorCode: null,
+      errorMessage: null,
+    });
+    this.#emit(run.id, 'version.state', {
+      versionId,
+      status: 'promoted',
+      detail: `refactored: the image is unchanged (trail checksum ${after.trailChecksum})`,
+    });
+    this.#emit(run.id, 'log', {
+      level: 'info',
+      message: `Refactored ${versionId}: the trail checksum is unchanged (${after.trailChecksum})`,
+    });
+    return { ok: true, version: updated, error: null, baseline, after };
+  }
+
+  /** Capture one frame for a comparison, and return its trail checksum. */
+  async #captureForCheck({ run, version, label }) {
+    const { viewport, seeds, stages, steps } = this.#protocol(run);
+    const sample = { stage: 'refactor', seed: seeds[0], step: steps[steps.length - 1] };
+    const outDir = join(this.config.dataDir, 'captures', `${version.id}-${label}`);
+    const configurationHash = sha256Hex(stableStringify(version.configuration));
+    const results = await withCaptureCeiling(
+      this.capture.capture({
+        liveBaseUrl: this.artifacts.liveUrlFor(version.id),
+        snapshotDir: this.artifacts.snapshotDirFor(version),
+        runtimeDir: this.artifacts.runtimeDir,
+        nodeModulesDir: this.artifacts.nodeModulesDir(this.#artworkContext(run.artworkId).packageDir),
+        samples: [{ ...sample, stage: stages[0] ?? 'late' }],
+        viewport,
+        timestep: CAPTURE_TIMESTEP,
+        outDir,
+        sourceHash: version.sourceHash,
+        configurationHash,
+        signal: this.active.get(run.id)?.abort.signal,
+      }),
+      this.config.capture.captureTimeoutMs + Math.max(5000, Math.round(this.config.capture.captureTimeoutMs * 0.2)),
+    );
+    const result = results[0];
+    this.#emit(run.id, 'log', {
+      level: 'info',
+      message: `${label}: trail checksum ${result.trailChecksum} at step ${result.step} (${result.path})`,
+    });
+    return result;
   }
 
   /**
-   * The single candidate of a two-entry comparison, which is the finalist. A
-   * comparison with more entries has no finalist, and the novelty branch then
-   * does not apply: it needs one candidate to reason about.
+   * Revive a version that a rule refused, when that rule has since been
+   * corrected. It re-captures the published snapshot and keeps the version when
+   * the frame passes. No session runs, so a revive costs nothing.
+   *
+   * This is an operator correction of the record, not part of the loop.
    */
-  #finalistOf(primary, parentVersionId) {
-    const entries = Object.values(primary?.labelToVersion ?? {});
-    const others = entries.filter((id) => id !== parentVersionId);
-    return others.length === 1 ? others[0] : null;
+  async reviveVersion({ versionId }) {
+    const version = this.store.getVersion(versionId);
+    if (!version) throw new ArtworkError('version_not_found', `No version ${versionId}`);
+    if (version.status === 'promoted') throw new ArtworkError('version_state_invalid', `${versionId} is already kept`);
+    const run = this.store.getRun(version.runId ?? '') ?? this.#latestRunForArtwork(version.artworkId);
+    if (!run) throw new ArtworkError('run_not_found', `Version ${versionId} has no run to record the capture against`);
+    const wasRefused = version.errorCode ?? 'unknown';
+
+    this.store.updateVersion(versionId, { status: 'capturing', errorCode: null, errorMessage: null });
+    this.#emit(run.id, 'version.state', { versionId, status: 'capturing', detail: `an operator revived this step (was refused with ${wasRefused})` });
+    try {
+      const captures = await this.#captureVersion({ run, version: this.store.getVersion(versionId) });
+      this.#promoteVersion(versionId, 'an operator revived this step');
+      this.#emit(run.id, 'log', { level: 'info', message: `Revived ${versionId}: the frame passes, so the step is kept` });
+      return { ok: true, version: this.store.getVersion(versionId), captures, wasRefused };
+    } catch (error) {
+      // The frame is still refused, so the version goes back as it was.
+      this.store.updateVersion(versionId, {
+        status: 'failed',
+        errorCode: error.code ?? 'revive_failed',
+        errorMessage: truncate(error?.message ?? String(error), 500),
+      });
+      this.#emit(run.id, 'version.state', { versionId, status: 'failed', detail: `the revive was refused: ${error?.message}` });
+      return { ok: false, version: this.store.getVersion(versionId), error, wasRefused };
+    }
   }
 
-  // ── one round ─────────────────────────────────────────────────────────────
-
-  async #runRound({ run, round, parent, direction = null }) {
-    const isolation = await this.capture.available();
-    const localOnly = isLocalHost(this.config.host);
-    const sourceMode = decideSourceMode({
-      status: isolation,
-      touchesSource: true,
-      requireIsolation: this.config.safety.requireIsolation,
-      localOnly,
-    });
-    assertSourceMode({ mode: sourceMode, status: isolation, touchesSource: true, localOnly });
-    if (sourceMode === 'sandboxed-browser') {
-      this.#emit(run.id, 'log', {
-        level: 'warn',
-        message: 'Source changes run in the sandboxed artwork page, not in a container. The page has no credentials, no network, and no host access.',
-      });
-    }
-    const paused = () => Boolean(this.active.get(run.id)?.paused);
-
-    // The provider extension fetches its model list as a session starts and
-    // keeps it in memory only: a failed fetch there leaves no provider at all.
-    // Check the catalog before a level spends anything.
-    if (typeof this.provider.probe === 'function') {
-      const health = await this.provider.probe();
-      if (!health.ok) {
-        throw new ArtworkError('provider_unavailable', `The provider catalog did not answer: ${health.detail}`, { probe: health });
-      }
-    }
-    const variants = run.protocol?.variantsPerEvolution ?? this.config.evolution.variants;
-    const plans = planRound({
-      level: round,
-      // A level uses the instruction written for it: the person's own words when
-      // there are any, and the text the run wrote for itself when there are not.
-      direction: direction?.text ?? run.direction,
-      variants,
-      unchangedLevels: run.unchangedRounds,
-      redirectAfter: this.config.evolution.unchangedRoundsBeforeRedirect,
-    });
-
-    // A resumed round reuses the candidates an interrupted attempt already
-    // published. A published snapshot is immutable, so capture and judging
-    // continue from it without repeating a paid author session.
-    const publishedBefore = this.#publishedVersionIds(run.id);
-    const prior = this.store
-      .listVersions(run.artworkId)
-      .filter(
-        (version) =>
-          version.runId === run.id &&
-          version.round === round &&
-          publishedBefore.has(version.id) &&
-          !['failed', 'rejected'].includes(version.status),
-      );
-    const coveredSlots = new Set(prior.map((version) => version.slot));
-    const pendingPlans = plans.filter((plan) => !coveredSlots.has(plan.slot));
-    if (prior.length > 0) {
-      this.#emit(run.id, 'run.round', {
-        round,
-        phase: 'author',
-        detail: `reusing ${prior.length} candidate(s) that this run already published`,
-      });
-    }
-
-    // Several sessions at once: faster, and the tree shows them together.
-    const authored = await mapLimit(pendingPlans, Math.max(1, this.config.evolution.authorConcurrency), async (plan) => {
-      // A pause must stop new paid work, not only new rounds.
-      if (paused()) return { version: null, ok: false, paused: true };
-      return this.#authorCandidate({ run, round, parent, plan });
-    });
-    const reused = prior.map((version) => ({ version, ok: true }));
-    const attempts = [...reused, ...authored];
-    const candidates = attempts.filter((entry) => entry.version && entry.ok);
-    const candidateIds = attempts.map((entry) => entry.version?.id).filter(Boolean);
-
-    // An interrupt must not reject work that a resume will reuse. A candidate
-    // without a published snapshot is parked, so it cannot linger in a running
-    // state; Resume authors that slot again. The publish jobs are read again
-    // here, because the authoring above just created them.
-    const parkUnpublished = () => {
-      const published = this.#publishedVersionIds(run.id);
-      for (const id of candidateIds) {
-        if (published.has(id)) continue;
-        const version = this.store.getVersion(id);
-        if (!version || ['failed', 'rejected', 'promoted'].includes(version.status)) continue;
-        this.#failVersion(
-          id,
-          new ArtworkError('interrupted_by_pause', 'The run was paused before this variant was published. Resume authors it again.'),
-        );
-      }
-    };
-
-    if (paused()) {
-      parkUnpublished();
-      return { interrupted: true, promoted: false, winnerVersionId: parent.id, candidateIds, note: 'The run was paused during authoring, so the parent stays.' };
-    }
-
-    if (candidates.length === 0) {
-      const failures = authored.map((entry) => entry.error).filter(Boolean);
-      // A provider that is down fails every session. Stop the run instead of
-      // spending the remaining evolutions on the same fault.
-      if (failures.length > 0 && failures.every((error) => isTransientProviderError(error))) {
-        throw new ArtworkError(
-          'provider_unavailable',
-          `Every variant failed before it started: ${truncate(failures[0].message, 300)}`,
-          { failures: failures.length, round },
-        );
-      }
-      this.#emit(run.id, 'run.round', { round, phase: 'author', detail: 'no candidate survived authoring' });
-      return { promoted: false, winnerVersionId: parent.id, candidateIds, note: 'All candidates failed a technical check. The parent stays.' };
-    }
-
-    const protocol = this.#protocol(run);
-    const entries = [parent, ...candidates.map((entry) => entry.version)];
-
-    // capture the round frames for the parent and for every valid candidate
-    const captured = await mapLimit(entries, this.config.capture.captureConcurrency, async (version) => {
-      try {
-        const captures = await this.#captureVersion({
-          run,
-          version,
-          stages: protocol.stages,
-          steps: protocol.steps,
-          seeds: protocol.seeds,
-          dense: false,
-        });
-        return { version, captures, ok: true };
-      } catch (error) {
-        return { version, captures: [], ok: false, error };
-      }
-    });
-
-    for (const entry of captured) {
-      if (entry.ok || entry.version.id === parent.id) continue;
-      this.#failVersion(entry.version.id, entry.error);
-    }
-    const judged = captured.filter((entry) => entry.ok && entry.captures.length > 0);
-    if (judged.length < 2) {
-      this.#rejectOtherCandidates(candidates.map((entry) => entry.version), null, 'Too few versions could be captured.');
-      return { promoted: false, winnerVersionId: parent.id, candidateIds, note: 'Too few versions could be captured. The parent stays.' };
-    }
-    for (const entry of judged) {
-      if (entry.version.id === parent.id) continue;
-      if (!['promoted', 'rejected', 'failed'].includes(entry.version.status)) this.#setVersionState(entry.version.id, 'judging');
-    }
-
-    const roundVerdict = await this.#judgeOrRetain({
-      run,
-      parent,
-      candidates,
-      candidateIds,
-      round,
-      entries: judged.map((entry) => ({ versionId: entry.version.id, captures: entry.captures })),
-      referenceVersionId: parent.id,
-      kind: 'round',
-    });
-    if (roundVerdict === null) {
-      // The comparison failed, so nothing is known about quality. A level that
-      // must advance still advances: the earliest variant takes the lineage, and
-      // the record says the judgement was missing rather than that it was won.
-      if (this.config.evolution.requireVariant && candidates.length > 0) {
-        const chosen = candidates[0].version;
-        this.#rejectOtherCandidates(candidates.slice(1).map((entry) => entry.version), null, 'The round comparison failed.');
-        this.#setVersionState(chosen.id, 'promoted');
-        this.store.updateRun(run.id, { unchangedRounds: 0 });
-        this.#emit(run.id, 'error', {
-          code: 'comparison_failed',
-          message: 'The round comparison failed, so the earliest variant advanced.',
-          detail: { round, mandate: true },
-        });
-        return {
-          promoted: true,
-          winnerVersionId: chosen.id,
-          candidateIds,
-          note: `Mandate: the round comparison failed, and a level must advance. ${chosen.title} takes the lineage.`,
-        };
-      }
-      // The comparison failed, so the work stops here. Close the candidate
-      // states instead of leaving them marked as judging.
-      this.#rejectOtherCandidates(candidates.map((entry) => entry.version), null, 'The round comparison failed.');
-      return { promoted: false, winnerVersionId: parent.id, candidateIds, note: 'The round comparison failed, so the parent stays.' };
-    }
-
-    // Pause stops admission here: the round comparison is durable, so a resume
-    // reuses it instead of paying for it again.
-    if (paused()) {
-      parkUnpublished();
-      return { interrupted: true, promoted: false, winnerVersionId: parent.id, candidateIds, note: 'The run was paused after the round comparison, so the parent stays.' };
-    }
-
-    // The round comparison names the strongest version. When it names the parent,
-    // a level that must advance still sends a variant to the finalist comparison,
-    // so the judge gets to choose between the two of them alone. The record keeps
-    // the fact that the parent was preferred in the first pass.
-    const namedByRound = roundVerdict.winnerVersionId;
-    const mustAdvance = this.config.evolution.requireVariant && candidates.length > 0;
-    const roundPreferredParent = !namedByRound || namedByRound === parent.id;
-    const finalistVersionId = roundPreferredParent && mustAdvance ? candidates[0].version.id : namedByRound;
-    this.#emit(run.id, 'run.round', {
-      round,
-      phase: 'judge',
-      detail: roundPreferredParent && mustAdvance
-        ? `the round comparison preferred the parent, so ${candidates[0].version.id} goes to the finalist comparison`
-        : `the round comparison chose ${namedByRound ?? 'no candidate'}`,
-    });
-    if (!finalistVersionId || (roundPreferredParent && !mustAdvance)) {
-      this.#rejectOtherCandidates(candidates.map((entry) => entry.version), null, 'No candidate beat the parent.');
-      return {
-        promoted: false,
-        winnerVersionId: parent.id,
-        candidateIds,
-        note: 'No candidate beat the parent in the round comparison, so the parent stays.',
-      };
-    }
-
-    const finalist = judged.find((entry) => entry.version.id === finalistVersionId)?.version ?? this.store.getVersion(finalistVersionId);
-
-    // a denser sequence for the finalist and the parent
-    const dense = await mapLimit([parent, finalist], this.config.capture.captureConcurrency, async (version) => {
-      try {
-        const captures = await this.#captureVersion({
-          run,
-          version,
-          stages: protocol.denseStages,
-          steps: protocol.denseSteps,
-          seeds: protocol.seeds,
-          dense: true,
-        });
-        return { version, captures, ok: true };
-      } catch (error) {
-        return { version, captures: [], ok: false, error };
-      }
-    });
-    const denseOk = dense.filter((entry) => entry.ok && entry.captures.length > 0);
-    const denseEntries = denseOk.length === 2 ? denseOk : judged.filter((entry) => [parent.id, finalist.id].includes(entry.version.id));
-    const comparisonEntries = denseEntries.map((entry) => ({ versionId: entry.version.id, captures: entry.captures }));
-
-    const primary = await this.#judgeOrRetain({
-      run,
-      parent,
-      candidates,
-      candidateIds,
-      round,
-      kind: 'finalist',
-      entries: comparisonEntries,
-      referenceVersionId: parent.id,
-    });
-    if (primary === null) {
-      // The finalist comparison failed. A level that must advance advances with
-      // the finalist it had already sent to that comparison.
-      if (this.config.evolution.requireVariant && finalist) {
-        this.#rejectOtherCandidates(candidates.filter((entry) => entry.version.id !== finalist.id).map((entry) => entry.version), null, 'The finalist comparison failed.');
-        this.#setVersionState(finalist.id, 'promoted');
-        this.store.updateRun(run.id, { unchangedRounds: 0 });
-        this.#emit(run.id, 'error', {
-          code: 'comparison_failed',
-          message: 'The finalist comparison failed, so the finalist advanced.',
-          detail: { round, mandate: true, finalistVersionId: finalist.id },
-        });
-        return {
-          promoted: true,
-          winnerVersionId: finalist.id,
-          candidateIds,
-          note: `Mandate: the finalist comparison failed, and a level must advance. ${finalist.title} takes the lineage.`,
-        };
-      }
-      this.#rejectOtherCandidates(candidates.map((entry) => entry.version), null, 'The finalist comparison failed.');
-      return { promoted: false, winnerVersionId: parent.id, candidateIds, note: 'The finalist comparison failed, so the parent stays.' };
-    }
-    if (paused()) {
-      parkUnpublished();
-      return { interrupted: true, promoted: false, winnerVersionId: parent.id, candidateIds, note: 'The run was paused during judging, so the parent stays.' };
-    }
-
-    const reversedComparison = await this.#judgeOrRetain({
-      run,
-      parent,
-      candidates,
-      candidateIds,
-      round,
-      kind: 'finalist-reversed',
-      entries: comparisonEntries,
-      referenceVersionId: parent.id,
-      reversed: true,
-    });
-    // A required reversed comparison that did not complete is not agreement.
-    // Never accept the primary judgment alone, and never spend a tie-break on it.
-    const reversedFailed = reversedComparison === null;
-
-    let tieBreak = null;
-    const tieBreakEnabled = this.#protocol(run).tieBreak;
-    if (tieBreakEnabled && !reversedFailed && !verdictsAgree(primary, reversedComparison)) {
-      this.#emit(run.id, 'run.round', { round, phase: 'judge', detail: 'the two comparisons disagree, so one tie-break runs' });
-      tieBreak = await this.#judgeOrRetain({
-        run,
-        parent,
-        candidates,
-        candidateIds,
-        round,
-        kind: 'tie-break',
-        entries: comparisonEntries,
-        referenceVersionId: parent.id,
-        tieBreak: true,
-      });
-    }
-
-    // The novelty branch needs one candidate and one parent, so it rides on the
-    // finalist comparison: that is where the promotion is finally decided. The
-    // distance is the configuration distance, which is free and already recorded.
-    const finalistId = this.#finalistOf(primary, parent.id);
-    const noveltyDistance = finalistId ? this.#configurationDistance(parent.id, finalistId) : null;
-
-    const decided = decideWinner({
-      primary,
-      reversed: reversedComparison,
-      tieBreak,
-      parentVersionId: parent.id,
-      promoteMargin: this.config.evolution.promoteMargin,
-      novelty:
-        finalistId && noveltyDistance !== null
-          ? {
-              candidateVersionId: finalistId,
-              distance: noveltyDistance,
-              floor: this.config.archive.noveltyFloor,
-              tolerance: this.config.archive.qualityTolerance,
-            }
-          : null,
-      // A level that must advance cannot leave the parent in place: if no
-      // comparison named a variant, one of them still takes the lineage.
-      mustPromote: this.config.evolution.requireVariant ? candidateIds : null,
-    });
-    const decision = reversedFailed
-      ? { winnerVersionId: parent.id, promoted: false, usedTieBreak: false, branch: 'none', reason: 'The reversed comparison did not complete, so the parent stays.' }
-      : decided;
-
-    if (!decision.promoted) {
-      this.#rejectVersion(finalist.id, decision.reason);
-      this.store.createEvaluation({ runId: run.id, round, versionId: finalist.id, comparisonId: primary.comparisonId, outcome: 'rejected', note: decision.reason });
-      this.#rejectOtherCandidates(candidates.map((entry) => entry.version), finalist.id, 'The parent was retained.');
-      return { promoted: false, winnerVersionId: parent.id, candidateIds, note: decision.reason };
-    }
-
-    this.#promoteVersion(finalist.id, decision.reason);
-    this.#rejectOtherCandidates(candidates.map((entry) => entry.version), finalist.id, `Round ${round} promoted another candidate.`);
-    this.store.createEvaluation({ runId: run.id, round, versionId: finalist.id, comparisonId: primary.comparisonId, outcome: 'promoted', note: decision.reason });
-    if (tieBreak) {
-      this.store.createEvaluation({ runId: run.id, round, versionId: finalist.id, comparisonId: tieBreak.comparisonId, outcome: 'tie-break', note: `The tie-break chose ${finalist.id}` });
-    }
-    return { promoted: true, winnerVersionId: finalist.id, candidateIds, note: decision.reason };
+  /** The newest run of one artwork. The record for an operator action. */
+  #latestRunForArtwork(artworkId) {
+    const runs = this.store.listRuns(200).filter((run) => run.artworkId === artworkId);
+    return runs[0] ?? null;
   }
 
-  // ── authoring ─────────────────────────────────────────────────────────────
+  /**
+   * Capture one frame for a version that has none. The imported root has no
+   * capture until this runs, so its card can show a real frame.
+   */  async captureFrame({ versionId }) {
+    const version = this.store.getVersion(versionId);
+    if (!version) throw new ArtworkError('version_not_found', `No version ${versionId}`);
+    const run = this.store.getRun(version.runId ?? '') ?? this.#latestRunForArtwork(version.artworkId);
+    if (!run) throw new ArtworkError('run_not_found', `Version ${versionId} has no run to record the frame against`);
+    const existing = this.store.listCaptures(version.id);
+    if (existing.length > 0) return existing.map(asCaptureResult);
+    this.logger('info', `Capturing a frame for ${versionId} (${version.title})`);
+    return this.#captureVersion({ run, version });
+  }
+
+  /**
+   * Repair one failed version and continue its step.
+   *
+   * An operator action, not part of the loop. It starts from the failed
+   * candidate's OWN published snapshot, so the repair fixes the code that
+   * failed instead of throwing the attempt away. One repair session runs, then
+   * the package is validated, published, captured, and kept.
+   */
+  async repairVersion({ versionId }) {
+    const version = this.store.getVersion(versionId);
+    if (!version) throw new ArtworkError('version_not_found', `No version ${versionId}`);
+    if (version.status === 'promoted') throw new ArtworkError('version_state_invalid', `${versionId} is already kept`);
+    const parent = version.parentId ? this.store.getVersion(version.parentId) : null;
+    if (!parent) throw new ArtworkError('version_not_found', `Version ${versionId} has no parent to review against`);
+    const run = this.store.getRun(version.runId ?? '') ?? this.#latestRunForArtwork(version.artworkId);
+    if (!run) throw new ArtworkError('run_not_found', `Version ${versionId} has no run to record the repair against`);
+
+    const context = this.#artworkContext(version.artworkId);
+    const workspaceDir = join(this.config.dataDir, 'workspaces', run.id, `${versionId}-repair`);
+    const failure = new ArtworkError(
+      version.errorCode ?? 'candidate_failed',
+      version.errorMessage ?? 'This step failed a technical check.',
+      { repairedFrom: version.id },
+    );
+
+    // Start from the failed candidate's own snapshot. It was published before the
+    // capture failed, so its intent is intact and only the fault is repaired.
+    await copyPackage(this.artifacts.snapshotDirFor(version), workspaceDir);
+    this.#emit(run.id, 'log', { level: 'info', message: `Repairing ${version.title}: ${failure.message}` });
+
+    const repaired = await this.#repair({ run, versionId, workspaceDir, failure });
+    if (!repaired) return { ok: false, version: this.store.getVersion(versionId), error: failure };
+
+    // The repair fixed the code, so the version returns to the live machine and
+    // its step continues. This is the only path from `failed` back.
+    this.store.updateVersion(versionId, { status: 'capturing', errorCode: null, errorMessage: null });
+    this.#emit(run.id, 'version.state', { versionId, status: 'capturing', detail: 'an operator repaired this step' });
+
+    const reviewed = await this.#validateCandidate({ run, versionId, workspaceDir, context, parent, phase: 'after-repair' });
+    if (!reviewed.ok) {
+      this.#failVersion(versionId, reviewed.error);
+      return { ok: false, version: this.store.getVersion(versionId), error: reviewed.error };
+    }
+
+    await this.#withJob({ run, round: version.round, kind: 'publish', versionId }, async () => {
+      const published = await publishSnapshot({
+        workspaceDir,
+        snapshotRoot: this.config.artifactsDir,
+        artworkId: context.manifest.id,
+        packageHash: reviewed.packageHash,
+      });
+      this.store.updateVersion(versionId, {
+        sourceHash: reviewed.packageHash,
+        snapshotPath: published.path,
+        configuration: reviewed.configuration,
+        changes: reviewed.changes,
+        workspacePath: workspaceDir,
+      });
+    });
+
+    await this.#captureVersion({ run, version: this.store.getVersion(versionId) });
+    this.#promoteVersion(versionId, 'an operator repaired this step');
+    return { ok: true, version: this.store.getVersion(versionId), error: null };
+  }
+
+  // ── one step ──────────────────────────────────────────────────────────────
 
   /**
    * A reporter that reads the real files as well as the events. It replaces the
@@ -945,20 +801,178 @@ export class RunController {
   /** Map the session events of one version to feed rows on the run stream. */
   #agentReporter(runId, versionId) {
     let lastTextAt = 0;
+    let lastReasonAt = 0;
     return (event) => {
       for (const row of feedRows(event, versionId)) {
-        if (row.kind === 'text') {
-          // The text arrives token by token. Keep the ticker readable.
+        // The text and the reasoning arrive token by token. Keep the ticker
+        // readable and the stream small.
+        if (row.kind === 'text' || row.kind === 'reason') {
           const now = Date.now();
-          if (now - lastTextAt < 500) continue;
-          lastTextAt = now;
+          if (row.kind === 'text' && now - lastTextAt < 500) continue;
+          if (row.kind === 'reason' && now - lastReasonAt < 500) continue;
+          if (row.kind === 'text') lastTextAt = now;
+          if (row.kind === 'reason') lastReasonAt = now;
         }
         this.#emit(runId, 'agent', row);
       }
     };
   }
 
-  async #authorCandidate({ run, round, parent, plan }) {
+  async #runStep({ run, round, parent }) {
+    const isolation = await this.capture.available();
+    const localOnly = isLocalHost(this.config.host);
+    const sourceMode = decideSourceMode({
+      status: isolation,
+      touchesSource: true,
+      requireIsolation: this.config.safety.requireIsolation,
+      localOnly,
+    });
+    assertSourceMode({ mode: sourceMode, status: isolation, touchesSource: true, localOnly });
+    if (sourceMode === 'sandboxed-browser' && round === 1) {
+      this.#emit(run.id, 'log', {
+        level: 'warn',
+        message: 'Source changes run in the sandboxed artwork page, not in a container. The page has no credentials, no network, and no host access.',
+      });
+    }
+
+    // The provider extension fetches its model list as a session starts and
+    // keeps it in memory only: a failed fetch there leaves no provider at all.
+    // Check the catalog before a step spends anything.
+    if (typeof this.provider.probe === 'function') {
+      const health = await this.provider.probe();
+      if (!health.ok) {
+        throw new ArtworkError('provider_unavailable', `The provider catalog did not answer: ${health.detail}`, { probe: health });
+      }
+    }
+
+    const paused = () => Boolean(this.active.get(run.id)?.paused);
+
+    // A resumed step reuses the child an interrupted attempt already published.
+    // A published snapshot is immutable, so capture and promotion continue from
+    // it without repeating a paid author session.
+    const publishedBefore = this.#publishedVersionIds(run.id);
+    const prior = this.store
+      .listVersions(run.artworkId)
+      .find(
+        (version) =>
+          version.runId === run.id &&
+          version.round === round &&
+          publishedBefore.has(version.id) &&
+          // A version that failed a real check is never reused. Only an
+          // interruption of already published work may continue.
+          !(version.status === 'failed' && version.errorCode !== 'interrupted_by_restart'),
+      );
+    if (prior) {
+      // A restart can leave a version that was already published marked failed.
+      // Its paid work is durable, so the step continues instead of paying again.
+      if (prior.status === 'failed' && prior.errorCode === 'interrupted_by_restart') {
+        this.store.updateVersion(prior.id, { status: 'capturing', errorCode: null, errorMessage: null });
+        this.#emit(run.id, 'version.state', {
+          versionId: prior.id,
+          status: 'capturing',
+          detail: 'the published snapshot of this step is reused after the restart',
+        });
+      }
+      this.#emit(run.id, 'run.round', {
+        round,
+        phase: 'author',
+        detail: `reusing ${prior.title} that this run already published`,
+      });
+    }
+
+    // A reused child is already durable, so it needs no author session.
+    const authored = prior ? { version: prior, ok: true } : await this.#createChild({ run, round, parent });
+    const child = authored.version;
+    const candidateIds = [child.id];
+
+    if (paused()) {
+      return { interrupted: true, promoted: false, winnerVersionId: null, candidateIds, note: 'The run was paused during this step, so the parent stays.' };
+    }
+
+    // The candidate failed authoring or validation: the version is recorded as
+    // failed with its reason, the chain head stays, and the next step starts
+    // from the last good version.
+    if (!authored.ok) {
+      const reason = child.errorMessage ?? authored.error?.message ?? 'The candidate failed a technical check.';
+      return { promoted: false, winnerVersionId: null, candidateIds, note: reason };
+    }
+
+    // The frame is the evidence of the step, and a capture can fail on a
+    // technical fault: the artwork throws at load, or the trail died. That is
+    // the same class of fault as a rejected package, so it gets the same one
+    // bounded repair session before the step is given up.
+    let failure = null;
+    try {
+      await this.#captureVersion({ run, version: child });
+    } catch (error) {
+      // A limit ends the RUN; it must not burn the remaining steps as a run of
+      // technical candidate failures.
+      if (isBudgetStop(error)) throw error;
+      if (this.#stopping(run.id)) throw error;
+      failure = error;
+    }
+    if (failure && this.config.evolution.repairAttempts > 0 && failure.code !== 'capture_timeout') {
+      // A timeout is an infrastructure fault, not a fault of the code, so it
+      // does not spend a repair session.
+      const outcome = await this.#repairAndRecapture({ run, round, versionId: child.id, workspaceDir: child.workspacePath, parent, failure });
+      failure = outcome.ok ? null : outcome.error;
+    }
+    if (failure) {
+      this.#failVersion(child.id, failure);
+      return { promoted: false, winnerVersionId: null, candidateIds, note: `The frame could not be captured: ${truncate(failure?.message ?? String(failure), 200)}` };
+    }
+
+    // A promotion fault is a fault of this step, never of the run: the card is
+    // recorded as failed and the next step starts from the last good version.
+    try {
+      this.#promoteVersion(child.id, `step ${round}: the child is always kept`);
+    } catch (error) {
+      this.logger('error', `Step ${round}: ${child.id} could not be promoted: ${error.message}`);
+      this.#failVersion(child.id, error);
+      return { promoted: false, winnerVersionId: null, candidateIds, note: `The step could not be kept: ${truncate(error?.message ?? String(error), 200)}` };
+    }
+    const promoted = this.store.getVersion(child.id) ?? child;
+    return { promoted: true, winnerVersionId: child.id, candidateIds, note: `${promoted.title} evolved from ${parent.title}.` };
+  }
+
+  /**
+   * Repair a workspace whose frame failed, then validate, publish, and capture
+   * it again. A repaired workspace is a new package, so it must be reviewed and
+   * published again before the frame can be trusted.
+   */
+  async #repairAndRecapture({ run, round, versionId, workspaceDir, parent, failure }) {
+    const context = this.#artworkContext(run.artworkId);
+    const repaired = await this.#repair({ run, versionId, workspaceDir, failure });
+    if (!repaired) return { ok: false, error: failure };
+
+    const reviewed = await this.#validateCandidate({ run, versionId, workspaceDir, context, parent, phase: 'after-repair' });
+    if (!reviewed.ok) return { ok: false, error: reviewed.error };
+
+    try {
+      await this.#withJob({ run, round, kind: 'publish', versionId }, async () => {
+        const published = await publishSnapshot({
+          workspaceDir,
+          snapshotRoot: this.config.artifactsDir,
+          artworkId: context.manifest.id,
+          packageHash: reviewed.packageHash,
+        });
+        this.store.updateVersion(versionId, {
+          sourceHash: reviewed.packageHash,
+          snapshotPath: published.path,
+          configuration: reviewed.configuration,
+          changes: reviewed.changes,
+        });
+      });
+      await this.#captureVersion({ run, version: this.store.getVersion(versionId) });
+      return { ok: true, error: null };
+    } catch (error) {
+      if (isBudgetStop(error) || this.#stopping(run.id)) throw error;
+      return { ok: false, error };
+    }
+  }
+
+  /** Create the child row and copy the parent package into its workspace. */
+  async #createChild({ run, round, parent }) {
     const context = this.#artworkContext(run.artworkId);
     const versionId = newId('ver');
     const workspaceDir = join(this.config.dataDir, 'workspaces', run.id, versionId);
@@ -969,10 +983,10 @@ export class RunController {
       runId: run.id,
       generation: parent.generation + 1,
       round,
-      slot: plan.slot,
-      title: plan.title,
+      // The title is the CHAIN position, so it agrees with the card name when a
+      // second run continues the chain.
+      title: `Step ${parent.generation + 1}`,
       status: 'queued',
-      direction: run.direction,
       sourceHash: parent.sourceHash,
       snapshotPath: parent.snapshotPath,
       workspacePath: workspaceDir,
@@ -983,27 +997,27 @@ export class RunController {
     this.#emit(run.id, 'version.created', { version: this.#publicVersion(version) });
 
     try {
-      await copyPackage(context.packageDir, workspaceDir);
-      await this.#withJob({ run, round, slot: plan.slot, kind: 'author', versionId }, async (job) => {
+      await copyPackage(this.artifacts.snapshotDirFor(parent), workspaceDir);
+      await this.#withJob({ run, round, kind: 'author', versionId }, async (job) => {
         this.#setVersionState(versionId, 'authoring');
         // Read the package before the session changes it, then follow the writes.
         const files = this.#fileReporter(run.id, versionId, workspaceDir);
         const agent = this.#agentReporter(run.id, versionId);
         await files.announce();
-        // Tell the session what this run already did, so a one-time change in
-        // the direction is not applied again at every evolution.
+        // Tell the session what this run already did, so a change an earlier
+        // step made is not applied again.
         const earlier = this.store.listRounds(run.id).filter((entry) => entry.round > 0 && entry.round < round);
         const history = [
-          ...earlier.map((entry) => `evolution ${entry.round}: ${truncate(entry.note ?? 'no note', 160)}`),
+          ...earlier.map((entry) => `step ${entry.round}: ${truncate(entry.note ?? 'no note', 160)}`),
           ...parent.changes.slice(0, 8).map((change) => `the parent changed ${change.path} (+${change.added} -${change.removed})`),
         ];
-        const prompt = buildAuthorPrompt({
-          direction: run.direction,
-          plan,
+        const prompt = buildEvolvePrompt({
+          instruction: STEP_INSTRUCTION,
           manifest: context.manifest,
           parentConfiguration: parent.configuration,
           history,
         });
+        const images = this.#chainFrames(parent, 3).map((frame) => frame.path);
         const sessionId = `phygen-${versionId}`;
         const attemptCall = (attempt) =>
           this.#providerCall({
@@ -1011,12 +1025,12 @@ export class RunController {
             kind: 'author',
             label: attempt === 1 ? `author:${versionId}` : `author-retry:${versionId}`,
             versionId,
-            jobId: job.id,
             call: (signal) =>
               this.provider.author({
                 workspaceDir,
                 prompt,
-                systemPrompt: AUTHOR_SYSTEM_PROMPT,
+                images,
+                systemPrompt: EVOLVE_SYSTEM_PROMPT,
                 model: run.protocol?.authorModel,
                 onEvent: (event) => {
                   agent(event);
@@ -1024,10 +1038,7 @@ export class RunController {
                 },
                 sessionId,
                 signal,
-                plan,
-                direction: run.direction,
                 round,
-                slot: plan.slot,
                 parentConfig: parent.configuration,
                 seedKey: run.id,
               }),
@@ -1060,17 +1071,20 @@ export class RunController {
             result = await attemptCall(3);
           }
         }
-        this.store.updateVersion(versionId, { explanation: truncate(result.text, 4000) });
+        this.store.updateVersion(versionId, {
+          explanation: truncate(result.text, 4000),
+          title: titleFromExplanation(result.text, parent.generation + 1),
+        });
         this.#emit(run.id, 'version.state', { versionId, status: 'authoring', detail: `author session ${result.sessionId ?? 'unknown'} finished` });
       });
 
       this.#setVersionState(versionId, 'validating');
-      const reviewed = await this.#validateCandidate({ run, versionId, workspaceDir, context, phase: 'first' });
+      const reviewed = await this.#validateCandidate({ run, versionId, workspaceDir, context, parent, phase: 'first' });
       if (!reviewed.ok) {
         this.#failVersion(versionId, reviewed.error);
-        return { version: this.store.getVersion(versionId), ok: false };
+        return { version: this.store.getVersion(versionId), ok: false, error: reviewed.error };
       }
-      await this.#withJob({ run, round, slot: plan.slot, kind: 'publish', versionId }, async () => {
+      await this.#withJob({ run, round, kind: 'publish', versionId }, async () => {
         const published = await publishSnapshot({
           workspaceDir,
           snapshotRoot: this.config.artifactsDir,
@@ -1093,19 +1107,45 @@ export class RunController {
       return { version: this.store.getVersion(versionId), ok: true };
     } catch (error) {
       // A configured limit ends the RUN; it must not burn the remaining
-      // evolutions as a run of technical candidate failures.
+      // steps as a run of technical candidate failures.
       if (isBudgetStop(error)) throw error;
       // A Stop cancels the session. The run ends; this must not be recorded as
-      // a candidate fault or as a consumed evolution.
+      // a candidate fault or as a consumed step.
       if (this.#stopping(run.id)) throw error;
+      // A provider that went away mid-run pauses the run, not the candidate.
+      if (isTransientProviderError(error)) {
+        throw new ArtworkError('provider_unavailable', `The author session did not answer: ${truncate(error?.message ?? String(error), 300)}`, {
+          round,
+          cause: error?.code ?? 'unknown',
+        });
+      }
       this.#failVersion(versionId, error);
       return { version: this.store.getVersion(versionId), ok: false, error };
     }
   }
 
+  /**
+   * The last `count` frames of the chain, newest first: the parent, then the
+   * two versions before it. Each version holds one late capture.
+   */
+  #chainFrames(parent, count) {
+    const lineage = this.store.lineage(parent.id);
+    const frames = [];
+    for (const version of [...lineage].reverse()) {
+      const captures = this.store.listCaptures(version.id);
+      if (captures.length === 0) continue;
+      const latest = captures[captures.length - 1];
+      frames.push({ versionId: version.id, path: latest.path, url: `/api/captures/${latest.id}.png` });
+      if (frames.length >= count) break;
+    }
+    return frames;
+  }
+
   /** Review the edits, repair once, then check the package and its configuration. */
-  async #validateCandidate({ run, versionId, workspaceDir, context, phase }) {
-    const review = await reviewEdits({ originalDir: context.packageDir, workspaceDir, manifest: context.manifest });
+  async #validateCandidate({ run, versionId, workspaceDir, context, parent, phase }) {
+    // The parent package is the baseline: the report then names exactly what
+    // THIS step changed, and the protected paths are checked against it.
+    const review = await reviewEdits({ originalDir: this.artifacts.snapshotDirFor(parent), workspaceDir, manifest: context.manifest });
     if (review.violations.length > 0) {
       return { ok: false, error: new ArtworkError('edit_surface_violation', review.violations[0], { violations: review.violations }) };
     }
@@ -1115,7 +1155,7 @@ export class RunController {
       const failure = new ArtworkError('package_invalid', check.problems[0] ?? 'The candidate package is invalid', { problems: check.problems });
       if (phase === 'first' && this.config.evolution.repairAttempts > 0) {
         const repair = await this.#repair({ run, versionId, workspaceDir, failure });
-        if (repair) return this.#validateCandidate({ run, versionId, workspaceDir, context, phase: 'after-repair' });
+        if (repair) return this.#validateCandidate({ run, versionId, workspaceDir, context, parent, phase: 'after-repair' });
       }
       return { ok: false, error: failure };
     }
@@ -1128,7 +1168,7 @@ export class RunController {
       const failure = new ArtworkError('configuration_invalid', `The candidate configuration is invalid: ${error.message}`, error.details ?? {});
       if (phase === 'first' && this.config.evolution.repairAttempts > 0) {
         const repair = await this.#repair({ run, versionId, workspaceDir, failure });
-        if (repair) return this.#validateCandidate({ run, versionId, workspaceDir, context, phase: 'after-repair' });
+        if (repair) return this.#validateCandidate({ run, versionId, workspaceDir, context, parent, phase: 'after-repair' });
       }
       return { ok: false, error: failure };
     }
@@ -1143,49 +1183,70 @@ export class RunController {
     };
   }
 
-  async #repair({ run, versionId, workspaceDir, failure }) {
-    this.#emit(run.id, 'version.state', { versionId, status: 'validating', detail: `one repair attempt: ${failure.code}` });
+  /**
+   * Run one bounded session that edits a workspace in place.
+   *
+   * A repair uses the default prompt and system prompt. A refactor passes its
+   * own, so one helper serves both and the budget label stays exact.
+   */
+  async #repair({ run, versionId, workspaceDir, failure, systemPrompt, prompt, label }) {
+    const isRefactor = label === 'refactor';
+    this.#emit(run.id, 'version.state', {
+      versionId,
+      status: 'validating',
+      detail: isRefactor ? 'a refactor session' : `one repair attempt: ${failure.code}`,
+    });
     try {
-      await this.#withJob({ run, round: null, slot: null, kind: 'author', versionId }, async (job) => {
+      await this.#withJob({ run, round: null, kind: 'author', versionId }, async () => {
         await this.#providerCall({
           run,
           kind: 'author',
-          label: `repair:${versionId}`,
+          label: isRefactor ? `refactor:${versionId}` : `repair:${versionId}`,
           versionId,
-          jobId: job.id,
           call: (signal) =>
             this.provider.author({
               workspaceDir,
-              prompt: buildRepairPrompt({ failure }),
+              prompt: prompt ?? buildRepairPrompt({ failure }),
               model: run.protocol?.authorModel,
               onEvent: this.#agentReporter(run.id, versionId),
-              systemPrompt: AUTHOR_SYSTEM_PROMPT,
-              sessionId: `phygen-${versionId}`,
+              systemPrompt: systemPrompt ?? EVOLVE_SYSTEM_PROMPT,
+              sessionId: `phygen-${versionId}${isRefactor ? '-refactor' : ''}`,
               signal,
             }),
         });
       });
       return true;
     } catch (error) {
-      this.logger('warn', `Repair attempt for ${versionId} failed: ${error.message}`);
+      this.logger('warn', `${isRefactor ? 'Refactor' : 'Repair'} attempt for ${versionId} failed: ${error.message}`);
       return false;
     }
   }
 
   // ── capture ───────────────────────────────────────────────────────────────
 
-  async #captureVersion({ run, version, stages, steps, seeds, dense }) {
+  /** The frame protocol of one run: the run's own values, or the configured defaults. */
+  #protocol(run) {    const protocol = run.protocol ?? {};
+    return {
+      viewport: protocol.viewport ?? this.config.evolution.viewport,
+      seeds: protocol.seeds ?? this.config.evolution.seeds,
+      stages: protocol.frameRoles ?? this.config.evolution.frameRoles,
+      steps: protocol.stepSchedule ?? this.config.evolution.stepSchedule,
+    };
+  }
+
+  async #captureVersion({ run, version }) {
+    const { viewport, seeds, stages, steps } = this.#protocol(run);
     const context = this.#artworkContext(run.artworkId);
-    const outDir = join(this.config.dataDir, 'captures', version.id, dense ? 'dense' : 'round');
+    const outDir = join(this.config.dataDir, 'captures', version.id);
     const configurationHash = sha256Hex(stableStringify(version.configuration));
     const samples = [];
     for (const seed of seeds) {
       stages.forEach((stage, index) => {
-        samples.push({ stage: dense ? `dense-${stage}` : stage, step: steps[Math.min(index, steps.length - 1)], seed });
+        samples.push({ stage, step: steps[Math.min(index, steps.length - 1)], seed });
       });
     }
 
-    // A resumed round must not duplicate or overwrite frame evidence. A frame
+    // A resumed step must not duplicate or overwrite frame evidence. A frame
     // this version already captured for the same seed, stage, step and inputs
     // is reused as it is.
     const existing = new Map(
@@ -1202,25 +1263,31 @@ export class RunController {
       else missing.push(sample);
     }
 
-    return this.#withJob({ run, round: version.round, slot: version.slot, kind: 'capture', versionId: version.id }, async (job) => {
+    return this.#withJob({ run, round: version.round, kind: 'capture', versionId: version.id }, async (job) => {
       // Read the current record: the caller may hold a snapshot from an earlier
       // stage, and a stale status must not drive a transition.
       const current = this.store.getVersion(version.id) ?? version;
       if (canTransition('version', current.status, 'capturing')) this.#setVersionState(version.id, 'capturing');
       if (missing.length === 0) return reused;
-      const results = await this.capture.capture({
-        liveBaseUrl: this.artifacts.liveUrlFor(version.id),
-        snapshotDir: this.artifacts.snapshotDirFor(version),
-        runtimeDir: this.artifacts.runtimeDir,
-        nodeModulesDir: this.artifacts.nodeModulesDir(context.packageDir),
-        samples: missing,
-        viewport: this.#protocol(run).viewport,
-        timestep: CAPTURE_TIMESTEP,
-        outDir,
-        sourceHash: version.sourceHash,
-        configurationHash,
-        signal: this.active.get(run.id)?.abort.signal,
-      });
+      const results = await withCaptureCeiling(
+        this.capture.capture({
+          liveBaseUrl: this.artifacts.liveUrlFor(version.id),
+          snapshotDir: this.artifacts.snapshotDirFor(version),
+          runtimeDir: this.artifacts.runtimeDir,
+          nodeModulesDir: this.artifacts.nodeModulesDir(context.packageDir),
+          samples: missing,
+          viewport,
+          timestep: CAPTURE_TIMESTEP,
+          outDir,
+          sourceHash: version.sourceHash,
+          configurationHash,
+          signal: this.active.get(run.id)?.abort.signal,
+        }),
+        // The ceiling is the configured capture time plus a startup margin.
+        this.config.capture.captureTimeoutMs * Math.max(1, missing.length) +
+          Math.max(5000, Math.round(this.config.capture.captureTimeoutMs * 0.2)),
+      );
+
 
       for (const result of results) {
         const record = this.store.createCapture({
@@ -1247,7 +1314,7 @@ export class RunController {
             consoleErrors: result.consoleErrors,
           },
         });
-        // The node shows the newest frame while the capture continues.
+        // The card shows the newest frame while the capture continues.
         this.#emit(run.id, 'capture.ready', {
           versionId: version.id,
           captureId: record.id,
@@ -1261,222 +1328,11 @@ export class RunController {
     });
   }
 
-  // ── judging ───────────────────────────────────────────────────────────────
-
-  /**
-   * Run one comparison. A judge answer that breaks the contract fails the
-   * COMPARISON, not the run: the round then keeps the parent.
-   * @returns {Promise<object|null>} null when the comparison failed
-   */
-  /**
-   * A comparison this run already made for the same round and kind, over
-   * exactly the same versions. A resumed round reuses it instead of repeating
-   * a paid judge session.
-   */
-  #reuseComparison({ run, round, kind, entries }) {
-    const wanted = entries.map((entry) => entry.versionId).sort().join('|');
-    for (const comparison of this.store.listComparisons(run.id)) {
-      if (comparison.round !== round || comparison.kind !== kind) continue;
-      const compared = Object.values(comparison.labels ?? {}).sort().join('|');
-      if (compared !== wanted) continue;
-      const verdict = comparison.verdict ?? {};
-      const preference = verdict.preference ?? 'none';
-      if (preference !== 'none' && !comparison.winnerVersionId) continue;
-      const labelToVersion = {};
-      for (const [versionId, label] of Object.entries(comparison.labels)) labelToVersion[label] = versionId;
-      return {
-        comparisonId: comparison.id,
-        winnerVersionId: comparison.winnerVersionId ?? null,
-        labels: comparison.labels,
-        labelToVersion,
-        verdict: {
-          ...verdict,
-          preference,
-          confidence: comparison.confidence ?? verdict.confidence ?? 0,
-          uncertainty: comparison.uncertainty ?? verdict.uncertainty ?? 'high',
-        },
-        reused: true,
-      };
-    }
-    return null;
-  }
-
-  async #judgeOrRetain(options) {
-    // Resume must not repeat a comparison that already completed. The stored
-    // verdict is the record; the paid session is not run again.
-    const reused = this.#reuseComparison(options);
-    if (reused) {
-      this.#emit(options.run.id, 'log', {
-        level: 'info',
-        message: `Reusing the completed ${options.kind} comparison of round ${options.round} instead of repeating it.`,
-      });
-      return reused;
-    }
-    try {
-      return await this.#judge(options);
-    } catch (error) {
-      // A limit stops the run; it is not a failed comparison.
-      if (isBudgetStop(error)) throw error;
-      if (error instanceof JudgeError) {
-        this.#emit(options.run.id, 'error', {
-          code: error.code,
-          message: error.message,
-          detail: { round: options.round, kind: options.kind, ...(error.details ?? {}) },
-        });
-        this.logger('warn', `Round ${options.round} ${options.kind} comparison failed: ${error.code}`);
-        return null;
-      }
-      // A failure the provider reported before it accepted the request cannot
-      // have been billed. The round keeps the parent and continues.
-      if (PRE_REQUEST_CODES.has(error?.code)) {
-        this.#emit(options.run.id, 'error', {
-          code: error.code,
-          message: error.message,
-          detail: { round: options.round, kind: options.kind, ...(error.details ?? {}), outcome: 'pre_request_failure' },
-        });
-        this.logger('warn', `Round ${options.round} ${options.kind} did not reach the provider: ${error.code}`);
-        return null;
-      }
-      // An accepted or uncertain paid request must not be repeated. Pause the
-      // run and keep every completed result instead of failing it.
-      if (isTransientProviderError(error)) {
-        throw new ArtworkError('provider_unavailable', `The ${options.kind} comparison did not answer: ${truncate(error?.message ?? String(error), 300)}`, {
-          round: options.round,
-          kind: options.kind,
-          cause: error?.code ?? 'unknown',
-        });
-      }
-      throw error;
-    }
-  }
-
-  async #judge({ run, round, kind, entries, referenceVersionId, reversed, tieBreak }) {
-    const available = entries.filter((entry) => entry.captures.length > 0);
-    if (available.length < 2) {
-      throw new JudgeError('comparison_too_small', `The ${kind} comparison needs at least two versions`);
-    }
-    const { ordered, labels, labelToVersion } = assignLabels(available);
-    // A comparison without its reference must fail, never silently relabel a
-    // candidate as the reference.
-    if (labels[referenceVersionId] === undefined) {
-      throw new JudgeError('reference_missing', 'The reference version has no captured frame, so the comparison cannot run', {
-        referenceVersionId,
-        compared: Object.keys(labels),
-      });
-    }
-    const referenceLabel = labels[referenceVersionId];
-    const orderedForPrompt = reversed ? [...ordered].reverse() : ordered;
-
-    const buildCaptures = (entry) =>
-      [...entry.captures]
-        .sort((a, b) => (a.stage === b.stage ? a.seed - b.seed : String(a.stage).localeCompare(String(b.stage))))
-        .map((capture) => ({
-          stage: capture.stage,
-          step: capture.step,
-          seed: capture.seed,
-          fileName: basename(capture.path),
-          path: capture.path,
-          url: `/api/captures/${capture.id}.png`,
-        }));
-
-    const promptEntries = orderedForPrompt.map((entry) => ({ versionId: entry.versionId, captures: buildCaptures(entry) }));
-    const prompt = buildJudgePrompt({
-      direction: run.direction,
-      entries: promptEntries,
-      labels,
-      referenceLabel,
-      reversed,
-      tieBreak,
-    });
-
-    const images = [];
-    for (const entry of promptEntries) {
-      for (const capture of entry.captures) {
-        images.push({
-          label: labels[entry.versionId],
-          path: capture.path,
-          fileName: capture.fileName,
-          stage: capture.stage,
-          step: capture.step,
-          seed: capture.seed,
-        });
-      }
-    }
-
-    const workDir = join(this.config.dataDir, 'judge', run.id);
-    await mkdir(workDir, { recursive: true });
-
-    const result = await this.#withJob({ run, round, slot: null, kind: 'judge', versionId: referenceVersionId }, async (job) =>
-      this.#providerCall({
-        run,
-        kind: 'judge',
-        label: `judge:${kind}:r${round}`,
-        versionId: referenceVersionId,
-        jobId: job.id,
-        call: (signal) =>
-          this.provider.judge({
-            prompt,
-            images,
-            cwd: workDir,
-            model: run.protocol?.providerModel,
-            systemPrompt: JUDGE_SYSTEM_PROMPT,
-            signal,
-            stub: { referenceLabel },
-          }),
-      }),
-    );
-
-    const verdict = extractJson(result.text);
-    if (!verdict) {
-      throw new JudgeError('judge_response_invalid', 'The judge answer holds no JSON object', { text: truncate(result.text, 800), kind });
-    }
-    const validated = validateVerdict(verdict, { labelToVersion, entries: promptEntries, labels });
-
-    const comparison = this.store.createComparison({
-      runId: run.id,
-      round,
-      kind,
-      order: promptEntries.map((entry) => labels[entry.versionId]),
-      labels,
-      verdict: { ...validated, model: result.model, stub: result.stub ?? false },
-      winnerVersionId: validated.preference === 'none' ? null : labelToVersion[validated.preference],
-      confidence: validated.confidence,
-      uncertainty: validated.uncertainty,
-      judgeSession: result.sessionId,
-      sourceHash: sha256Hex(stableStringify(promptEntries.map((entry) => [entry.versionId, entry.captures.map((capture) => capture.fileName)]))),
-    });
-
-    this.#emit(run.id, 'comparison.result', {
-      round,
-      kind,
-      labels,
-      order: comparison.order,
-      winnerVersionId: comparison.winnerVersionId,
-      confidence: comparison.confidence,
-      uncertainty: comparison.uncertainty,
-    });
-
-    return {
-      comparisonId: comparison.id,
-      winnerVersionId: comparison.winnerVersionId,
-      labelToVersion,
-      labels,
-      verdict: validated,
-    };
-  }
-
   // ── provider and job plumbing ──────────────────────────────────────────────
 
   /** Reserve the bound, call the provider, then commit the real cost. */
-  async #providerCall({ run, kind, label, versionId, jobId, call }) {
-    const bound =
-      kind === 'author'
-        ? label.startsWith('repair:')
-          ? this.config.cost.repairCallUsd
-          : this.config.cost.authorCallUsd
-        : label.startsWith('judge:tie-break')
-          ? this.config.cost.tieBreakCallUsd
-          : this.config.cost.judgeCallUsd;
+  async #providerCall({ run, kind, label, versionId, call }) {
+    const bound = label.startsWith('repair:') || label.startsWith('refactor:') ? this.config.cost.repairCallUsd : this.config.cost.authorCallUsd;
 
     // Never start a request for a run that is stopping, and never start one
     // that a configured limit already refuses.
@@ -1484,7 +1340,7 @@ export class RunController {
     this.budget.assertRunLimits(this.store.getRun(run.id));
 
     const requestId = newId('req');
-    const model = kind === 'author' ? run.protocol?.authorModel ?? this.config.provider.authorModel : run.protocol?.providerModel ?? this.config.provider.model;
+    const model = run.protocol?.authorModel ?? this.config.provider.authorModel;
 
     const fresh = this.store.getRun(run.id);
     // The run holds one overall reservation until the first request replaces it
@@ -1511,7 +1367,6 @@ export class RunController {
         });
         this.store.createUsage({
           runId: run.id,
-          jobId,
           versionId,
           kind,
           model,
@@ -1555,7 +1410,6 @@ export class RunController {
     });
     this.store.createUsage({
       runId: run.id,
-      jobId,
       versionId,
       kind,
       model: result.model ?? model,
@@ -1578,11 +1432,11 @@ export class RunController {
   }
 
   /** Run one job: take a lease, publish every transition, release the lease. */
-  async #withJob({ run, round, slot, kind, versionId }, work) {
-    const job = this.store.createJob({ runId: run.id, versionId, round, slot, kind, state: 'queued' });
+  async #withJob({ run, round, kind, versionId }, work) {
+    const job = this.store.createJob({ runId: run.id, versionId, round, kind, state: 'queued' });
     const owner = `${process.pid}-${newId('w')}`;
     this.leases.set(job.id, owner);
-    this.#emit(run.id, 'job.state', { jobId: job.id, kind, state: 'queued', detail: `round ${round ?? '-'} slot ${slot ?? '-'}` });
+    this.#emit(run.id, 'job.state', { jobId: job.id, kind, state: 'queued', detail: `round ${round ?? '-'}` });
     this.store.updateJob(job.id, {
       state: transition('job', 'queued', 'running'),
       leaseOwner: owner,
@@ -1621,40 +1475,15 @@ export class RunController {
     return context;
   }
 
-  #protocol(run) {
-    const protocol = run.protocol ?? {};
-    const fallback = {
-      viewport: this.config.evolution.viewport,
-      seeds: this.config.evolution.seeds,
-      stages: this.config.evolution.frameRoles,
-      steps: this.config.evolution.stepSchedule,
-      denseStages: this.config.evolution.denseFrameRoles,
-      denseSteps: this.config.evolution.denseStepSchedule,
-      tieBreak: this.config.evolution.tieBreak,
-    };
-    return {
-      viewport: protocol.viewport ?? fallback.viewport,
-      seeds: protocol.seeds ?? fallback.seeds,
-      stages: protocol.frameRoles ?? fallback.stages,
-      steps: protocol.stepSchedule ?? fallback.steps,
-      denseStages: protocol.denseFrameRoles ?? fallback.denseStages,
-      denseSteps: protocol.denseStepSchedule ?? fallback.denseSteps,
-      tieBreak: protocol.tieBreak ?? fallback.tieBreak,
-    };
-  }
-
   #publicVersion(version) {
     return {
       id: version.id,
       parentId: version.parentId,
       generation: version.generation,
       round: version.round,
-      slot: version.slot,
       title: version.title,
       status: version.status,
-      direction: version.direction,
       onLineage: version.onLineage,
-      thumbnailUrl: `/api/versions/${version.id}/artifacts/thumb`,
       livePath: `/live/${version.id}`,
       sourceHash: version.sourceHash,
       createdAt: version.createdAt,
@@ -1682,35 +1511,13 @@ export class RunController {
     const status = transition('version', version.status, 'promoted');
     const updated = this.store.updateVersion(versionId, { status, onLineage: true });
     this.#emit(version.runId, 'version.state', { versionId, status, detail: reason, onLineage: true });
-    // The interface announces the decision over the node.
-    this.#emit(version.runId, 'version.decision', { versionId, outcome: 'winner', reason });
     return updated;
-  }
-
-  #rejectVersion(versionId, reason) {
-    const version = this.store.getVersion(versionId);
-    if (['promoted', 'rejected', 'failed'].includes(version.status)) return version;
-    const status = transition('version', version.status, 'rejected');
-    const updated = this.store.updateVersion(versionId, { status, onLineage: false });
-    this.#emit(version.runId, 'version.state', { versionId, status, detail: reason, onLineage: false });
-    this.#emit(version.runId, 'version.decision', { versionId, outcome: 'yeeted', reason });
-    return updated;
-  }
-
-  /** Every candidate of a round that the round did not promote is rejected. */
-  #rejectOtherCandidates(versions, winnerVersionId, note) {
-    for (const version of versions) {
-      if (version.id === winnerVersionId) continue;
-      const current = this.store.getVersion(version.id);
-      if (!current || ['promoted', 'rejected', 'failed'].includes(current.status)) continue;
-      this.#rejectVersion(current.id, note);
-    }
   }
 
   #failVersion(versionId, error) {
     const version = this.store.getVersion(versionId);
     if (!version) return null;
-    if (['promoted', 'rejected', 'failed'].includes(version.status)) return version;
+    if (['promoted', 'failed'].includes(version.status)) return version;
     const status = transition('version', version.status, 'failed');
     const updated = this.store.updateVersion(versionId, {
       status,
@@ -1733,5 +1540,3 @@ export class RunController {
     return this.events.emit(runId, type, payload);
   }
 }
-
-

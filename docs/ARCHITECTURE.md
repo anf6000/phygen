@@ -8,147 +8,76 @@ wrong. It does not repeat the work rules in `AGENTS.md`.
 ```
 runtime/            the artwork package contract, shared by every side
 threejs/            one artwork package (the physarum simulation)
-server/             the controller: records, providers, capture, judging
-  src/analysis/     measured relationships between versions
-  src/controller/   one run: rounds, candidates, judging, budgets
-  src/judge/        the visual comparison protocol
-  src/artwork/      package review, workspace, snapshot publication
-web/                the interface: rings, cards, detail, measurements
-  src/layout/       the pure generation-ring layout
+server/             the controller: records, providers, capture, the API
+  src/artwork/      package review, workspace copy, snapshot publication
+  src/controller/   one run: the step loop, prompts, budgets, the agent feed
+  src/providers/    the Pi session driver and the deterministic test double
+  src/capture/      the browser capture and the container worker
+web/                the interface: the chain, the cards, the shell, the live view
+  src/chain.ts      the pure chain order and the playing rule
 ```
 
-## Generation rings
+## The forward chain
 
-Every node's children are placed around that node, and the arrangement repeats at
-every level, so the whole drawing is a recursive circular structure.
+A run is a **linear chain**. Each step makes exactly one child of the newest
+version with status `promoted`, which is the **chain head**.
 
-- The root is the centre. It has no parent, so its children surround it: a full
-  turn.
-- Every other node spreads its children over a fan **centred on the direction
-  away from its parent**, at most a half turn, so no child is ever placed behind
-  its own parent. A fan is capped at a half turn: a full turn is smaller on
-  paper, but the children behind the parent collide with the parent's own
-  ancestors and the drawing has to spread out to separate them.
-- **A brood whose children are all leaves is packed as a BLOCK** at card pitch,
-  not as a ring. None of those children needs room to grow outward, and a block
-  covers far less area: for one parent of thirty-eight the ring needs a circle of
-  radius 1,670, and the block fits the same cards in under 60% of that area. A
-  brood with even one branching child keeps the ring, because mixing the two
-  arrangements pushes the cards into each other.
-- Card depth is the **calculated distance from the canonical root**, counted
-  through parent links. A stored `generation` that disagrees is reported; it
-  never decides a position.
-- Siblings are sorted by creation time, then by ID, so the layout is stable.
+- There is no judge, no comparison, no variant, and no archive. The child is
+  always kept, and a person judges quality by looking at the frames.
+- The chain head is read again before every step, so a failed step never becomes
+  a parent.
+- A step that fails a technical check, after one bounded repair session, marks
+  its version `failed` and leaves the chain head where it was.
+- A failed version is terminal. The one path back is the operator repair:
+  `RunController.repairVersion` starts from the failed candidate's OWN published
+  snapshot, runs one repair session with the failure, then validates, publishes,
+  captures, and promotes it. It is refused while a run is active.
+- The imported root has no capture until `RunController.captureFrame` runs. The
+  import route starts that in the background, so the root card shows a real frame.
+- An interrupted step (a pause) is recorded but does not consume a step. A resume
+  reuses the child the run already published, because a published snapshot is
+  immutable and must not be paid for twice.
 
-Both arrangements clear the real rectangles, not a bounding circle. Two
-axis-aligned cards clear each other when their centres are far enough apart on
-*either* axis, so a ring radius is solved by bisection against that condition for
-every pair — the parent's card, the cards already placed, and the ring's own
-cards — and the fixtures assert that no ring wastes room. The block is exact by
-construction: its columns sit one card width plus the gap apart, and its rows one
-card height plus the gap apart.
+The chain is a straight line in the records: every child has one `parent_id` and
+one `generation`, and the records are ordered by generation and creation time.
 
-A repair pass then measures every placed pair on the real rectangles. When pairs
-still overlap, the least uniform factor that clears them all is found by
-bisection, and the best result seen is kept: the layout never returns a worse
-drawing than the one it started from. The layout reports how many times it grew
-and any pair it could not separate, and the interface shows that count.
+## One step
 
-### Circle packing does not work here
+1. Read the chain head.
+2. Create the child row, and copy the parent snapshot into
+   `data-evolve/workspaces/<runId>/<versionId>/`.
+3. Run one author session with the fixed instruction. The session receives the
+   manifest rules, the parent configuration, the history of this run, and the
+   last three frames of the chain, newest first.
+4. Review the edits against the manifest, check the package, and validate the
+   configuration. A technical failure gets one bounded repair session.
+5. Publish the snapshot (immutable, content addressed).
+6. Capture one late square frame: 1024 x 1024, seed 1337, step 2500.
+7. Promote the child.
 
-The obvious next idea is to pack each subtree into its own circle and place the
-child circles tangent around the parent. It was implemented and measured, and it
-is **not** used. A subtree's bounding circle grows with every ancestor's
-clearance requirement, so the radius doubles at each level:
+The prompt tells the session to keep the seeded stream reproducible, to keep the
+adapter contract, to change at least one file under `src/`, and to keep the
+network visible.
 
-| generation | child distance |
-| --- | --- |
-| 1 | 100,011 |
-| 2 | 50,006 |
-| 3 | 26,805 |
-| 4 | 11,961 |
-| 5 | 9,713 |
+### There is no quality gate
 
-On the recorded artwork that is a drawing 248,254,760 units wide with four
-unresolved overlaps, against 11,707 units for the arrangement above. Circle
-packing is only suitable when a subtree fits inside a circle that is small
-compared with its parent's clearance, which is not true for a lineage.
-
-The way to pack a deep lineage tighter is a **sector** layout: give every subtree
-an angular wedge as well as a radius, and keep its cards inside that wedge. That
-is the next real change to this module, and it is not a radius tweak.
-
-### Zoom floor
-
-The canvas never zooms below 0.16, and Fit All clamps to that floor. A card is
-260 graph units wide, so 0.16 keeps every card about 42 pixels wide — a target a
-person can hit. An overview where 103 cards are 15-pixel specks is not usable,
-however much of the artwork it shows at once; the rest of the artwork is reached
-by panning or with Focus selection. Drawn lines take no pointer events at all, so
-a line can never swallow a click meant for a card.
-
-Positions are calculated before any filter is applied. A filter changes what is
-drawn, never where a card is. The canonical root stays visible.
-
-Layout order is **ancestry**. It is not similarity. A viewer must never read a
-ring distance as a measured resemblance.
-
-A record whose parent is missing, and a record inside a parent cycle, goes to a
-separate diagnostic column. No ancestry is invented for it.
-
-### Lines
-
-Both draw layers are **solid**. Ancestry is black: 3 px on the selected lineage,
-1.4 px otherwise, and **straight** — a spoke says "this card hangs from that one".
-A measured relationship joins two cards that can sit anywhere, so it is drawn as
-a **cubic bow that bends away from the middle of the artwork**; the bow keeps
-crossing lines apart and reads as a flowing mesh instead of a knot of chords.
-
-The measured layer is drawn at **every** zoom, the widest overview included, and
-keeps its **stroke width on screen** (`vector-effect: non-scaling-stroke`). A
-stroke in graph units shrinks with the zoom, so without that the layer would
-vanish into hairlines exactly when the whole artwork is in view. The number of
-measured lines is bounded (`MAX_RELATIONSHIP_DRAWS`, currently 150, strongest
-first) and the layer has its own toggle.
-
-## Measured relationships
-
-A measurement is a record about a **pair of versions**. It never changes a parent
-link and never places a card.
-
-Every measure declares:
-
-- a stable `id`, which each record stores;
-- a `method`: `deterministic` (no model, no spend) or `model`;
-- a `direction`: one sentence that says what a HIGH score means.
-
-A score is a **distance**. A high score means the two versions are less alike.
-An unavailable model measure is reported with its reason. It is never replaced by
-a silent approximation.
-
-Candidate pairs are bounded and deterministic:
-
-1. every version against its parent;
-2. versions of the same round against each other;
-3. versions one generation apart;
-4. versions that hold the same role;
-5. the remaining budget, filled with a seeded shuffle.
-
-The plan never reads a canvas position, so a layout change cannot change the
-sample. A record for a pair is reused only when both versions still hold the same
-source hash and the same configuration.
+The child is always kept. There is no judge, no comparison, and no measure of the
+frame, because there is no selection to make: a person judges the work by looking
+at the chain. A step is refused only for a real technical fault — a package that
+does not load, or a capture that fails or passes its time limit. A quiet, dark, or
+bold frame is a step, and it stays.
 
 ## Runs and recovery
 
-- A configured limit that refuses admission stops the run. It does not consume an
-  evolution and it is not recorded as a candidate fault.
-- A pause stops new paid work. The interrupted round is recorded and does not
-  consume an evolution. Resume reuses the candidates the run already published
-  and the comparisons it already completed.
+- A configured limit that refuses admission stops the run. It does not consume a
+  step and it is not recorded as a candidate fault.
+- A pause stops new steps. The interrupted step is recorded and does not consume
+  a step. A resume reuses the child the run already published.
 - A stop is checked before every provider reservation, before every retry delay,
   and before every process start. A stop can never start another paid session.
-- A measurement run is never resumed automatically after a restart. It is marked
-  failed, so a half-measured set can never look complete.
+- After a restart, an in-flight run pauses with the reason `paused_after_restart`,
+  and its running jobs are marked failed with `interrupted_by_restart`. A paid
+  request may have been accepted, so a person decides what to do next.
 
 ## Snapshots
 
@@ -164,6 +93,40 @@ verifies every snapshot in read-only mode.
 Publication writes to a unique working directory and renames it into place, so
 two publications of one hash cannot delete each other's files. An existing
 snapshot is reused only after its file hashes are verified.
+
+## The agent feed
+
+The source is the Pi JSON event stream. `tool_execution_start` carries the tool
+name and its arguments, so an `edit` gives the changed text and a `write` gives
+the content; `tool_execution_end` says whether it failed; `message_update` gives
+the assistant text and the reasoning as they arrive; `turn_end` gives the tokens
+and the cost.
+
+`src/controller/agent-events.mjs` maps those events to `agent` rows. A reasoning
+block becomes a `reason` row, the answer text becomes a `text` row, and a tool
+call becomes a `tool` row with the short path and the line counts. Every row is
+capped at 4000 characters, and the text and reasoning rows are throttled to one
+row per half second, so one row cannot flood the stream.
+
+The controller stores every row in the `events` table. `GET
+/api/versions/:versionId/agent` returns the stored feed of one version, so a
+finished version still shows how it was made. The workspace reader adds the real
+line counts of the files the session touched.
+
+## The interface
+
+- One vertical column of cards, newest at the top. A card holds the step number
+  and title, a 1024 x 1024 square, the changed files, the tokens, and the cost.
+- Exactly one card plays live: the newest promoted version. `playingVersionId` in
+  `web/src/chain.ts` is the single rule, and it is tested.
+- Every other card shows its still frame, its stage, or its failure reason.
+- The shell is a read-only log, newest at the bottom. It follows the work while a
+  step runs, and it shows the stored rows of a selected card.
+- The chain area and the shell are split by a drag handle. The split is kept in
+  `localStorage`.
+
+The playing rule is a pure function on the version records, so a card never
+decides for itself whether it plays.
 
 ## Event stream
 

@@ -22,6 +22,36 @@ export class CaptureError extends ArtworkError {
 }
 
 /**
+ * Race a promise against a wall-clock deadline.
+ *
+ * A page that runs an endless loop blocks its own main thread, and a timeout
+ * inside that page can never fire. The deadline here runs in Node, so the
+ * capture always ends, and `onTimeout` tears the browser context down.
+ */
+function withDeadline(promise, ms, onTimeout) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      try {
+        onTimeout?.();
+      } catch {
+        // the teardown must never hide the timeout
+      }
+      reject(new CaptureError('capture_timeout', `The capture passed its time limit of ${ms} ms`, { limitMs: ms }));
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+/**
  * @param {object} options
  * @param {import('playwright-core').Browser} options.browser
  * @param {string} options.baseUrl             the live artwork URL for one version
@@ -54,7 +84,12 @@ export async function captureSamples({
   });
   const results = [];
 
-  try {
+  // A capture that hangs must never hold the run. The deadline covers every
+  // sample, and closing the context kills a wedged renderer.
+  const perSampleMs = Math.max(30000, timeoutMs);
+  const deadlineMs = perSampleMs * Math.max(1, samples.length) + 30000;
+
+  const captureAll = async () => {
     for (const sample of samples) {
       if (signal?.aborted) throw new CaptureError('capture_cancelled', 'The capture was cancelled', { stage: sample.stage });
       const url = `${baseUrl}?steps=${sample.step}&seed=${sample.seed}&speed=${timestep}&paused=0&dpr=${viewport.dpr}`;
@@ -135,6 +170,12 @@ export async function captureSamples({
         });
       }
     }
+  };
+
+  try {
+    await withDeadline(captureAll(), deadlineMs, () => {
+      void context.close().catch(() => {});
+    });
   } finally {
     await context.close().catch(() => {});
   }

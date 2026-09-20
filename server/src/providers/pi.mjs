@@ -5,8 +5,8 @@
 //
 //   pi --mode json -p --provider kilo --model <model> [--tools …] [@image…] <prompt>
 //
-// The provider is the official Kilo provider extension. Author sessions get
-// file tools and no shell. Judge sessions get no tools at all.
+// The provider is the official Kilo provider extension. An evolve session gets
+// file tools and the attached frames, so it can see the chain it evolves.
 //
 // The driver never decides when to spend. The controller reserves the cost
 // bound first, and the driver refuses to start unless the operator enabled
@@ -68,14 +68,33 @@ function normalizeUsage(raw) {
   return { inputTokens, outputTokens, costUsd, costKnown: costUsd > 0, raw: usage };
 }
 
-function textFromMessage(message) {
+const REASONING_TYPES = new Set(['reasoning', 'thinking', 'redacted_thinking']);
+
+/** The reasoning text of one content block, or '' when it holds none. */
+function reasoningTextOf(block) {
+  const candidate = block?.text ?? block?.thinking ?? block?.content;
+  return typeof candidate === 'string' ? candidate : '';
+}
+
+/**
+ * Read one message. The answer text and the reasoning content stay separate:
+ * the shell shows reasoning dim, and the record keeps only the answer.
+ */
+function contentFromMessage(message) {
   const content = message?.content;
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return '';
-  return content
-    .filter((block) => block && (block.type === 'text' || block.type === 'output_text'))
-    .map((block) => block.text ?? '')
-    .join('');
+  if (typeof content === 'string') return { text: content, reasoning: '' };
+  if (!Array.isArray(content)) return { text: '', reasoning: '' };
+  let text = '';
+  let reasoning = '';
+  for (const block of content) {
+    if (!block || typeof block !== 'object') continue;
+    if (block.type === 'reasoning' || block.type === 'thinking' || block.type === 'redacted_thinking') {
+      reasoning += reasoningTextOf(block);
+    } else if (block.type === 'text' || block.type === 'output_text') {
+      text += block.text ?? '';
+    }
+  }
+  return { text, reasoning };
 }
 
 function sleepMs(ms) {
@@ -180,7 +199,7 @@ export class PiProvider {
    * Run one session.
    *
    * @param {object} options
-   * @param {'author'|'judge'} options.kind
+   * @param {'author'} options.kind
    * @param {string} options.prompt
    * @param {string[]} [options.images] absolute image paths, attached with @
    * @param {string} options.cwd
@@ -188,7 +207,7 @@ export class PiProvider {
    * @param {string} [options.model]
    * @param {number} [options.timeoutMs]
    * @param {AbortSignal} [options.signal]
-   * @returns {Promise<{text: string, sessionId: string|null, usage: object, events: object[], exitCode: number, stderr: string}>}
+   * @returns {Promise<{text: string, reasoning: string, sessionId: string|null, usage: object, events: object[], exitCode: number, stderr: string}>}
    */
   async run({ kind, prompt, images = [], cwd, sessionId, model, timeoutMs, signal, systemPrompt, onEvent = null }) {
     // A Stop before the request must not start a process at all.
@@ -206,12 +225,12 @@ export class PiProvider {
       try {
         await stat(image);
       } catch {
-        throw new ProviderError('image_missing', `The judge image does not exist: ${image}`, { image });
+        throw new ProviderError('image_missing', `The attached frame does not exist: ${image}`, { image });
       }
     }
 
     const { providerName, thinking, authorThinking, authorTools } = this.config.provider;
-    const args = ['--mode', 'json', '-p', '--provider', providerName, '--model', model ?? (kind === 'author' ? this.config.provider.authorModel : this.config.provider.model)];
+    const args = ['--mode', 'json', '-p', '--provider', providerName, '--model', model ?? this.config.provider.authorModel];
     const effort = kind === 'author' ? authorThinking : thinking;
     if (effort) args.push('--thinking', effort);
     if (systemPrompt) args.push('--system-prompt', systemPrompt);
@@ -219,10 +238,9 @@ export class PiProvider {
     else args.push('--no-tools');
     args.push('--no-approve');
     if (sessionId) args.push('--session-id', sessionId);
-    if (kind === 'judge') args.push('--no-session');
     args.push('--', ...images.map((image) => `@${image}`), prompt);
 
-    const limit = timeoutMs ?? (kind === 'author' ? this.config.provider.sessionTimeoutMs : this.config.provider.judgeTimeoutMs);
+    const limit = timeoutMs ?? this.config.provider.sessionTimeoutMs;
     const spec = this.#spawnSpec();
     // stdin is closed at once: Pi must not wait for input that will never come.
     const child = spawn(spec.command, [...spec.prefix, ...args], { cwd, env: safeEnv(), shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -291,12 +309,14 @@ export class PiProvider {
 
     const header = events.find((event) => event.type === 'session');
     let text = '';
+    let reasoning = '';
     let usage = { inputTokens: 0, outputTokens: 0, costUsd: 0, raw: {} };
     for (const event of events) {
       if (event.type === 'message_update' && event.usage) usage = normalizeUsage(event.usage);
       if (event.type === 'message_end' && event.message?.role === 'assistant') {
-        const candidate = textFromMessage(event.message);
-        if (candidate.trim().length > 0) text = candidate;
+        const answer = contentFromMessage(event.message);
+        if (answer.text.trim().length > 0) text = answer.text;
+        if (answer.reasoning.trim().length > 0) reasoning = answer.reasoning;
         const messageUsage = event.message.usage ?? event.message.meta?.usage;
         if (messageUsage) usage = normalizeUsage(messageUsage);
       }
@@ -319,24 +339,20 @@ export class PiProvider {
 
     return {
       text: text.trim(),
+      reasoning: reasoning.trim(),
       sessionId: header?.id ?? sessionId ?? null,
       usage,
       events: events.map((event) => ({ type: event.type })),
       exitCode,
       stderr: truncate(stderr, 2000),
-      model: model ?? (kind === 'author' ? this.config.provider.authorModel : this.config.provider.model),
+      model: model ?? this.config.provider.authorModel,
       toolNames: unique(events.filter((event) => event.type === 'tool_execution_start').map((event) => event.toolName)),
       stub: false,
     };
   }
 
-  /** One author session inside a candidate workspace. It has file tools only. */
-  async author({ workspaceDir, prompt, systemPrompt, sessionId, signal, model, onEvent }) {
-    return this.run({ kind: 'author', prompt, cwd: workspaceDir, sessionId, systemPrompt, signal, model, onEvent });
-  }
-
-  /** One judge session. It has no tools, no source, and no version identity. */
-  async judge({ prompt, images, cwd, systemPrompt, signal, model }) {
-    return this.run({ kind: 'judge', prompt, images: images.map((image) => image.path), cwd, systemPrompt, signal, model });
+  /** One evolve session inside the candidate workspace. It has file tools and sees the attached frames. */
+  async author({ workspaceDir, prompt, images = [], systemPrompt, sessionId, signal, model, onEvent }) {
+    return this.run({ kind: 'author', prompt, images, cwd: workspaceDir, sessionId, systemPrompt, signal, model, onEvent });
   }
 }

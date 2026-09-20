@@ -1,4 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 // app.mjs — the controller API.
 //
 // The interface talks to this server only. Artwork code never does: it runs on
@@ -12,16 +12,10 @@ import fastifyStatic from '@fastify/static';
 
 import { ArtworkError } from '../../../runtime/contract.js';
 import { checkPackage } from '../../../runtime/node/package-checks.js';
-import { MAX_COMPARISON_ENTRIES } from '../judge/protocol.mjs';
-import { buildArchive } from '../controller/archive.mjs';
-import { measurePair } from '../analysis/relationships.mjs';
-import { readVersionSources } from '../analysis/service.mjs';
 import { publishSnapshot } from '../artwork/workspace.mjs';
 import { streamEvents } from './stream.mjs';
 import { round6 } from '../util.mjs';
 import { isInside } from '../artifacts.mjs';
-
-const STAGE_ORDER = ['early', 'early-mid', 'middle', 'late-mid', 'late', 'dense-early', 'dense-early-mid', 'dense-middle', 'dense-late-mid', 'dense-late'];
 
 function fail(reply, code, message, detail = {}) {
   const status = {
@@ -31,12 +25,6 @@ function fail(reply, code, message, detail = {}) {
     run_not_found: 404,
     capture_not_found: 404,
     not_found: 404,
-    analysis_not_found: 404,
-    measure_unknown: 400,
-    measure_not_enabled: 400,
-    measure_too_few_versions: 400,
-    measure_already_running: 409,
-    measure_unavailable: 503,
     payload_invalid: 400,
     run_state_invalid: 409,
     budget_exceeded: 400,
@@ -51,44 +39,7 @@ function fail(reply, code, message, detail = {}) {
   reply.code(status).send({ error: { code, message, detail } });
 }
 
-function stageRank(stage) {
-  const index = STAGE_ORDER.indexOf(stage);
-  return index === -1 ? STAGE_ORDER.length : index;
-}
-
-const STAGE_PATTERN = /^[a-z0-9][a-z0-9-]{0,23}$/;
-
-/**
- * Validate the evaluation protocol. These values become record fields and file
- * names, so every one of them is bounded here.
- * @returns {string|null} the problem, or null when the protocol is valid
- */
-function validateProtocol(protocol) {
-  const { viewport, seeds, frameRoles, stepSchedule, denseFrameRoles, denseStepSchedule, tieBreak } = protocol;
-  if (!viewport || !Number.isInteger(viewport.width) || !Number.isInteger(viewport.height)) return 'viewport.width and viewport.height must be integers';
-  if (viewport.width < 64 || viewport.width > 16384) return 'viewport.width must be from 64 to 16384';
-  if (viewport.height < 64 || viewport.height > 16384) return 'viewport.height must be from 64 to 16384';
-  if (typeof viewport.dpr !== 'number' || viewport.dpr < 0.25 || viewport.dpr > 4) return 'viewport.dpr must be from 0.25 to 4';
-  if (!Array.isArray(seeds) || seeds.length < 1 || seeds.length > 8) return 'seeds must hold from 1 to 8 values';
-  if (!seeds.every((seed) => Number.isInteger(seed) && seed >= 0 && seed <= 4294967295)) return 'every seed must be an integer from 0 to 4294967295';
-  if (typeof tieBreak !== 'boolean') return 'tieBreak must be true or false';
-
-  for (const [label, roles, steps] of [
-    ['frameRoles', frameRoles, stepSchedule],
-    ['denseFrameRoles', denseFrameRoles, denseStepSchedule],
-  ]) {
-    if (!Array.isArray(roles) || roles.length < 1 || roles.length > 8) return `${label} must hold from 1 to 8 names`;
-    if (!roles.every((role) => typeof role === 'string' && STAGE_PATTERN.test(role))) {
-      return `${label} must hold lowercase names of letters, digits, and hyphens`;
-    }
-    if (new Set(roles).size !== roles.length) return `${label} repeats a name`;
-    if (!Array.isArray(steps) || steps.length !== roles.length) return `${label} and its schedule must have the same length`;
-    if (!steps.every((step) => Number.isInteger(step) && step >= 1 && step <= 200000)) return 'every scheduled step must be an integer from 1 to 200000';
-  }
-  return null;
-}
-
-export function buildApp({ store, events, budget, controller, capture, provider, config, artifacts, detection, captureStatus, catalog, recorder = null, analysis = null }) {
+export function buildApp({ store, events, budget, controller, capture, provider, config, artifacts, detection, captureStatus, catalog }) {
   const app = Fastify({ logger: false, bodyLimit: config.server.requestBodyLimit });
 
   app.setErrorHandler((error, request, reply) => {
@@ -136,16 +87,15 @@ export function buildApp({ store, events, budget, controller, capture, provider,
     models: catalog ? { source: catalog.status().source, count: catalog.status().count } : { source: 'unavailable', count: 0 },
   }));
 
-  // ── models and cost ───────────────────────────────────────────────────────
+  // ── models ────────────────────────────────────────────────────────────────
   app.get('/api/models', async () => {
-    if (!catalog) return { source: 'unavailable', count: 0, models: [], defaultModel: config.provider.model, authorModel: config.provider.authorModel };
+    if (!catalog) return { source: 'unavailable', count: 0, models: [], defaultModel: config.provider.model };
     const status = catalog.status();
     return {
       source: status.source,
       count: status.count,
       fetchedAt: status.fetchedAt,
       defaultModel: config.provider.model,
-      authorModel: config.provider.authorModel,
       models: status.models.map((model) => ({
         id: model.id,
         name: model.name,
@@ -177,11 +127,7 @@ export function buildApp({ store, events, budget, controller, capture, provider,
     }
 
     const existing = store.findArtworkByPackagePath(body.packagePath);
-    if (existing) {
-      const artwork = store.getArtwork(existing.id);
-      artwork.rootVersionId = store.getVersion(artwork.rootVersionId).id;
-      return { artwork };
-    }
+    if (existing) return { artwork: store.getArtwork(existing.id) };
 
     const published = await publishSnapshot({
       workspaceDir: packageDir,
@@ -196,7 +142,6 @@ export function buildApp({ store, events, budget, controller, capture, provider,
       generation: 0,
       title: 'Root',
       status: 'promoted',
-      direction: null,
       sourceHash: check.packageHash,
       snapshotPath: published.path,
       workspacePath: packageDir,
@@ -216,6 +161,14 @@ export function buildApp({ store, events, budget, controller, capture, provider,
     store.db.prepare('UPDATE versions SET artwork_id = ? WHERE id = ?').run(artwork.id, rootVersion.id);
     artwork.rootVersionId = rootVersion.id;
 
+    // The root has no frame until one is captured, so its card would show the
+    // loading art. Capture it in the background: the import stays fast, and the
+    // card shows a real frame as soon as the capture lands.
+    void controller
+      .captureFrame({ versionId: rootVersion.id })
+      .then(() => request.log.info('Captured the frame of the root version'))
+      .catch((error) => request.log.warn(`The root frame was not captured: ${error.message}`));
+
     return reply.code(201).send({ artwork: store.getArtwork(artwork.id) ?? artwork });
   });
 
@@ -223,9 +176,9 @@ export function buildApp({ store, events, budget, controller, capture, provider,
     const artwork = store.getArtwork(request.params.artworkId);
     if (!artwork) return fail(reply, 'artwork_not_found', `No artwork ${request.params.artworkId}`);
     const versions = store.listVersions(artwork.id);
-    const variantOf = variantIndexMap(store, artwork.id);
     const latestCapture = store.latestCaptureByArtwork(artwork.id);
     const usageByVersion = store.usageCostByArtwork(artwork.id);
+    const tokensByVersion = store.usageTokensByArtwork(artwork.id);
     // A version produced by a run whose provider was the test double is NOT real
     // work, and it must never look like it. The card carries the mark.
     const stubRuns = new Set(
@@ -235,11 +188,14 @@ export function buildApp({ store, events, budget, controller, capture, provider,
         .map((run) => run.id),
     );
     const nodes = versions.map((version) => ({
-      ...publicVersion(version, variantOf.get(version.id) ?? null, latestCapture.get(version.id) ?? null),
+      ...publicVersion(version, latestCapture.get(version.id) ?? null),
       liveUrl: artifacts.liveUrlFor(version.id),
       onLineage: version.onLineage,
+      changes: version.changes.map((change) => ({ path: change.path, status: change.status, added: change.added, removed: change.removed })),
+      explanation: version.explanation,
       stub: Boolean(version.runId && stubRuns.has(version.runId)),
       usageUsd: round6(usageByVersion.get(version.id) ?? 0),
+      tokens: tokensByVersion.get(version.id) ?? 0,
       error: version.errorCode ? { code: version.errorCode, message: version.errorMessage } : null,
     }));
     const edges = versions
@@ -247,7 +203,7 @@ export function buildApp({ store, events, budget, controller, capture, provider,
       .map((version) => ({ id: `e_${version.id}`, source: version.parentId, target: version.id, onLineage: version.onLineage }));
 
     // The interface needs to know which versions a worker holds right now, so it
-    // can show a progress bar and a leader on the active nodes.
+    // can show progress on the active cards.
     const runs = store.listRuns(20).filter((run) => run.artworkId === artwork.id);
     const activeRun = runs.find((run) => ['queued', 'running', 'paused', 'stopping'].includes(run.state)) ?? null;
     const activeVersionIds = [];
@@ -270,144 +226,6 @@ export function buildApp({ store, events, budget, controller, capture, provider,
     };
   });
 
-  // ── measurements ──────────────────────────────────────────────────────────
-  // A measurement is a record of how two versions relate. It is never ancestry:
-  // no route here changes a parent link, and every answer states the measure and
-  // how old the record is.
-  app.get('/api/measures', async () => ({ measures: analysis ? analysis.measures() : [], defaultMeasure: analysis?.measures().find((measure) => measure.available)?.id ?? null }));
-
-  app.get('/api/artworks/:artworkId/relationships', async (request, reply) => {
-    if (!analysis) return fail(reply, 'measure_unavailable', 'The measurement service is not running.');
-    const artwork = store.getArtwork(request.params.artworkId);
-    if (!artwork) return fail(reply, 'artwork_not_found', `No artwork ${request.params.artworkId}`);
-    const measureId = String(request.query?.measure ?? analysis.measures().find((measure) => measure.available)?.id ?? 'configuration');
-    try {
-      const status = analysis.status(artwork.id, measureId);
-      const nodes = store.listVersions(artwork.id);
-      const byId = new Map(nodes.map((version) => [version.id, version]));
-      const pairs = status.pairs.map((pair) => ({
-        id: pair.id,
-        measure: pair.measure,
-        a: pair.versionA,
-        b: pair.versionB,
-        pairKey: pair.pairKey,
-        outcome: pair.outcome,
-        score: pair.score,
-        band: pair.band,
-        evidence: pair.evidence,
-        group: pair.evidence?.group ?? null,
-        ancestor: isAncestor(byId, pair.versionA, pair.versionB),
-        error: pair.errorCode ? { code: pair.errorCode, message: pair.errorMessage } : null,
-      }));
-      return { measure: status.measure, run: status.run, pairs, currentRevision: status.currentRevision, stale: status.stale, reason: status.reason, maximum: config.analysis.maxPairs };
-    } catch (error) {
-      return fail(reply, error.code ?? 'measure_failed', error.message, error.details ?? {});
-    }
-  });
-
-  app.post('/api/artworks/:artworkId/relationships', async (request, reply) => {
-    if (!analysis) return fail(reply, 'measure_unavailable', 'The measurement service is not running.');
-    const artwork = store.getArtwork(request.params.artworkId);
-    if (!artwork) return fail(reply, 'artwork_not_found', `No artwork ${request.params.artworkId}`);
-    const body = request.body ?? {};
-    const measureId = String(body.measure ?? '');
-    try {
-      const run = await analysis.start({ artwork, measureId, limit: body.limit, force: body.force === true });
-      return reply.code(202).send({ run, measure: analysis.measures().find((measure) => measure.id === run.measure) ?? null });
-    } catch (error) {
-      return fail(reply, error.code ?? 'measure_failed', error.message, error.details ?? {});
-    }
-  });
-
-  app.post('/api/analysis/:analysisRunId/cancel', async (request, reply) => {
-    if (!analysis) return fail(reply, 'measure_unavailable', 'The measurement service is not running.');
-    const run = store.getAnalysisRun(request.params.analysisRunId);
-    if (!run) return fail(reply, 'analysis_not_found', `No measurement ${request.params.analysisRunId}`);
-    return { run: analysis.cancel(run.id) };
-  });
-
-  // ── the archive ───────────────────────────────────────────────────────────
-  // Which versions are worth evolving next, and why the others are not. A run
-  // reads this to choose its own parent, so the report has to be honest about
-  // every refusal. It changes no record and spends nothing.
-  app.get('/api/artworks/:artworkId/archive', async (request, reply) => {
-    const artwork = store.getArtwork(request.params.artworkId);
-    if (!artwork) return fail(reply, 'artwork_not_found', `No artwork ${request.params.artworkId}`);
-    const measure = String(request.query?.measure ?? 'configuration');
-    if (!['configuration', 'source'].includes(measure)) return fail(reply, 'measure_unknown', `No measure is named ${measure}`);
-
-    const versions = store.listVersions(artwork.id);
-    const comparisons = store.listComparisonsByArtwork(artwork.id);
-    const byId = new Map(versions.map((version) => [version.id, version]));
-
-    // The configuration measure reads the records only. The source measure reads
-    // the published text of each version once and keeps it for the whole report.
-    const sources = new Map();
-    const distance =
-      measure === 'configuration'
-        ? (a, b) => measurePair({ measure: 'configuration', a: byId.get(a), b: byId.get(b) }).score ?? 1
-        : (a, b) => 1;
-    if (measure === 'source') {
-      for (const version of versions) sources.set(version.id, await readVersionSources(version));
-    }
-    const sourceDistance = (a, b) => measurePair({ measure: 'source', a: byId.get(a), b: byId.get(b), aSources: sources.get(a), bSources: sources.get(b) }).score ?? 1;
-    const gap = measure === 'source' ? sourceDistance : distance;
-
-    const archive = buildArchive({
-      versions,
-      comparisons,
-      distance: gap,
-      size: config.archive.size,
-      noveltyFloor: config.archive.noveltyFloor,
-      qualityFloor: config.archive.qualityFloor,
-    });
-
-    const memberIds = new Set(archive.members.map((member) => member.version.id));
-    const publicEntry = (version, extra = {}) => ({
-      id: version.id,
-      title: version.title,
-      generation: version.generation,
-      status: version.status,
-      createdAt: version.createdAt,
-      parentId: version.parentId,
-      ...extra,
-    });
-
-    return {
-      measure,
-      floors: { novelty: config.archive.noveltyFloor, quality: config.archive.qualityFloor, size: config.archive.size },
-      members: archive.members.map((member) =>
-        publicEntry(byId.get(member.version.id), {
-          quality: round6(member.quality.score),
-          votes: member.quality.votes,
-          wins: member.quality.wins,
-          losses: member.quality.losses,
-          confidence: round6(member.quality.confidence),
-          novelty: round6(member.novelty),
-          addedBy: member.addedBy,
-        }),
-      ),
-      refused: archive.refused
-        .map((entry) => ({ ...publicEntry(byId.get(entry.id)), reason: entry.reason, quality: round6(entry.quality), novelty: round6(entry.novelty) }))
-        .sort((a, b) => (a.reason === b.reason ? b.novelty - a.novelty : a.reason.localeCompare(b.reason))),
-      totals: {
-        versions: versions.length,
-        members: archive.members.length,
-        refused: archive.refused.length,
-        nearDuplicates: archive.refused.filter((entry) => entry.reason === 'near duplicate').length,
-        belowQuality: archive.refused.filter((entry) => entry.reason === 'quality').length,
-        capacity: archive.refused.filter((entry) => entry.reason === 'capacity').length,
-        compared: comparisons.length,
-      },
-      health: {
-        // The mean novelty of the members is how much ground the tree covers. A
-        // number near the floor means the archive is nearly full of copies.
-        meanNovelty: archive.members.length > 0 ? round6(archive.members.reduce((sum, member) => sum + member.novelty, 0) / archive.members.length) : 0,
-        votes: archive.members.reduce((sum, member) => sum + member.quality.votes, 0),
-      },
-    };
-  });
-
   // ── versions ──────────────────────────────────────────────────────────────
   app.get('/api/versions/:versionId', async (request, reply) => {
     const version = store.getVersion(request.params.versionId);
@@ -427,29 +245,9 @@ export function buildApp({ store, events, budget, controller, capture, provider,
       url: `/api/captures/${capture.id}.png`,
       createdAt: capture.createdAt,
     }));
-    const comparisons = store
-      .listComparisons(version.runId ?? '')
-      .filter((comparison) => Object.values(comparison.labels).includes(version.id) || comparison.winnerVersionId === version.id)
-      .map((comparison) => ({
-        id: comparison.id,
-        kind: comparison.kind,
-        round: comparison.round,
-        order: comparison.order,
-        labels: comparison.labels,
-        winnerVersionId: comparison.winnerVersionId,
-        confidence: comparison.confidence,
-        uncertainty: comparison.uncertainty,
-        observations: comparison.verdict.observations ?? [],
-        weaknesses: comparison.verdict.weaknesses ?? [],
-        notes: comparison.verdict.notes ?? '',
-        model: comparison.verdict.model ?? null,
-        stub: comparison.verdict.stub ?? false,
-        judgeSession: comparison.judgeSession,
-        createdAt: comparison.createdAt,
-      }));
     return {
       version: {
-        ...publicVersion(version, variantIndexMap(store, version.artworkId).get(version.id) ?? null),
+        ...publicVersion(version, store.latestCaptureByArtwork(version.artworkId).get(version.id) ?? null),
         liveUrl: artifacts.liveUrlFor(version.id),
         onLineage: version.onLineage,
         changes: version.changes,
@@ -460,7 +258,6 @@ export function buildApp({ store, events, budget, controller, capture, provider,
       explanation: version.explanation,
       snapshotPath: version.snapshotPath,
       captures,
-      evaluations: comparisons,
       usage: store.listUsageForVersion(version.id),
       error: version.errorCode ? { code: version.errorCode, message: version.errorMessage } : null,
     };
@@ -486,20 +283,51 @@ export function buildApp({ store, events, budget, controller, capture, provider,
         files.push({ seq: event.seq, at: event.at, ...event.payload });
       }
     }
-    return { rows: rows.slice(-200), files: files.slice(-400) };
+    return { rows: rows.slice(-400), files: files.slice(-400) };
   });
 
-  app.get('/api/versions/:versionId/artifacts/:name', async (request, reply) => {    const version = store.getVersion(request.params.versionId);
+  app.get('/api/versions/:versionId/artifacts/:name', async (request, reply) => {
+    const version = store.getVersion(request.params.versionId);
     if (!version) return fail(reply, 'version_not_found', `No version ${request.params.versionId}`);
     const captures = store.listCaptures(version.id);
     if (captures.length === 0) return fail(reply, 'capture_not_found', 'This version has no capture yet');
     const name = request.params.name;
-    const chosen =
-      name === 'thumb'
-        ? [...captures].sort((a, b) => stageRank(a.stage) - stageRank(b.stage) || a.step - b.step)[0]
-        : captures.find((capture) => capture.stage === name) ?? captures[0];
+    const chosen = captures.find((capture) => capture.stage === name) ?? captures[captures.length - 1];
     return sendImage(reply, chosen.path, chosen.id);
   });
+
+  // ── operator actions ──────────────────────────────────────────────────────
+  // The interface has no button for these. They repair one failed step, and
+  // they capture a frame for a version that has none (the imported root).
+  app.post('/api/versions/:versionId/repair', async (request, reply) => {
+    const version = store.getVersion(request.params.versionId);
+    if (!version) return fail(reply, 'version_not_found', `No version ${request.params.versionId}`);
+    if (controller.isActive(version.runId ?? '')) {
+      return fail(reply, 'run_state_invalid', 'A run is working on this artwork. Repair after the run ends.');
+    }
+    try {
+      const result = await controller.repairVersion({ versionId: version.id });
+      if (!result.ok) return fail(reply, result.error?.code ?? 'repair_failed', result.error?.message ?? 'The repair failed', result.error?.details ?? {});
+      return { version: publicVersion(result.version), repaired: true };
+    } catch (error) {
+      return fail(reply, error.code ?? 'repair_failed', error.message, error.details ?? {});
+    }
+  });
+
+  app.post('/api/versions/:versionId/capture', async (request, reply) => {
+    const version = store.getVersion(request.params.versionId);
+    if (!version) return fail(reply, 'version_not_found', `No version ${request.params.versionId}`);
+    try {
+      const captures = await controller.captureFrame({ versionId: version.id });
+      return { version: publicVersion(store.getVersion(version.id)), captures: captures.length };
+    } catch (error) {
+      return fail(reply, error.code ?? 'capture_failed', error.message, error.details ?? {});
+    }
+  });
+
+  // Refactoring is a ONE-TIME cleanup, not part of evolution. It has no route:
+  // the step loop never calls it, and `tools/repair-version.mjs --refactor` runs
+  // it once, by hand, on one kept version.
 
   app.get('/api/captures/:captureId.png', async (request, reply) => {
     const capture = store.getCapture(String(request.params.captureId).replace(/\.png$/, ''));
@@ -533,124 +361,46 @@ export function buildApp({ store, events, budget, controller, capture, provider,
   });
 
   // ─ runs ──────────────────────────────────────────────────────────────────
-  app.get('/api/cost-estimate', async (request) => {
-    const evolutions = Math.max(1, Math.min(50, Number(request.query?.evolutions) || 1));
-    const variants = Math.max(1, Math.min(8, Number(request.query?.variants) || config.evolution.variants));
-    const judgeModel = typeof request.query?.model === 'string' && request.query.model.length > 0 ? request.query.model : config.provider.model;
-    const authorModel = typeof request.query?.authorModel === 'string' && request.query.authorModel.length > 0 ? request.query.authorModel : config.provider.authorModel;
-    const bound = budget.boundFor({
-      evolutions,
-      variants,
-      protocol: { tieBreak: config.evolution.tieBreak },
-      authorModel,
-      judgeModel,
-    });
-    return {
-      ...bound,
-      evolutions,
-      variants,
-      judgeModel: bound.judgeModel ?? { id: judgeModel },
-      authorModel: bound.authorModel ?? { id: authorModel },
-      note: 'An estimate only. Spending is not limited: the record keeps the real cost.',
-    };
-  });
-
   app.post('/api/runs', async (request, reply) => {
     const body = request.body ?? {};
     const artwork = store.getArtwork(body.artworkId);
     if (!artwork) return fail(reply, 'artwork_not_found', `No artwork ${body.artworkId}`);
-    // A person who steers by hand must say what they want. An autonomous run
-    // writes its own instruction from the archive and the last verdicts, so it
-    // may start with no direction at all.
-    const autonomous = body.pinned !== true;
-    const direction = typeof body.direction === 'string' ? body.direction.trim() : '';
-    if (!autonomous && direction.length < 3) {
-      return fail(reply, 'payload_invalid', 'direction is required for a pinned run and must be at least 3 characters');
-    }
     const evolutions = Number(body.evolutions);
-    if (!Number.isInteger(evolutions) || evolutions < 1 || evolutions > 50) {
-      return fail(reply, 'payload_invalid', 'evolutions must be an integer from 1 to 50');
+    if (!Number.isInteger(evolutions) || evolutions < 1 || evolutions > 100) {
+      return fail(reply, 'payload_invalid', 'evolutions must be an integer from 1 to 100');
     }
-    // A variant is one child version. An evolution is one level of them.
-    const variants = Number(body.variants ?? config.evolution.variants);
-    if (!Number.isInteger(variants) || variants < 1 || variants > 8) {
-      return fail(reply, 'payload_invalid', 'variants must be an integer from 1 to 8');
+    // The interface sends no model when it wants the default.
+    const model = typeof body.model === 'string' && body.model.length > 0 ? body.model : config.provider.authorModel;
+    if (catalog && catalog.status().count > 0) {
+      const known = catalog.get(model);
+      if (!known) return fail(reply, 'payload_invalid', `The model ${model} is not in the Kilo catalog`);
+      // The step session must see the attached frames of the chain.
+      if (!known.acceptsImages) return fail(reply, 'payload_invalid', `The model ${model} cannot read images`);
     }
+
     // No cost guardrail. A limit is optional, and 0 means none.
     const limitUsd = Number(body.spendingLimitUsd ?? 0);
     if (!Number.isFinite(limitUsd) || limitUsd < 0) {
       return fail(reply, 'payload_invalid', 'spendingLimitUsd must be zero or a positive number');
     }
 
-    const branch = body.branchFromVersionId ? store.getVersion(body.branchFromVersionId) : null;
-    if (body.branchFromVersionId && !branch) return fail(reply, 'version_not_found', `No version ${body.branchFromVersionId}`);
-    if (branch && branch.artworkId !== artwork.id) {
-      return fail(reply, 'payload_invalid', 'The branch version belongs to a different artwork');
-    }
-    const rootVersion = branch ?? store.getVersion(artwork.rootVersionId);
+    const rootVersion = store.getVersion(artwork.rootVersionId);
     if (!rootVersion) return fail(reply, 'version_not_found', 'This artwork has no root version');
 
     const protocol = {
-      viewport: body.evaluation?.viewport ?? config.evolution.viewport,
-      seeds: body.evaluation?.seeds ?? config.evolution.seeds,
-      frameRoles: body.evaluation?.frameRoles ?? config.evolution.frameRoles,
-      stepSchedule: body.evaluation?.stepSchedule ?? config.evolution.stepSchedule,
-      denseFrameRoles: body.evaluation?.denseFrameRoles ?? config.evolution.denseFrameRoles,
-      denseStepSchedule: body.evaluation?.denseStepSchedule ?? config.evolution.denseStepSchedule,
-      tieBreak: body.evaluation?.tieBreak ?? config.evolution.tieBreak,
-      // Autonomous by default: the run reads its archive and picks its own parent
-      // at every level, after the level that starts from the seed version. A
-      // pinned run follows the promoted lineage instead, which is the predictable
-      // mode a person chooses when they want to steer by hand.
-      pinnedParent: body.pinned === true,
+      viewport: config.evolution.viewport,
+      seeds: config.evolution.seeds,
+      frameRoles: config.evolution.frameRoles,
+      stepSchedule: config.evolution.stepSchedule,
+      providerDriver: detection?.driver ?? 'unknown',
+      providerModel: model,
+      authorModel: model,
     };
-    if (protocol.stepSchedule.length !== protocol.frameRoles.length) {
-      return fail(reply, 'payload_invalid', 'stepSchedule and frameRoles must have the same length');
-    }
-    if (protocol.denseStepSchedule.length !== protocol.denseFrameRoles.length) {
-      return fail(reply, 'payload_invalid', 'denseStepSchedule and denseFrameRoles must have the same length');
-    }
-    const protocolProblem = validateProtocol(protocol);
-    if (protocolProblem) return fail(reply, 'payload_invalid', `The evaluation protocol is invalid: ${protocolProblem}`);
 
-    const judgeModel = typeof body.model === 'string' && body.model.length > 0 ? body.model : config.provider.model;
-    const authorModel = typeof body.authorModel === 'string' && body.authorModel.length > 0 ? body.authorModel : config.provider.authorModel;
-    if (catalog && catalog.status().count > 0) {
-      const judge = catalog.get(judgeModel);
-      if (!judge) return fail(reply, 'payload_invalid', `The model ${judgeModel} is not in the Kilo catalog`);
-      if (!judge.acceptsImages) return fail(reply, 'payload_invalid', `The judge model ${judgeModel} cannot read images`);
-      if (!catalog.get(authorModel)) return fail(reply, 'payload_invalid', `The author model ${authorModel} is not in the Kilo catalog`);
-    }
+    const bound = budget.boundFor({ evolutions, authorModel: model });
 
-    const bound = budget.boundFor({
-      evolutions,
-      variants,
-      protocol,
-      authorModel,
-      judgeModel,
-    });
-
-    // Every candidate is compared against the parent in one round comparison,
-    // so the label capacity and the image count are checked BEFORE the first
-    // author call. A run that could not be judged must never be authored.
-    if (variants + 1 > MAX_COMPARISON_ENTRIES) {
-      return fail(
-        reply,
-        'payload_invalid',
-        `A round comparison holds at most ${MAX_COMPARISON_ENTRIES} versions, so at most ${MAX_COMPARISON_ENTRIES - 1} variants can be compared with the parent`,
-      );
-    }
-    const imagesPerEntry = protocol.frameRoles.length * protocol.seeds.length;
-    const comparisonImages = (variants + 1) * imagesPerEntry;
-    if (comparisonImages > config.evolution.maxComparisonImages) {
-      return fail(
-        reply,
-        'payload_invalid',
-        `A round comparison would attach ${comparisonImages} images; the limit is ${config.evolution.maxComparisonImages}`,
-      );
-    }
     try {
-      budget.assertAdmission({ evolutions, variants, limitUsd, boundUsd: bound.boundUsd });
+      budget.assertAdmission({ evolutions, limitUsd, boundUsd: bound.boundUsd });
     } catch (error) {
       return fail(reply, error.code ?? 'budget_exceeded', error.message, error.details ?? {});
     }
@@ -660,10 +410,9 @@ export function buildApp({ store, events, budget, controller, capture, provider,
       run = store.createRun({
         artworkId: artwork.id,
         rootVersionId: rootVersion.id,
-        direction,
         evolutionsRequested: evolutions,
         limitUsd,
-        protocol: { ...protocol, variantsPerEvolution: variants, providerDriver: detection?.driver ?? 'unknown', providerModel: judgeModel, authorModel, estimate: bound },
+        protocol,
         costBoundUsd: bound.boundUsd,
       });
       store.upsertRound({
@@ -693,15 +442,6 @@ export function buildApp({ store, events, budget, controller, capture, provider,
       return fail(reply, error.code ?? 'budget_exceeded', error.message ?? String(error), error.details ?? {});
     }
 
-    // The tickbox can ask for a recording as the run starts.
-    if (recorder && body.record === true) {
-      void recorder
-        .start({ runId: run.id, url: `http://${config.host}:${config.port}/` })
-        .catch((error) => {
-          events.emit(run.id, 'error', { code: 'recording_failed', message: String(error.message ?? error) });
-        });
-    }
-
     void controller.start(run.id).catch((error) => {
       events.emit(run.id, 'error', { code: error.code ?? 'run_failed', message: error.message });
     });
@@ -722,13 +462,12 @@ export function buildApp({ store, events, budget, controller, capture, provider,
       run: { ...run, rounds: store.listRounds(run.id).filter((round) => round.round > 0) },
       jobs: store.listJobs(run.id),
       usage: store.listUsage(run.id),
-      comparisons: store.listComparisons(run.id),
       active: controller.isActive(run.id),
     };
   });
 
   // The interface polls this while a run moves. It stays small on purpose: the
-  // job, usage, and comparison lists grow for the whole life of a run.
+  // job and usage lists grow for the whole life of a run.
   app.get('/api/runs/:runId/summary', async (request, reply) => {
     const run = store.getRun(request.params.runId);
     if (!run) return fail(reply, 'run_not_found', `No run ${request.params.runId}`);
@@ -751,25 +490,6 @@ export function buildApp({ store, events, budget, controller, capture, provider,
   app.post('/api/runs/:runId/stop', async (request, reply) => {
     if (!store.getRun(request.params.runId)) return fail(reply, 'run_not_found', 'No such run');
     return { run: await controller.stop(request.params.runId) };
-  });
-
-  // ── documentation recording ───────────────────────────────────────────────
-  // The tickbox writes one PNG per second of the whole interface, then encodes a
-  // lossless video when the run ends.
-  app.get('/api/recording', async () => (recorder ? recorder.status() : { active: false, frames: 0 }));
-
-  app.post('/api/runs/:runId/recording', async (request, reply) => {
-    if (!recorder) return fail(reply, 'payload_invalid', 'Recording is not available in this server');
-    const run = store.getRun(request.params.runId);
-    if (!run) return fail(reply, 'run_not_found', `No run ${request.params.runId}`);
-    const url = `http://${config.host}:${config.port}/`;
-    const enabled = request.body?.enabled !== false;
-    const finished = ['stopped', 'completed', 'failed'].includes(run.state);
-    return {
-      recording: enabled
-        ? await recorder.start({ runId: run.id, url })
-        : await recorder.stop({ reason: 'requested', encodeNow: finished }),
-    };
   });
 
   // ── events ────────────────────────────────────────────────────────────────
@@ -839,61 +559,27 @@ export function buildApp({ store, events, budget, controller, capture, provider,
   return app;
 }
 
-function publicVersion(version, variant = null, newestCapture = null) {
+function publicVersion(version, newestCapture = null) {
   return {
     id: version.id,
     parentId: version.parentId,
     generation: version.generation,
-    evolution: version.round,
-    variant,
-    slot: version.slot,
+    // The step number is the CHAIN position, so it stays right when a second
+    // run continues the chain. The root is generation 0 and shows as "Root".
+    step: version.generation > 0 ? version.generation : null,
     title: version.title,
     status: version.status,
-    direction: version.direction,
     // The palette this version renders with, so the interface can show which
-    // colours a new run will inherit.
+    // colours a new step will inherit.
     palette: version.configuration?.palette ?? null,
-    // A version with no capture has no thumbnail. Saying so here stops the
-    // interface from requesting an image the server cannot answer.
-    thumbnailUrl: newestCapture ? `/api/versions/${version.id}/artifacts/thumb` : null,
-    // The frame the capture wrote last, so a node can show work in progress.
-    latestCaptureUrl: newestCapture ? `/api/captures/${newestCapture.id}.png` : null,
-    latestCaptureStage: newestCapture ? newestCapture.stage : null,
-    latestCaptureStep: newestCapture ? newestCapture.step : null,
+    // The frame this version captured: the still image of an older card.
+    stillUrl: newestCapture ? `/api/captures/${newestCapture.id}.png` : null,
+    stillStage: newestCapture ? newestCapture.stage : null,
+    stillStep: newestCapture ? newestCapture.step : null,
     livePath: `/live/${version.id}`,
     sourceHash: version.sourceHash,
     createdAt: version.createdAt,
   };
-}
-
-/** The position of each version inside its level, from the round records. */
-function variantIndexMap(store, artworkId) {
-  const map = new Map();
-  for (const run of store.listRuns(200)) {
-    if (run.artworkId !== artworkId) continue;
-    for (const round of store.listRounds(run.id)) {
-      round.candidateIds.forEach((id, index) => map.set(id, index + 1));
-    }
-  }
-  return map;
-}
-
-/**
- * True when one version is an ancestor of the other. The comparison itself says
- * so; the interface does not guess it from a ring number.
- */
-function isAncestor(byId, a, b) {
-  const walk = (start, target) => {
-    const seen = new Set();
-    let current = byId.get(start);
-    while (current?.parentId && !seen.has(current.id)) {
-      seen.add(current.id);
-      if (current.parentId === target) return true;
-      current = byId.get(current.parentId);
-    }
-    return false;
-  };
-  return walk(a, b) || walk(b, a);
 }
 
 function escapeHtml(value) {
@@ -921,4 +607,3 @@ async function sendImage(reply, path, id) {
     return fail(reply, 'capture_not_found', `The capture file is missing: ${error.code ?? error.message}`);
   }
 }
-

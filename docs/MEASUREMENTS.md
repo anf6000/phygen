@@ -2,6 +2,16 @@
 
 Date: 2026-09-15. Owner: Phygen.
 
+> **Historical record.** This measurement was made with the older 768 x 768
+> viewport and the older multi-frame schedule. The current frame is one 1024 x
+> 1024 square with seed 1337, and the `capture-check` tool is removed.
+>
+> Finding 2 below still guides the choice: the network has no visible structure
+> at step 300, the first filaments appear near step 1200, and the image is
+> saturated near step 3600. The current frame uses step 2500, which is a late
+> frame with real structure and a shorter render. Set `PHYGEN_STEP_SCHEDULE` to
+> change it. The numbers below are kept as evidence of the machine's speed.
+
 ## Machine
 
 | Item | Value |

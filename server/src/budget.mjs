@@ -43,34 +43,20 @@ export class Budget {
   }
 
   /** The highest possible cost of one run, before it starts. */
-  boundFor({ evolutions, variants, candidatesPerRound, protocol, authorModel, judgeModel }) {
-    const perLevel = variants ?? candidatesPerRound ?? this.config.evolution.variants;
+  boundFor({ evolutions, authorModel }) {
     if (this.catalog) {
       const estimate = this.catalog.estimateRun({
         evolutions,
-        candidatesPerRound: perLevel,
-        protocol,
         authorModel: authorModel ?? this.config.provider.authorModel,
-        judgeModel: judgeModel ?? this.config.provider.model,
       });
       return { ...estimate, pricingSource: estimate.pricingSource };
     }
-    const rounds = Math.max(1, evolutions);
-    const candidates = Math.max(1, perLevel);
-    const judgeCallsPerRound = candidates + 1 + (protocol?.tieBreak === false ? 0 : 1);
-    const authorCalls = rounds * candidates;
-    const repairCalls = rounds * candidates * this.config.evolution.repairAttempts;
-    const judgeCalls = rounds * judgeCallsPerRound;
-    const tieBreakCalls = rounds * (protocol?.tieBreak === false ? 0 : 1);
-    const usd =
-      (authorCalls + repairCalls) * this.config.cost.authorCallUsd +
-      judgeCalls * this.config.cost.judgeCallUsd +
-      tieBreakCalls * this.config.cost.tieBreakCallUsd;
+    const steps = Math.max(1, evolutions);
+    const repairCalls = steps * this.config.evolution.repairAttempts;
+    const usd = (steps + repairCalls) * this.config.cost.authorCallUsd;
     return {
-      rounds,
-      candidatesPerRound: candidates,
-      authorCalls: authorCalls + repairCalls,
-      judgeCalls: judgeCalls + tieBreakCalls,
+      evolutions: steps,
+      authorCalls: steps + repairCalls,
       estimateUsd: round6(usd),
       boundUsd: round6(usd),
       safetyFactor: 1,
@@ -159,15 +145,14 @@ export class Budget {
    *
    * @param {object} options
    * @param {number} options.evolutions
-   * @param {number} [options.variants] variants per level
    * @param {number} options.limitUsd 0 means no per-run limit
    * @param {number} options.boundUsd the highest possible cost of the run
    */
-  assertAdmission({ evolutions, variants, limitUsd = 0, boundUsd = 0 }) {
+  assertAdmission({ evolutions, limitUsd = 0, boundUsd = 0 }) {
     const { maxRunUsd, maxRounds, maxCallsPerRun } = this.config.cost;
     if (maxRounds > 0 && evolutions > maxRounds) {
-      throw new BudgetError('round_limit_reached', `The run asks for ${evolutions} rounds; the limit is ${maxRounds}`, {
-        rounds: evolutions,
+      throw new BudgetError('round_limit_reached', `The run asks for ${evolutions} steps; the limit is ${maxRounds}`, {
+        steps: evolutions,
         limit: maxRounds,
       });
     }
@@ -182,15 +167,11 @@ export class Budget {
         { requested: boundUsd, limit, evolutions },
       );
     }
-    if (maxCallsPerRun > 0) {
-      const perLevel = Math.max(1, variants ?? this.config.evolution.variants);
-      const authorCalls = evolutions * perLevel;
-      if (authorCalls > maxCallsPerRun) {
-        throw new BudgetError('request_limit_reached', `The run would make at least ${authorCalls} author requests; the limit is ${maxCallsPerRun}`, {
-          calls: authorCalls,
-          limit: maxCallsPerRun,
-        });
-      }
+    if (maxCallsPerRun > 0 && evolutions > maxCallsPerRun) {
+      throw new BudgetError('request_limit_reached', `The run would make at least ${evolutions} author requests; the limit is ${maxCallsPerRun}`, {
+        calls: evolutions,
+        limit: maxCallsPerRun,
+      });
     }
     return true;
   }

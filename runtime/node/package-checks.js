@@ -37,7 +37,7 @@ function toPosix(value) {
   return value.split('\\').join('/');
 }
 
-async function readJson(path, problems, label) {
+async function readJson(path, label, problems) {
   try {
     return JSON.parse(await readFile(path, 'utf8'));
   } catch (error) {

@@ -14,15 +14,12 @@ export const VERSION_STATES = Object.freeze([
   'authoring',
   'validating',
   'capturing',
-  'judging',
   'promoted',
-  'rejected',
   'failed',
-  'paused',
 ]);
-export const TERMINAL_VERSION_STATES = Object.freeze(['promoted', 'rejected', 'failed']);
+export const TERMINAL_VERSION_STATES = Object.freeze(['promoted', 'failed']);
 
-export const JOB_KINDS = Object.freeze(['author', 'capture', 'judge', 'publish']);
+export const JOB_KINDS = Object.freeze(['author', 'capture', 'publish']);
 export const JOB_STATES = Object.freeze(['queued', 'running', 'done', 'failed', 'cancelled']);
 export const TERMINAL_JOB_STATES = Object.freeze(['done', 'failed', 'cancelled']);
 
@@ -37,14 +34,11 @@ const RUN_TRANSITIONS = {
 };
 
 const VERSION_TRANSITIONS = {
-  queued: ['authoring', 'failed', 'rejected', 'paused'],
-  authoring: ['validating', 'failed', 'rejected', 'paused'],
-  validating: ['capturing', 'failed', 'rejected', 'authoring', 'paused'],
-  capturing: ['judging', 'failed', 'rejected', 'paused'],
-  judging: ['promoted', 'rejected', 'failed', 'paused'],
-  paused: ['authoring', 'validating', 'capturing', 'judging', 'rejected', 'failed'],
+  queued: ['authoring', 'failed'],
+  authoring: ['validating', 'failed'],
+  validating: ['capturing', 'failed'],
+  capturing: ['promoted', 'failed'],
   promoted: [],
-  rejected: [],
   failed: [],
 };
 
@@ -67,7 +61,7 @@ export function transition(machine, from, to) {
   const definition = MACHINES[machine];
   if (!definition) throw new ArtworkError('state_machine_unknown', `Unknown state machine: ${machine}`);
   if (!definition.states.includes(to)) {
-    throw new ArtworkError('state_invalid', `${machine} has no state ${to}`, { machine, state: to, allowed: definition.states });
+    throw new ArtworkError('state_invalid', `${machine} has no state ${to}`, { machine, state: to });
   }
   if (from === to) return to;
   const allowed = definition.transitions[from];
