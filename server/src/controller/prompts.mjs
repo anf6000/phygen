@@ -30,6 +30,7 @@ export const EVOLVE_SYSTEM_PROMPT = [
   'Keep the artwork runnable: the configuration must satisfy the schema in config.schema.json.',
   'Write no code comments. Do not add a comment to explain a change, and do not add a heading or a label comment.',
   'Favor bold colors. Choose a strong palette with real contrast, and avoid a muddy or washed-out result.',
+  'The frame must stay calm in time. Do not strobe, do not flash, do not flip a large part of the image between one step and the next, and do not swing the image back and forth between steps. A person must see an artwork evolve, not flicker.',
   'When you finish, list the files you changed and write one short paragraph that explains why.',
 ].join(' ');
 
@@ -64,6 +65,7 @@ export function buildEvolvePrompt({ instruction, manifest, parentConfiguration, 
   lines.push('4. Change config.json when the new code needs different values.');
   lines.push('5. Keep the network visible. After 2500 steps the frame must still show a trail with real structure, never an almost empty field. A step whose frame is nearly empty is refused.');
   lines.push('6. Write no code comments. Remove any comment you would have added, and do not write a heading or a label comment. Keep a comment that already exists only when the code below it does not say the same thing.');
+  lines.push('7. Keep the frame calm in time. Do NOT add a display effect that strobes or flashes, that flips a large share of the image between one step and the next, or that swings the image back and forth between steps. Do not make the field churn: a mechanism that rewrites most of the trail every step, or that oscillates with the step count, is refused. A person must see the artwork evolve, not flicker.');
   lines.push('');
   lines.push('Work efficiently. Read only src/physarum.js, src/renderer.js, and config.json. Do not read the tests or the other package files. Do not write long code: one focused change is enough.');
   lines.push('');

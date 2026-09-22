@@ -14,7 +14,7 @@
 // failure gets one repair session; a second failure marks the version failed,
 // the chain head stays, and the next step starts from the last good version.
 // ─────────────────────────────────────────────────────────────────────────────
-import { readFile, rm, stat } from 'node:fs/promises';
+import { readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { ArtworkError } from '../../../runtime/contract.js';
@@ -25,6 +25,7 @@ import { newId, nowIso, sha256Hex, sleep, stableStringify, truncate } from '../u
 import { canTransition, isTerminal, transition } from '../state.mjs';
 import { BudgetError } from '../budget.mjs';
 import { copyPackage, publishSnapshot, reviewEdits } from '../artwork/workspace.mjs';
+import { injectSettle } from '../artwork/calm.mjs';
 import { assertSourceMode, decideSourceMode, isLocalHost } from '../capture/index.mjs';
 import { isTransientProviderError } from '../providers/index.mjs';
 import { EVOLVE_SYSTEM_PROMPT, REFACTOR_SYSTEM_PROMPT, STEP_INSTRUCTION, buildEvolvePrompt, buildRefactorPrompt, buildRepairPrompt } from './prompts.mjs';
@@ -656,6 +657,120 @@ export class RunController {
     }
   }
 
+  /**
+   * Apply an operator edit to one version, as a NEW child step. No model runs.
+   *
+   * The caller supplies the edit and it must be small and deliberate: the child
+   * is reviewed against its parent, its configuration must not move, and it is
+   * published, captured, and kept, so the fix is an ordinary step of the chain
+   * with its own frame.
+   */
+  async applyEditVersion({ versionId, apply, title }) {
+    const parent = this.store.getVersion(versionId);
+    if (!parent) throw new ArtworkError('version_not_found', `No version ${versionId}`);
+    if (parent.status !== 'promoted') {
+      throw new ArtworkError('version_state_invalid', `Only a kept version can be edited (${versionId} is ${parent.status})`);
+    }
+    const run = this.store.getRun(parent.runId ?? '') ?? this.#latestRunForArtwork(parent.artworkId);
+    if (!run) throw new ArtworkError('run_not_found', `Version ${versionId} has no run to record the edit against`);
+    const context = this.#artworkContext(parent.artworkId);
+
+    const child = this.store.createVersion({
+      artworkId: parent.artworkId,
+      parentId: parent.id,
+      runId: run.id,
+      generation: parent.generation + 1,
+      round: null,
+      title: title ?? `Edit of step ${parent.generation}`,
+      status: 'queued',
+      sourceHash: parent.sourceHash,
+      snapshotPath: parent.snapshotPath,
+      workspacePath: null,
+      configuration: parent.configuration,
+      changes: [],
+      onLineage: false,
+    });
+    const workspaceDir = join(this.config.dataDir, 'workspaces', run.id, `${child.id}-edit`);
+    this.store.updateVersion(child.id, { workspacePath: workspaceDir });
+    this.#emit(run.id, 'version.created', { version: this.#publicVersion(child) });
+    this.#emit(run.id, 'log', { level: 'info', message: `An operator edits ${parent.id} as ${child.id}` });
+
+    await copyPackage(this.artifacts.snapshotDirFor(parent), workspaceDir);
+    try {
+      await this.#withJob({ run, round: null, kind: 'author', versionId: child.id }, async () => {
+        this.#setVersionState(child.id, 'authoring');
+        await apply({ workspaceDir, version: this.store.getVersion(child.id), parent });
+        this.store.updateVersion(child.id, { explanation: 'An operator edited this step. No model ran.' });
+      });
+
+      this.#setVersionState(child.id, 'validating');
+      const reviewed = await this.#validateCandidate({ run, versionId: child.id, workspaceDir, context, parent, phase: 'after-repair' });
+      if (!reviewed.ok) {
+        this.#failVersion(child.id, reviewed.error);
+        return { ok: false, version: this.store.getVersion(child.id), error: reviewed.error };
+      }
+      // An operator display fix must not move a number in the configuration.
+      if (sha256Hex(stableStringify(reviewed.configuration)) !== sha256Hex(stableStringify(parent.configuration))) {
+        const error = new ArtworkError('edit_changed_config', 'The edit changed config.json. An operator edit fixes the code, not the numbers.');
+        this.#failVersion(child.id, error);
+        return { ok: false, version: this.store.getVersion(child.id), error };
+      }
+
+      await this.#withJob({ run, round: null, kind: 'publish', versionId: child.id }, async () => {
+        const published = await publishSnapshot({
+          workspaceDir,
+          snapshotRoot: this.config.artifactsDir,
+          artworkId: context.manifest.id,
+          packageHash: reviewed.packageHash,
+        });
+        this.store.updateVersion(child.id, {
+          sourceHash: reviewed.packageHash,
+          snapshotPath: published.path,
+          configuration: reviewed.configuration,
+          changes: reviewed.changes,
+        });
+      });
+
+      await this.#captureVersion({ run, version: this.store.getVersion(child.id) });
+      this.#promoteVersion(child.id, 'an operator edited this step');
+      return { ok: true, version: this.store.getVersion(child.id), error: null };
+    } catch (error) {
+      if (isBudgetStop(error) || this.#stopping(run.id)) throw error;
+      this.#failVersion(child.id, error);
+      return { ok: false, version: this.store.getVersion(child.id), error };
+    }
+  }
+
+  /**
+   * Keep the frame calm: one step must not rewrite most of the field.
+   *
+   * A session rewrites the whole source file, so a settle applied once does not
+   * survive into the next step. Every child gets it here instead. The settle is
+   * inert when it is already present, and it never fails a step: when the anchor
+   * is not found, the package is published as the session wrote it.
+   *
+   * @returns {Promise<boolean>} true when the settle was added
+   */
+  async #keepFrameCalm({ run, versionId, workspaceDir }) {
+    const file = join(workspaceDir, 'src', 'physarum.js');
+    let source;
+    try {
+      source = await readFile(file, 'utf8');
+    } catch {
+      return false;
+    }
+    const result = injectSettle(source);
+    if (!result.injected) {
+      if (result.reason !== 'already settles') {
+        this.logger('warn', `${versionId}: ${result.reason}, so the frame is published as it is`);
+      }
+      return false;
+    }
+    await writeFile(file, result.source, 'utf8');
+    this.#emit(run.id, 'log', { level: 'info', message: `${versionId}: the frame settle was added to the step pipeline` });
+    return true;
+  }
+
   /** The newest run of one artwork. The record for an operator action. */
   #latestRunForArtwork(artworkId) {
     const runs = this.store.listRuns(200).filter((run) => run.artworkId === artworkId);
@@ -1077,6 +1192,10 @@ export class RunController {
         });
         this.#emit(run.id, 'version.state', { versionId, status: 'authoring', detail: `author session ${result.sessionId ?? 'unknown'} finished` });
       });
+
+      // The frame must stay calm in time. A session rewrites the whole file, so
+      // the settle cannot be asked for once: it is ensured here, for every child.
+      await this.#keepFrameCalm({ run, versionId, workspaceDir });
 
       this.#setVersionState(versionId, 'validating');
       const reviewed = await this.#validateCandidate({ run, versionId, workspaceDir, context, parent, phase: 'first' });

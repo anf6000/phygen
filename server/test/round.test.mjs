@@ -190,7 +190,7 @@ test('three steps make three children in one chain', async (t) => {
   assert.deepEqual(
     children.map((child) => child.generation),
     [1, 2, 3],
-    'each child is one generation deeper',
+    `each child is one generation deeper: ${children.map((child) => `${child.generation}/${child.status}/${child.errorCode ?? '-'}/${(child.errorMessage ?? '').slice(0, 90)}`).join(' | ')}`,
   );
   for (const child of children) {
     assert.equal(child.status, 'promoted', `every child is kept: ${child.status}`);
@@ -722,6 +722,150 @@ test('a refactor that moves a number in config.json is rejected', async (t) => {
   assert.equal(result.ok, false);
   assert.equal(result.error.code, 'refactor_changed_config');
   assert.equal(store.getVersion(child.id).configuration.num, rootVersion.configuration.num);
+});
+
+test('an operator edit becomes a new kept step that holds the edit', async (t) => {
+  const { store, controller, run, artwork, rootVersion, dir } = await setup(t, { evolutions: 1 });
+
+  const parent = store.createVersion({
+    artworkId: artwork.id,
+    parentId: rootVersion.id,
+    runId: run.id,
+    generation: 1,
+    round: 1,
+    title: 'Step 1',
+    status: 'promoted',
+    sourceHash: rootVersion.sourceHash,
+    snapshotPath: rootVersion.snapshotPath,
+    workspacePath: join(dir, 'workspaces', run.id, 'parent'),
+    configuration: rootVersion.configuration,
+  });
+
+  const result = await controller.applyEditVersion({
+    versionId: parent.id,
+    title: 'Stop the frame flashing',
+    apply: async ({ workspaceDir }) => {
+      const file = join(workspaceDir, 'src', 'renderer.js');
+      const source = await readFile(file, 'utf8');
+      await writeFile(file, `${source}\n// an operator fix\n`, 'utf8');
+    },
+  });
+
+  assert.equal(result.ok, true, result.error?.message);
+  // A new step, child of the one that was edited, with no round of its own.
+  assert.equal(result.version.generation, parent.generation + 1);
+  assert.equal(result.version.parentId, parent.id);
+  assert.equal(result.version.round, null);
+  assert.equal(result.version.status, 'promoted');
+  assert.equal(result.version.onLineage, true);
+  // A new snapshot was published, and it holds the edit.
+  assert.notEqual(result.version.sourceHash, parent.sourceHash);
+  const published = await readFile(join(result.version.snapshotPath, 'files', 'src', 'renderer.js'), 'utf8');
+  assert.match(published, /an operator fix/);
+  // The numbers did not move, and the new step has its own frame.
+  assert.deepEqual(result.version.configuration, parent.configuration);
+  assert.equal(store.listCaptures(result.version.id).length, 1);
+  assert.match(result.version.explanation ?? '', /No model ran/);
+});
+
+test('an operator edit that moves a number in config.json is refused', async (t) => {
+  const { store, controller, run, artwork, rootVersion, dir } = await setup(t, { evolutions: 1 });
+  const parent = store.createVersion({
+    artworkId: artwork.id,
+    parentId: rootVersion.id,
+    runId: run.id,
+    generation: 1,
+    round: 1,
+    title: 'Step 1',
+    status: 'promoted',
+    sourceHash: rootVersion.sourceHash,
+    snapshotPath: rootVersion.snapshotPath,
+    workspacePath: join(dir, 'workspaces', run.id, 'parent'),
+    configuration: rootVersion.configuration,
+  });
+
+  const result = await controller.applyEditVersion({
+    versionId: parent.id,
+    title: 'A display fix that also tunes the number',
+    apply: async ({ workspaceDir }) => {
+      const file = join(workspaceDir, 'config.json');
+      const configuration = JSON.parse(await readFile(file, 'utf8'));
+      configuration.gain = configuration.gain + 0.1;
+      await writeFile(file, `${JSON.stringify(configuration, null, 2)}\n`, 'utf8');
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, 'edit_changed_config');
+  assert.equal(store.getVersion(result.version.id).status, 'failed');
+  // The parent is untouched and stays the chain head.
+  assert.equal(store.getVersion(parent.id).status, 'promoted');
+});
+
+test('an operator edit that cannot be applied fails its own step, and nothing else', async (t) => {
+  const { store, controller, run, artwork, rootVersion, dir } = await setup(t, { evolutions: 1 });
+  const parent = store.createVersion({
+    artworkId: artwork.id,
+    parentId: rootVersion.id,
+    runId: run.id,
+    generation: 1,
+    round: 1,
+    title: 'Step 1',
+    status: 'promoted',
+    sourceHash: rootVersion.sourceHash,
+    snapshotPath: rootVersion.snapshotPath,
+    workspacePath: join(dir, 'workspaces', run.id, 'parent'),
+    configuration: rootVersion.configuration,
+  });
+
+  const result = await controller.applyEditVersion({
+    versionId: parent.id,
+    title: 'A patch that does not fit,',
+    apply: async () => {
+      const error = new Error('The shader does not hold the text this patch removes');
+      error.code = 'patch_not_found';
+      throw error;
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, 'patch_not_found');
+  assert.equal(store.getVersion(result.version.id).status, 'failed');
+  assert.equal(store.getVersion(parent.id).status, 'promoted', 'the edited version keeps its place');
+});
+
+test('every child keeps the frame calm, though the session rewrote the file', async (t) => {
+  const { store, controller, run, artwork } = await setup(t, { evolutions: 1 });
+
+  await controller.start(run.id);
+
+  const child = store.listVersions(artwork.id).find((version) => version.parentId);
+  assert.ok(child, 'the step made a child');
+  const published = await readFile(join(child.snapshotPath, 'files', 'src', 'physarum.js'), 'utf8');
+  // The settle is in the source that was published, not only in the workspace.
+  assert.match(published, /settlePrev/, 'the published source settles its trail');
+  assert.match(published, /settlePrev\.set\(settleTrail\)/, 'and it remembers the settled trail');
+  // The step still passes its checks and is kept.
+  assert.equal(child.status, 'promoted');
+  // And the record says the settle was added.
+  const logs = store.listEventsByType(run.id, 'log');
+  assert.ok(
+    logs.some((event) => /frame settle was added/.test(event.payload?.message ?? '')),
+    'the record names the settle',
+  );
+});
+
+test('the settle is not added twice', async (t) => {
+  const { store, controller, run, artwork } = await setup(t, { evolutions: 2 });
+  await controller.start(run.id);
+  const children = store.listVersions(artwork.id).filter((version) => version.parentId && version.status === 'promoted');
+  assert.ok(children.length >= 2, 'two steps were kept');
+  for (const child of children) {
+    const published = await readFile(join(child.snapshotPath, 'files', 'src', 'physarum.js'), 'utf8');
+    assert.equal((published.match(/settlePrev/g) ?? []).length > 0, true, 'every child settles');
+    // One settle block, and it is the one that was inserted.
+    assert.equal((published.match(/const settleTrail = this\.trail;/g) ?? []).length, 1, 'the settle is present once');
+  }
 });
 
 test('one capture per version holds the configured square and role', async (t) => {  const { store, controller, run, artwork } = await setup(t, { evolutions: 1 });

@@ -125,6 +125,11 @@ Observed on 2026-09-19, with `deepseek/deepseek-v4.1-flash`:
   timeout fails the step with `capture_timeout` and spends no repair session,
   because it is an infrastructure fault, not a fault of the code. One capture
   hung for three hours before this ceiling existed.
+- The heavy late-chain artwork cannot finish its 2500-step capture inside the
+  default 600 s. Observed on 2026-09-21 at step 120: three run rounds and one
+  operator edit failed with `capture_timeout`. Raise both
+  `PHYGEN_CAPTURE_TIMEOUT_MS` and `PHYGEN_CONTAINER_TIMEOUT_MS` (which must stay
+  the larger); 1800000 and 2400000 held the step-120 capture at about 11 min.
 
 ## Settings
 
@@ -242,6 +247,15 @@ Possible later work, none of it requested yet:
 
 - A server restart PAUSES every in-flight run on purpose, because a paid request
   may have been accepted. Resume it with `POST /api/runs/:runId/resume`.
+- The FIRST resume POST after a server boot can answer 500 without starting the
+  loop, and it writes no event. The second POST works, and no state is harmed.
+  Observed on 2026-09-21 on two boots. Later evidence points at the PowerShell
+  client, not the server: the same POST answers 200 from curl at the same
+  moment. Check the client before you hunt a server fault.
+- The server must run with `PHYGEN_CAPTURE_TIMEOUT_MS=1800000` and
+  `PHYGEN_CONTAINER_TIMEOUT_MS=2400000` (the container value must stay the
+  larger), or every capture of the late-chain artwork dies at the default
+  600 s. The running server carries them since 2026-09-21.
 - The Pi child process needs its standard input closed. An open pipe makes it wait
   forever. `server/src/providers/pi.mjs` sets this.
 - Source-code candidates run in the sandboxed artwork page, not in a container.
