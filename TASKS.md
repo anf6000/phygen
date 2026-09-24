@@ -5,8 +5,20 @@
 The system runs a **forward chain** with the real model. One run makes a chain of
 child versions, one child per step, and the interface is read-only.
 
-The step instruction now tells the session to **write no code comments** and to
-**favor bold colors**.
+The chain was **reset to the mother** on 2026-09-22 with
+`node tools/reset-to-root.mjs`: every evolved version, run, and record was
+removed, and the root version `ver_mu7yy6qkaa12f051` is the only kept version.
+The next run starts the tree at generation 0 again. The mother frame was
+recaptured at the new schedule with `node tools/capture-frame.mjs`.
+
+The step instruction now tells the session to **write no code comments**, to
+**favor bold colors**, and to keep the new direction of the tree: particle color
+from a generated color map or image, per particle and not global; forces like
+wind, noise, or attractors; stroke weight and transparency; a buffer that can be
+cleared or accumulate; texture-driven transparency and behavior; and appearance
+and behavior that change over time without strobing or flickering. The system
+prompt adds that **only the normal blending mode** is allowed: no multiply, add,
+overlay, or screen, in the display or in how a deposit meets the trail.
 
 A **refactor** is a one-time operator cleanup, never part of evolution. The step
 loop never calls it. Run it by hand:
@@ -20,6 +32,63 @@ and after, and the version is updated only when the trail checksum is unchanged.
 A changed `config.json` is refused too. Applied once on 2026-09-19 to step 50:
 both source files lost every comment (4900 lines to 3320), and the trail checksum
 stayed `3998659443`.
+
+An operator **fix** changes a kept version in place, with intent. The fixed
+package is validated, published, and captured again, and the version keeps its
+place in the chain:
+
+```bash
+cd server && node tools/repair-version.mjs --version <id> --fix-blend
+cd server && node tools/repair-version.mjs --version <id> --soften-clear <decay>
+```
+
+Applied on 2026-09-22 to step 2: the trail accumulates (decay 0), and a deposit
+blends with the trail like normal alpha-over instead of brightest-wins. Applied
+to step 12 the same day: the feathered 3×3 and 5×5 brushes became hard squares;
+the injected frame settle was removed; and the clearing was softened to decay 1,
+so the trails stay longer. The settle is no longer injected into every child:
+`#keepFrameCalm` is gone from the step pipeline, and the strict calm wording is
+gone from the prompts. The only calm rule left is **no flicker**: nothing may
+flicker on and off from one frame to the next. It travels through the system
+prompt, the step instruction, and requirement 7 of the step prompt.
+`tools/calm-steps.mjs` and the `--calm-steps` flag of the repair tool remain the
+manual way to add a settle.
+
+Applied to **step 49** (`ver_mudtkezme7c41392`) on 2026-09-23 and 2026-09-24,
+because the frame read as dim, jittery colored static. Step 49 was later removed
+from the chain with the truncate below, but the fix modes remain in the repair
+tool for future use:
+
+- `--calm-forces`: motion scaled by 0.55, and the net steering clamped per step.
+- `--sharpen`: the clamp relaxed to 5 degrees, diffusion cut from 0.34 to 0.06.
+- `--solo-sensing`: the steering up to the wind keeps the 5 degree budget, and
+  every later force field together may bend the heading only 2 degrees more.
+- `--sense-lead`: the steering budget before the wind raised to 30 degrees, so
+  the trail-sensing table can turn onto trails; the channel split
+  (`DISP_BLUE`) zeroed, so all three channels deposit on one pixel.
+- `--unify-color`: every particle samples its color from one generated color
+  image at its position; the province color rotations and the clashing rival
+  image are gone.
+- `--align-channels`: the red rail offset (`spread`) zeroed, so a deposit
+  cannot leave green and blue dots without red.
+- `--sim-palette`: the simulation's default palette changed from `inferno` to
+  `ember`. The adapter builds the simulation WITHOUT the configured palette
+  (`src/adapter.js` is protected, so the operator fix lives in the sim
+  default), and the inferno hue window ends past 1.0, so its last band wraps
+  into green. That wrap was the persistent green and violet speckle. The
+  configured `ember` window stays inside the reds, so the frame is now one
+  coherent warm palette.
+
+Each fix publishes a new snapshot hash, so an older snapshot's `physarum.js` is
+a stale patch anchor. Always re-read `versions.snapshot_path` before a fix.
+
+The chain was **truncated after step 34** on 2026-09-24 with
+`node tools/truncate-chain.mjs --keep-through 34`: every version above
+generation 34 was removed with its captures, all runs and their records were
+cleared, and the unreferenced snapshots were deleted. The chain head is
+`ver_mudp078j33202e5c` ("I added a slow, coarse crowding competition field…")
+at generation 34, and the next run evolves from there. A consistent backup of
+the state before the truncation is in `backups/before-truncate-20260924`.
 
 Vocabulary, which the interface, the API, and the records use:
 
@@ -80,6 +149,9 @@ cd web && npm run build
 cd server && node tools/snapshot-report.mjs            # snapshot integrity report
 cd server && node tools/backup.mjs --out <dir>         # consistent backup
 cd server && node tools/clear-stale-jobs.mjs           # close records left in flight
+cd server && node tools/reset-to-root.mjs              # delete every evolved version, keep the mother
+cd server && node tools/truncate-chain.mjs --keep-through <generation>   # delete every step above one generation, keep it
+cd server && node tools/capture-frame.mjs --version <id> [--force]   # frame for a version outside any run
 node tools/live-check.mjs --version <id>               # the live artwork on both routes
 ```
 
@@ -95,7 +167,7 @@ A step does these actions, in order:
 4. Review the edits against the manifest, and check the package and the
    configuration. A technical failure gets one bounded repair session.
 5. Publish the snapshot.
-6. Capture one late square frame: 1024 x 1024, seed 1337, step 2500.
+6. Capture one late square frame: 1024 x 1024, seed 1337, step 1000.
 7. Promote the child.
 
 A technical failure after the repair marks the version `failed`, keeps the chain
@@ -141,7 +213,7 @@ Observed on 2026-09-19, with `deepseek/deepseek-v4.1-flash`:
 | `PHYGEN_MODEL` | `deepseek/deepseek-v4.1-flash` | The model of the run. The step session must accept images. |
 | `PHYGEN_AUTHOR_MODEL` | as above | The author model. |
 | `PHYGEN_AUTHOR_THINKING` | `high` | Author effort. `minimal` is much faster and much shallower. |
-| `PHYGEN_STEP_SCHEDULE` | `2500` | The captured steps, comma separated, increasing. |
+| `PHYGEN_STEP_SCHEDULE` | `1000` | The captured steps, comma separated, increasing. |
 | `PHYGEN_MAX_RUN_USD` | `0` | A cost limit. `0` enforces none. |
 | `PHYGEN_COST_SAFETY_FACTOR` | `1.8` | The reserve is this multiple of the estimate. |
 | `PHYGEN_REQUIRE_ISOLATION` | `0` | `1` refuses source candidates without a container. |

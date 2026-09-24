@@ -834,7 +834,7 @@ test('an operator edit that cannot be applied fails its own step, and nothing el
   assert.equal(store.getVersion(parent.id).status, 'promoted', 'the edited version keeps its place');
 });
 
-test('every child keeps the frame calm, though the session rewrote the file', async (t) => {
+test('a child does not carry the injected settle, though the session rewrote the file', async (t) => {
   const { store, controller, run, artwork } = await setup(t, { evolutions: 1 });
 
   await controller.start(run.id);
@@ -842,29 +842,27 @@ test('every child keeps the frame calm, though the session rewrote the file', as
   const child = store.listVersions(artwork.id).find((version) => version.parentId);
   assert.ok(child, 'the step made a child');
   const published = await readFile(join(child.snapshotPath, 'files', 'src', 'physarum.js'), 'utf8');
-  // The settle is in the source that was published, not only in the workspace.
-  assert.match(published, /settlePrev/, 'the published source settles its trail');
-  assert.match(published, /settlePrev\.set\(settleTrail\)/, 'and it remembers the settled trail');
+  // The controller no longer injects a settle: what the session wrote is what
+  // was published.
+  assert.doesNotMatch(published, /settlePrev/, 'the published source carries no injected settle');
   // The step still passes its checks and is kept.
   assert.equal(child.status, 'promoted');
-  // And the record says the settle was added.
+  // And the record does not name a settle.
   const logs = store.listEventsByType(run.id, 'log');
   assert.ok(
-    logs.some((event) => /frame settle was added/.test(event.payload?.message ?? '')),
-    'the record names the settle',
+    !logs.some((event) => /frame settle was added/.test(event.payload?.message ?? '')),
+    'the record names no settle',
   );
 });
 
-test('the settle is not added twice', async (t) => {
+test('no step carries the injected settle', async (t) => {
   const { store, controller, run, artwork } = await setup(t, { evolutions: 2 });
   await controller.start(run.id);
   const children = store.listVersions(artwork.id).filter((version) => version.parentId && version.status === 'promoted');
   assert.ok(children.length >= 2, 'two steps were kept');
   for (const child of children) {
     const published = await readFile(join(child.snapshotPath, 'files', 'src', 'physarum.js'), 'utf8');
-    assert.equal((published.match(/settlePrev/g) ?? []).length > 0, true, 'every child settles');
-    // One settle block, and it is the one that was inserted.
-    assert.equal((published.match(/const settleTrail = this\.trail;/g) ?? []).length, 1, 'the settle is present once');
+    assert.doesNotMatch(published, /settlePrev/, 'no child settles');
   }
 });
 

@@ -25,7 +25,6 @@ import { newId, nowIso, sha256Hex, sleep, stableStringify, truncate } from '../u
 import { canTransition, isTerminal, transition } from '../state.mjs';
 import { BudgetError } from '../budget.mjs';
 import { copyPackage, publishSnapshot, reviewEdits } from '../artwork/workspace.mjs';
-import { injectSettle } from '../artwork/calm.mjs';
 import { assertSourceMode, decideSourceMode, isLocalHost } from '../capture/index.mjs';
 import { isTransientProviderError } from '../providers/index.mjs';
 import { EVOLVE_SYSTEM_PROMPT, REFACTOR_SYSTEM_PROMPT, STEP_INSTRUCTION, buildEvolvePrompt, buildRefactorPrompt, buildRepairPrompt } from './prompts.mjs';
@@ -742,36 +741,70 @@ export class RunController {
   }
 
   /**
-   * Keep the frame calm: one step must not rewrite most of the field.
+   * Apply an operator fix to one kept version, in place. No model runs.
    *
-   * A session rewrites the whole source file, so a settle applied once does not
-   * survive into the next step. Every child gets it here instead. The settle is
-   * inert when it is already present, and it never fails a step: when the anchor
-   * is not found, the package is published as the session wrote it.
-   *
-   * @returns {Promise<boolean>} true when the settle was added
+   * A refactor may not change the image; a fix may. The caller supplies a
+   * small, deliberate edit. The fixed package is reviewed against the
+   * version's own snapshot, validated, and published, and the version's frame
+   * is captured again, so the card shows the fixed behavior. The version keeps
+   * its status, its lineage, and its place in the chain.
    */
-  async #keepFrameCalm({ run, versionId, workspaceDir }) {
-    const file = join(workspaceDir, 'src', 'physarum.js');
-    let source;
+  async fixVersion({ versionId, apply, note }) {
+    const version = this.store.getVersion(versionId);
+    if (!version) throw new ArtworkError('version_not_found', `No version ${versionId}`);
+    if (version.status !== 'promoted') throw new ArtworkError('version_state_invalid', `Only a kept version can be fixed (${versionId} is ${version.status})`);
+    const run = this.store.getRun(version.runId ?? '') ?? this.#latestRunForArtwork(version.artworkId);
+    if (!run) throw new ArtworkError('run_not_found', `Version ${versionId} has no run to record the fix against`);
+    const context = this.#artworkContext(version.artworkId);
+
+    const workspaceDir = join(this.config.dataDir, 'workspaces', run.id, `${versionId}-fix`);
+    await copyPackage(this.artifacts.snapshotDirFor(version), workspaceDir);
     try {
-      source = await readFile(file, 'utf8');
-    } catch {
-      return false;
-    }
-    const result = injectSettle(source);
-    if (!result.injected) {
-      if (result.reason !== 'already settles') {
-        this.logger('warn', `${versionId}: ${result.reason}, so the frame is published as it is`);
+      await this.#withJob({ run, round: version.round, kind: 'author', versionId }, async () => {
+        await apply({ workspaceDir, version });
+      });
+      this.#emit(run.id, 'log', { level: 'info', message: `An operator fix edits ${versionId} in place` });
+
+      const reviewed = await this.#validateCandidate({ run, versionId, workspaceDir, context, parent: version, phase: 'after-repair' });
+      if (!reviewed.ok) {
+        this.#emit(run.id, 'error', { code: reviewed.error.code, message: reviewed.error.message, detail: { versionId } });
+        return { ok: false, version: this.store.getVersion(versionId), error: reviewed.error };
       }
-      return false;
+
+      let published;
+      await this.#withJob({ run, round: version.round, kind: 'publish', versionId }, async () => {
+        published = await publishSnapshot({
+          workspaceDir,
+          snapshotRoot: this.config.artifactsDir,
+          artworkId: context.manifest.id,
+          packageHash: reviewed.packageHash,
+        });
+      });
+
+      const updated = this.store.updateVersion(versionId, {
+        sourceHash: reviewed.packageHash,
+        snapshotPath: published.path,
+        configuration: reviewed.configuration,
+        changes: reviewed.changes,
+        workspacePath: workspaceDir,
+        explanation: truncate(note ?? 'An operator fixed this step in place. No model ran.', 4000),
+        errorCode: null,
+        errorMessage: null,
+      });
+      await this.#captureVersion({ run, version: this.store.getVersion(versionId) });
+      this.#emit(run.id, 'version.state', { versionId, status: 'promoted', detail: 'an operator fixed this step in place' });
+      this.#emit(run.id, 'log', { level: 'info', message: `Fixed ${versionId}: ${reviewed.changes.length} file(s) changed, a new frame is captured` });
+      return { ok: true, version: updated, error: null };
+    } catch (error) {
+      if (isBudgetStop(error) || this.#stopping(run.id)) throw error;
+      this.#emit(run.id, 'error', { code: error.code ?? 'fix_failed', message: error.message, detail: { versionId } });
+      return { ok: false, version: this.store.getVersion(versionId), error };
     }
-    await writeFile(file, result.source, 'utf8');
-    this.#emit(run.id, 'log', { level: 'info', message: `${versionId}: the frame settle was added to the step pipeline` });
-    return true;
   }
 
-  /** The newest run of one artwork. The record for an operator action. */
+  /**
+   * The newest run of one artwork. The record for an operator action.
+   */
   #latestRunForArtwork(artworkId) {
     const runs = this.store.listRuns(200).filter((run) => run.artworkId === artworkId);
     return runs[0] ?? null;
@@ -1193,10 +1226,10 @@ export class RunController {
         this.#emit(run.id, 'version.state', { versionId, status: 'authoring', detail: `author session ${result.sessionId ?? 'unknown'} finished` });
       });
 
-      // The frame must stay calm in time. A session rewrites the whole file, so
-      // the settle cannot be asked for once: it is ensured here, for every child.
-      await this.#keepFrameCalm({ run, versionId, workspaceDir });
-
+      // The only calm rule is no flicker: nothing may flicker on and off from
+      // one frame to the next. The system prompt and the step instruction
+      // carry that rule to the session. The injected settle is an
+      // operator action now, never an automatic one.
       this.#setVersionState(versionId, 'validating');
       const reviewed = await this.#validateCandidate({ run, versionId, workspaceDir, context, parent, phase: 'first' });
       if (!reviewed.ok) {

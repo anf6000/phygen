@@ -182,12 +182,12 @@ export function loadConfig(overrides = {}) {
       // One step at a time: one author session, one child.
       authorConcurrency: readNumber('PHYGEN_AUTHOR_CONCURRENCY', 1),
       repairAttempts: readNumber('PHYGEN_REPAIR_ATTEMPTS', 1),
-      // The frame is a 1024 x 1024 square. One seed, one late step: the network
-      // has real structure by step 2500, and a shorter render makes every step
-      // faster. See docs/MEASUREMENTS.md.
+      // The frame is a 1024 x 1024 square. One seed, one late step. A 1000-step
+      // render keeps the tree fast; the instruction asks for visible structure
+      // at that step. See docs/MEASUREMENTS.md.
       viewport: { width: 1024, height: 1024, dpr: 1 },
       seeds: [1337],
-      stepSchedule: readList('PHYGEN_STEP_SCHEDULE', [2500]),
+      stepSchedule: readList('PHYGEN_STEP_SCHEDULE', [1000]),
       frameRoles: ['late'],
       // Remove candidate workspaces when a run finishes. Records and captures stay.
       cleanupWorkspaces: readBool('PHYGEN_CLEANUP_WORKSPACES', true),
