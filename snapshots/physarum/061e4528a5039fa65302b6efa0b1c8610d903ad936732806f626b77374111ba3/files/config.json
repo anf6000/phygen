@@ -1,0 +1,15 @@
+{
+  "palette": "bone",
+  "gamma": 1.1,
+  "dpr": 1,
+  "num": 850,
+  "sensorAngle": 30,
+  "sensorDist": 30,
+  "rotAngle": 24,
+  "decay": 0,
+  "spawnRadius": 120,
+  "scale": 1,
+  "gain": 1.6,
+  "speed": 2,
+  "seed": 1337
+}

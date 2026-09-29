@@ -1,0 +1,15 @@
+{
+  "palette": "ice",
+  "gamma": 1,
+  "dpr": 1,
+  "num": 800,
+  "sensorAngle": 30,
+  "sensorDist": 75,
+  "rotAngle": 24,
+  "decay": 0,
+  "spawnRadius": 70,
+  "scale": 1,
+  "gain": 1,
+  "speed": 3,
+  "seed": 1337
+}

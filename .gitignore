@@ -3,7 +3,11 @@ data/
 # A fresh artwork tree gets its own records directory: PHYGEN_DATA=data-simple,
 # PHYGEN_DATA=data-pop1, and so on. Those are runtime state, never source.
 data-*/
-snapshots/
+# The evolved artwork packages under snapshots/ are source, and they ARE
+# committed: one directory per version, each holding the full package. Only the
+# record database, the candidate workspaces, and the captured frames under
+# data-*/ stay local. docs/chain.json carries the chain structure as text,
+# because the database that holds it is runtime state.
 web/dist/
 *.log
 *.png

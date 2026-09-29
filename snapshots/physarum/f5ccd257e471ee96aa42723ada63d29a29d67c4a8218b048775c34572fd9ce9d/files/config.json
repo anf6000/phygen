@@ -1,0 +1,15 @@
+{
+  "palette": "magma",
+  "gamma": 1.1,
+  "dpr": 1,
+  "num": 780,
+  "sensorAngle": 28,
+  "sensorDist": 26,
+  "rotAngle": 11,
+  "decay": 0,
+  "spawnRadius": 430,
+  "scale": 1,
+  "gain": 1.9,
+  "speed": 2,
+  "seed": 1337
+}

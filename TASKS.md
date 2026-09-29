@@ -142,6 +142,22 @@ cleared, and the unreferenced snapshots were deleted. The chain head is
 at generation 34, and the next run evolves from there. A consistent backup of
 the state before the truncation is in `backups/before-truncate-20260924`.
 
+The **evolved artworks are in version control** since 2026-09-29. Every
+referenced snapshot under `snapshots/physarum/<hash>/` holds one version's full
+package, and `docs/chain.json` holds the chain structure as text: each version
+with its generation, parent, status, title, configuration, changed files, and
+snapshot hash. Rewrite that file with `node tools/chain-index.mjs` after a run,
+then commit it with the new snapshots. Unreferenced snapshots are pruned first,
+so the tree holds exactly the versions the record names.
+
+Two parts stay local, and both are derived or live state:
+
+- The **record database** (`data-evolve/phygen.db`) is runtime state. The chain
+  index is its text mirror for the chain.
+- The **captured frames** (`data-evolve/captures/`) are about 77 MB of PNG. A
+  frame is a deterministic render of the package at a fixed seed and step
+  count, so `node tools/capture-frame.mjs` can make it again.
+
 Vocabulary, which the interface, the API, and the records use:
 
 - A **step** makes exactly one child of the newest good version.
@@ -204,6 +220,7 @@ cd server && node tools/clear-stale-jobs.mjs           # close records left in f
 cd server && node tools/reset-to-root.mjs              # delete every evolved version, keep the mother
 cd server && node tools/truncate-chain.mjs --keep-through <generation>   # delete every step above one generation, keep it
 cd server && node tools/capture-frame.mjs --version <id> [--force]   # frame for a version outside any run
+cd server && node tools/chain-index.mjs                # rewrite docs/chain.json after a run
 node tools/live-check.mjs --version <id>               # the live artwork on both routes
 ```
 

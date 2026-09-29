@@ -1,0 +1,4 @@
+# The artwork snapshots are content-addressed: snapshot.json holds the sha256 of
+# every file in the package. Keep those bytes exactly as they were committed, so
+# a checkout still matches the recorded hashes and the integrity check passes.
+snapshots/** -text

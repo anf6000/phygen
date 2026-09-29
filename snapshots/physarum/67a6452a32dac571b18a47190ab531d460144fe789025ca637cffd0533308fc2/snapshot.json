@@ -1,0 +1,94 @@
+{
+  "snapshotVersion": 1,
+  "artworkId": "physarum",
+  "contractVersion": "1.0.0",
+  "packageHash": "67a6452a32dac571b18a47190ab531d460144fe789025ca637cffd0533308fc2",
+  "createdAt": "2026-09-22T14:17:52.685Z",
+  "files": [
+    {
+      "path": "config.json",
+      "bytes": 169,
+      "sha256": "c89e72b46c063ae651352c17a10c0460244a76e343218ac4b391c6666d18e121"
+    },
+    {
+      "path": "config.schema.json",
+      "bytes": 2682,
+      "sha256": "dc3bf170b3da9a33b0ef31d4c29143794643314ce04fefefe8766e27ecd330db"
+    },
+    {
+      "path": "index.html",
+      "bytes": 841,
+      "sha256": "d44b1af154c04cb2720cc10c01849655d2da8af6153f27ffc698f3fb305a1f4d"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 1638,
+      "sha256": "2907823e8dcd4dfdabc090498d5f406d658392ec15a7151aea20706924876194"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 540,
+      "sha256": "f7dc67b5aa07e61959a5d7b3a0afdd83f54c6af5026ac722812df0adfed835b1"
+    },
+    {
+      "path": "package.json",
+      "bytes": 434,
+      "sha256": "1c08c8c588df15914829735d1f8d263a5d18a5a47d7f33124b3b6b5ac5438d9e"
+    },
+    {
+      "path": "server.mjs",
+      "bytes": 2783,
+      "sha256": "0d7ab1323bfa9dfaf0b2afdef60b3644f2ea35ab1ab6698d8507266f4fbeaf79"
+    },
+    {
+      "path": "src/adapter.js",
+      "bytes": 14425,
+      "sha256": "387dde66ab7860688e0e5c9a731fbd54f40d9d97acd729a4dde9499dabb42c49"
+    },
+    {
+      "path": "src/main.js",
+      "bytes": 7940,
+      "sha256": "513da563844b9943218cfc84999c8700a258b98edc13da4121d73e3167dc0dee"
+    },
+    {
+      "path": "src/physarum.js",
+      "bytes": 22746,
+      "sha256": "4425acc5705748a544b76de8844f413d34b5df6495f3bfcd6c013a6fee0de5d2"
+    },
+    {
+      "path": "src/renderer.js",
+      "bytes": 8619,
+      "sha256": "28c4c8b189267131e35304c880f10acba614a57096bd35c60d5f5f5faec0a2ea"
+    },
+    {
+      "path": "test/adapter.test.mjs",
+      "bytes": 9932,
+      "sha256": "a9d5067ce67f39e41ba337f7347196e82f4996ec45f1eec1a026d55ce18eb7ad"
+    },
+    {
+      "path": "test/config.test.mjs",
+      "bytes": 5736,
+      "sha256": "ba732ef9b590733a33f3d85e1f013ac6a41dae3b593767144ca325b5a0a4e7ba"
+    },
+    {
+      "path": "test/package.test.mjs",
+      "bytes": 9346,
+      "sha256": "34998cad8c00bbc8ec8aa675de0fc60bf429cb481cedeb2faf29f17630496ab5"
+    },
+    {
+      "path": "test/physarum.test.mjs",
+      "bytes": 4230,
+      "sha256": "de7e7a1c5caecec393fe12ac6896ea40244059452b8316e32bc7f874f22ef915"
+    },
+    {
+      "path": "tools/snapshot.mjs",
+      "bytes": 4226,
+      "sha256": "9998dc9de5d1b05a6742804ccaaa7cfa78b970a8a03f57c0c0c71ab0cb5b2e8e"
+    },
+    {
+      "path": "tools/validate-package.mjs",
+      "bytes": 2227,
+      "sha256": "86258817efa6924e02b89249c7226056f76554d3dc31b5b74ba7f21590f225d2"
+    }
+  ]
+}

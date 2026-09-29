@@ -1,0 +1,15 @@
+{
+  "palette": "ember",
+  "gamma": 1.2,
+  "dpr": 1,
+  "num": 600,
+  "sensorAngle": 34,
+  "sensorDist": 15,
+  "rotAngle": 26,
+  "decay": 0,
+  "spawnRadius": 88,
+  "scale": 1,
+  "gain": 1.3,
+  "speed": 2,
+  "seed": 1337
+}

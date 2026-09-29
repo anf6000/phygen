@@ -1,0 +1,5188 @@
+{
+  "note": "Chain structure for the committed snapshots. The record database stays local; this file is its text mirror for the chain. Regenerate with server/tools/chain-index.mjs after a run.",
+  "generatedAt": "2026-09-29T07:46:58.732Z",
+  "versionCount": 125,
+  "versions": [
+    {
+      "id": "ver_mu7yy6qkaa12f051",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 0,
+      "round": null,
+      "parentId": null,
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Root",
+      "snapshot": "5883e4a0a59ff0543bfb46a30e76175622599837b1e1691310f483058109547f",
+      "createdAt": "2026-09-19T05:50:45.404Z",
+      "configuration": {
+        "palette": "white",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 45,
+        "decay": 5,
+        "spawnRadius": 20,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": []
+    },
+    {
+      "id": "ver_mucnuoms3638d81f",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 1,
+      "round": 1,
+      "parentId": "ver_mu7yy6qkaa12f051",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The trail buffer now holds four bytes for each pixel, so a deposit ca...",
+      "snapshot": "5848f9edfd4e0e31421e7413111631486e56223f31d72cac462ca93e16b3d9ca",
+      "createdAt": "2026-09-22T12:38:57.076Z",
+      "configuration": {
+        "palette": "inferno",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 45,
+        "decay": 6,
+        "spawnRadius": 20,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 16
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 15,
+          "removed": 7
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 147,
+          "removed": 16
+        }
+      ]
+    },
+    {
+      "id": "ver_muco1sdd55d47ff8",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 2,
+      "round": 1,
+      "parentId": "ver_mucnuoms3638d81f",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Change complete.",
+      "snapshot": "622e222bfc746d30a7da7a8ca8f1d560807ea53bc8e8b43d0b67718ea6acee64",
+      "createdAt": "2026-09-22T12:44:28.513Z",
+      "configuration": {
+        "palette": "inferno",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 0,
+        "spawnRadius": 20,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 15,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 4,
+          "removed": 6
+        }
+      ]
+    },
+    {
+      "id": "ver_mucp2lwd6dbee104",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 3,
+      "round": 1,
+      "parentId": "ver_muco1sdd55d47ff8",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I added a second generated field to the simulation: a coarse 9×9 pigm...",
+      "snapshot": "5123956b1232473f8a881c70d454c4e9c344491a8f8ced4480ff9c6ebd886f4e",
+      "createdAt": "2026-09-22T13:13:06.397Z",
+      "configuration": {
+        "palette": "inferno",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 0,
+        "spawnRadius": 20,
+        "scale": 1,
+        "gain": 1.15,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 15
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 51,
+          "removed": 10
+        }
+      ]
+    },
+    {
+      "id": "ver_mucp9z404b6a2b54",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 4,
+      "round": 1,
+      "parentId": "ver_mucp2lwd6dbee104",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Changed the color source of the deposit from a one-dimensional hue ta...",
+      "snapshot": "3a4a009b33ea7821975c36133464f40383699ae2e7a445b120c8cca13c226fa6",
+      "createdAt": "2026-09-22T13:18:50.112Z",
+      "configuration": {
+        "palette": "inferno",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 0,
+        "spawnRadius": 20,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 135,
+          "removed": 67
+        }
+      ]
+    },
+    {
+      "id": "ver_mucpinuld4e93ead",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 5,
+      "round": 2,
+      "parentId": "ver_mucp9z404b6a2b54",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The change is in place. The simulation now captures the agents in sev...",
+      "snapshot": "16bf12f8683fb3ce510fe22752ad08ce3a0658b76cddb392217260dfa9f699b7",
+      "createdAt": "2026-09-22T13:25:35.422Z",
+      "configuration": {
+        "palette": "inferno",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 0,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 67,
+          "removed": 9
+        }
+      ]
+    },
+    {
+      "id": "ver_mucpp7p90f394bdb",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 6,
+      "round": 3,
+      "parentId": "ver_mucpinuld4e93ead",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "What changed",
+      "snapshot": "af59fc73f80d690f10917cf7dbafefc99eab675ddc7b3c683bcf65ef64bc845c",
+      "createdAt": "2026-09-22T13:30:41.085Z",
+      "configuration": {
+        "palette": "inferno",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 0,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.15,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 64,
+          "removed": 17
+        }
+      ]
+    },
+    {
+      "id": "ver_mucr342k6c000c2a",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 7,
+      "round": 1,
+      "parentId": "ver_mucpp7p90f394bdb",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I added a per-agent charge that follows the local trail density at th...",
+      "snapshot": "50e05f8e1c12fe317113f51d4b7e1ec0c263abd7329c5d377c74f3908995f46a",
+      "createdAt": "2026-09-22T14:09:29.180Z",
+      "configuration": {
+        "palette": "inferno",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 0,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.05,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 29,
+          "removed": 7
+        }
+      ]
+    },
+    {
+      "id": "ver_mucraivca935eb3e",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 8,
+      "round": 2,
+      "parentId": "ver_mucr342k6c000c2a",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The frame now carries its color as coherent territories instead of on...",
+      "snapshot": "67a6452a32dac571b18a47190ab531d460144fe789025ca637cffd0533308fc2",
+      "createdAt": "2026-09-22T14:15:14.952Z",
+      "configuration": {
+        "palette": "inferno",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 5,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.15,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 19,
+          "removed": 5
+        }
+      ]
+    },
+    {
+      "id": "ver_mucrea6118246d57",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 9,
+      "round": 3,
+      "parentId": "ver_mucraivca935eb3e",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The change is in place and consistent: the trail deposit is now a fou...",
+      "snapshot": "a90cff5e8d3592d11ea9155a9b0e8ce726bc14186990dad4b61b43fc15836a5e",
+      "createdAt": "2026-09-22T14:18:10.297Z",
+      "configuration": {
+        "palette": "inferno",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 5,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.05,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 65,
+          "removed": 22
+        }
+      ]
+    },
+    {
+      "id": "ver_mucrqibk0bfb46aa",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 10,
+      "round": 4,
+      "parentId": "ver_mucrea6118246d57",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Done. The trail color is now a sensed channel, not only a display value.",
+      "snapshot": "bf70cad27a7de1177953dc1e5d7f26f1f6b87e9e78cf59a48b9e2a008c9e2b64",
+      "createdAt": "2026-09-22T14:27:40.736Z",
+      "configuration": {
+        "palette": "inferno",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 6000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 5,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.05,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 90,
+          "removed": 39
+        }
+      ]
+    },
+    {
+      "id": "ver_mucs2kb93b1f217d",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 11,
+      "round": 5,
+      "parentId": "ver_mucrqibk0bfb46aa",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Step 11",
+      "snapshot": "ea093bbfb43f9201878a70549347af00e6c7c4883423a4cf6b6fe9ab639af138",
+      "createdAt": "2026-09-22T14:37:03.189Z",
+      "configuration": {
+        "palette": "inferno",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 6000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 5,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.05,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 104,
+          "removed": 0
+        }
+      ]
+    },
+    {
+      "id": "ver_mucs7deu3d63e954",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 12,
+      "round": 6,
+      "parentId": "ver_mucs2kb93b1f217d",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The artwork now carries a slow, generated aurora field. A four-cell s...",
+      "snapshot": "8addc2ea3e25915119700e1f22afd22168c2d185eac5feabb7785bfe72c4da56",
+      "createdAt": "2026-09-22T14:40:47.526Z",
+      "configuration": {
+        "palette": "inferno",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 6000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 1,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.15,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 15,
+          "removed": 1
+        }
+      ]
+    },
+    {
+      "id": "ver_muculqm4250a43dd",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 13,
+      "round": 1,
+      "parentId": "ver_mucs7deu3d63e954",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Changed src/physarum.js and config.json.",
+      "snapshot": "05d404ba1684f85d10e95d7ff9c27e0182eccde80a88758f413910d0eab86bd3",
+      "createdAt": "2026-09-22T15:47:57.052Z",
+      "configuration": {
+        "palette": "inferno",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 1,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 15
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 65,
+          "removed": 20
+        }
+      ]
+    },
+    {
+      "id": "ver_mucup1tb88b876df",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 14,
+      "round": 2,
+      "parentId": "ver_muculqm4250a43dd",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The change is in place. Here is what I did and why.",
+      "snapshot": "c2eadb79230917705aeb444db717fee63f94476c0b064e80a44b6c33441b3a84",
+      "createdAt": "2026-09-22T15:50:31.535Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 1,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 32,
+          "removed": 0
+        }
+      ]
+    },
+    {
+      "id": "ver_mucursty0191e59f",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 15,
+      "round": 3,
+      "parentId": "ver_mucup1tb88b876df",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Done. The artwork now runs a seeded life cycle.",
+      "snapshot": "74b8719f14939645c968c57b503444142128384112ace0be247314f4bfcad561",
+      "createdAt": "2026-09-22T15:52:39.862Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 1,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.3,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 48,
+          "removed": 8
+        }
+      ]
+    },
+    {
+      "id": "ver_mucuxlvoe23850bb",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 16,
+      "round": 1,
+      "parentId": "ver_mucursty0191e59f",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The change is complete.",
+      "snapshot": "25e28589f377e47632e6e167d8d5d62f364de3192708bbb95755c62fb077ef09",
+      "createdAt": "2026-09-22T15:57:10.788Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 1,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.15,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 53,
+          "removed": 3
+        }
+      ]
+    },
+    {
+      "id": "ver_mucv0con6dc7e226",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 17,
+      "round": 2,
+      "parentId": "ver_mucuxlvoe23850bb",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The artwork now carries a drifting grazing pressure: a generated 5×5 ...",
+      "snapshot": "a5408cbc2ebe606a33cc3037155e46a017f09bf53a3c1889c6135b40afa64aea",
+      "createdAt": "2026-09-22T15:59:18.839Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 1,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.3,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 85,
+          "removed": 9
+        }
+      ]
+    },
+    {
+      "id": "ver_mucv45nb713cf75e",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 18,
+      "round": 3,
+      "parentId": "ver_mucv0con6dc7e226",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "What changed",
+      "snapshot": "cb128122f09ed2dbda0eacb401f47bd1e48d0af4ffe23d693b51461913d2767c",
+      "createdAt": "2026-09-22T16:02:16.343Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 1,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.3,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 42,
+          "removed": 0
+        }
+      ]
+    },
+    {
+      "id": "ver_mucv92cu8a48aafc",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 19,
+      "round": 4,
+      "parentId": "ver_mucv45nb713cf75e",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The hue-domain quantization constant went from 7 to 4, so the generat...",
+      "snapshot": "12d3df7053e50427b9f37adcdb710b8aad5c3ccb65f18572887b33bb21d67655",
+      "createdAt": "2026-09-22T16:06:05.358Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 1,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.3,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 28,
+          "removed": 1
+        }
+      ]
+    },
+    {
+      "id": "ver_mucvchwe46bf4240",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 20,
+      "round": 5,
+      "parentId": "ver_mucv92cu8a48aafc",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "What changed",
+      "snapshot": "df0d2756c08a5204f3f418f90bd77c6b0aa64eff45c0972f908dada4fe1d04d3",
+      "createdAt": "2026-09-22T16:08:45.470Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 3,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.3,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 46,
+          "removed": 14
+        }
+      ]
+    },
+    {
+      "id": "ver_mucvj24wbcfff47b",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 21,
+      "round": 6,
+      "parentId": "ver_mucvchwe46bf4240",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The mirrored-deposit mechanism is in place. Every deposit and every g...",
+      "snapshot": "7849e9e1acb13b707347c9af604611996bc7baf023d284fc9027e17ef9101440",
+      "createdAt": "2026-09-22T16:13:51.633Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 3,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.3,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 13,
+          "removed": 0
+        }
+      ]
+    },
+    {
+      "id": "ver_mucvn4lqb2dd7d6a",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 22,
+      "round": 7,
+      "parentId": "ver_mucvj24wbcfff47b",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Both edits are in place and the classes keep every public method (ste...",
+      "snapshot": "63938fb54f279585b16131f882065e455138c7950ffd9571c2db344d96404052",
+      "createdAt": "2026-09-22T16:17:01.454Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 3,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.3,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 43,
+          "removed": 2
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 25,
+          "removed": 2
+        }
+      ]
+    },
+    {
+      "id": "ver_mucvsovjbb74961b",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 23,
+      "round": 8,
+      "parentId": "ver_mucvn4lqb2dd7d6a",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Step 23",
+      "snapshot": "1b9e5453aeaa4b8dfb619112e5417d60db4ac32811db993e8da281eb0179d58d",
+      "createdAt": "2026-09-22T16:21:21.008Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4000,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 3,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.35,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 52,
+          "removed": 2
+        }
+      ]
+    },
+    {
+      "id": "ver_mucvwh0z8e4a4cde",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 24,
+      "round": 9,
+      "parentId": "ver_mucvsovjbb74961b",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Step 24",
+      "snapshot": "5690408d9a0dd2e82c6d56f05b2c3279104741b62065b10efb871a10804a6d8e",
+      "createdAt": "2026-09-22T16:24:17.460Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4600,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 3,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.35,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 2,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 36,
+          "removed": 2
+        }
+      ]
+    },
+    {
+      "id": "ver_mudni6m1608f4338",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 25,
+      "round": 1,
+      "parentId": "ver_mucvwh0z8e4a4cde",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I added a chromatic (per-channel) dispersion mechanism to the deposit.",
+      "snapshot": "4da33c5009d82d54a17444bfe3090cbd781ca832445ea2996857030db94671f9",
+      "createdAt": "2026-09-23T05:17:00.025Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4600,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 3,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.35,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 52,
+          "removed": 8
+        }
+      ]
+    },
+    {
+      "id": "ver_mudno27j034f7a9c",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 26,
+      "round": 2,
+      "parentId": "ver_mudni6m1608f4338",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I changed the deposit geometry in the simulation and retuned the trail.",
+      "snapshot": "b12a8743f53ed3be9a4b2f8497124457da5ec221f5fd567007186434d261b586",
+      "createdAt": "2026-09-23T05:21:34.255Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4600,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 4,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.35,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 27,
+          "removed": 2
+        }
+      ]
+    },
+    {
+      "id": "ver_mudnu4bse3f6ea50",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 27,
+      "round": 3,
+      "parentId": "ver_mudno27j034f7a9c",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Change complete.",
+      "snapshot": "2fe18e2d12816a320e154bb8d6c851eecfd3d19d29d1742778d8bebfa299d14f",
+      "createdAt": "2026-09-23T05:26:16.936Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4600,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 3,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.35,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 38,
+          "removed": 4
+        }
+      ]
+    },
+    {
+      "id": "ver_mudnxtlt68d93bca",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 28,
+      "round": 4,
+      "parentId": "ver_mudnu4bse3f6ea50",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I changed the color source of the system and added a spiral-glide force.",
+      "snapshot": "a01af56929aebe38622ed29c1a068e5d1b96e684ad787e63e259b98e9f007fb3",
+      "createdAt": "2026-09-23T05:29:09.665Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4600,
+        "sensorAngle": 45,
+        "sensorDist": 10,
+        "rotAngle": 40,
+        "decay": 3,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.35,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 39,
+          "removed": 11
+        }
+      ]
+    },
+    {
+      "id": "ver_mudo5qfgbfb35b75",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 29,
+      "round": 5,
+      "parentId": "ver_mudnxtlt68d93bca",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Change complete. The simulation now carries a second, much larger-sca...",
+      "snapshot": "4db3a1acedab5031f7320c76506400d0b22739c90023cce97b6ba969e016349c",
+      "createdAt": "2026-09-23T05:35:18.796Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4600,
+        "sensorAngle": 45,
+        "sensorDist": 13,
+        "rotAngle": 40,
+        "decay": 3,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.35,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 3
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 48,
+          "removed": 2
+        }
+      ]
+    },
+    {
+      "id": "ver_mudoa4t5b834d0e8",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 30,
+      "round": 6,
+      "parentId": "ver_mudo5qfgbfb35b75",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Done. The simulation now carries a runoff field: a seeded 7×7 lattice...",
+      "snapshot": "e086348db8ebf96c3aeaa665a000575eedd7ec532685de9f5b43bf8fef5b6c2a",
+      "createdAt": "2026-09-23T05:38:44.057Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4600,
+        "sensorAngle": 45,
+        "sensorDist": 13,
+        "rotAngle": 40,
+        "decay": 4,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.38,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 28,
+          "removed": 3
+        }
+      ]
+    },
+    {
+      "id": "ver_mudoez7y0ef3464a",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 31,
+      "round": 7,
+      "parentId": "ver_mudoa4t5b834d0e8",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Work complete.",
+      "snapshot": "e7a600009fec508b74bc40015ddeb5b6d6ffc1e6ec988e13004d6c9c72c4a542",
+      "createdAt": "2026-09-23T05:42:30.094Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4600,
+        "sensorAngle": 45,
+        "sensorDist": 13,
+        "rotAngle": 40,
+        "decay": 3,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.38,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 122,
+          "removed": 1
+        }
+      ]
+    },
+    {
+      "id": "ver_mudonjlyb51f0a33",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 32,
+      "round": 8,
+      "parentId": "ver_mudoez7y0ef3464a",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Done. The simulation now runs a territorial feedback on the deposit.",
+      "snapshot": "4ed44c9d33c861c9af28a65432d3099e1a1957c3fdb39570ac1ffbef2bc7ca50",
+      "createdAt": "2026-09-23T05:49:09.766Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4600,
+        "sensorAngle": 45,
+        "sensorDist": 13,
+        "rotAngle": 40,
+        "decay": 3,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.5,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 17,
+          "removed": 2
+        }
+      ]
+    },
+    {
+      "id": "ver_mudosp23dc96bd43",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 33,
+      "round": 9,
+      "parentId": "ver_mudonjlyb51f0a33",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Change complete.",
+      "snapshot": "dcfe5d524999770e7192b86d36345190d79a708742aecf2884e0f98de13cccdc",
+      "createdAt": "2026-09-23T05:53:10.107Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4600,
+        "sensorAngle": 45,
+        "sensorDist": 13,
+        "rotAngle": 40,
+        "decay": 4,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.3,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 92,
+          "removed": 2
+        }
+      ]
+    },
+    {
+      "id": "ver_mudp078j33202e5c",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 34,
+      "round": 10,
+      "parentId": "ver_mudosp23dc96bd43",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I added a slow, coarse \"crowding competition\" field to the simulation...",
+      "snapshot": "7325447d877df7843e7ab772ae79a7ddf8e21046fdb01a835e047aaf219db3c0",
+      "createdAt": "2026-09-23T05:59:00.259Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 4600,
+        "sensorAngle": 45,
+        "sensorDist": 13,
+        "rotAngle": 40,
+        "decay": 4,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.3,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 91,
+          "removed": 2
+        }
+      ]
+    },
+    {
+      "id": "ver_muf7q68t82efe910",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 35,
+      "round": 1,
+      "parentId": "ver_mudp078j33202e5c",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I added a harmonic Chladni resonance field to guide the slime mold ag...",
+      "snapshot": "78ecaa2566e8bb0594bf0a3a05037efa6223803002c35e48233ac67d7dfb2510",
+      "createdAt": "2026-09-24T07:30:51.294Z",
+      "configuration": {
+        "palette": "inferno",
+        "gamma": 0.95,
+        "dpr": 1,
+        "num": 4600,
+        "sensorAngle": 42,
+        "sensorDist": 12,
+        "rotAngle": 42,
+        "decay": 0,
+        "spawnRadius": 12,
+        "scale": 1,
+        "gain": 1.4,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        }
+      ]
+    },
+    {
+      "id": "ver_mufb42gxcd50f2d6",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 36,
+      "round": 1,
+      "parentId": "ver_muf7q68t82efe910",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The evolution is complete. Here is the report.",
+      "snapshot": "3680a20f92d8e7cf7283064ef38c0214ce5ee832993cceb15922a3ae18862bfd",
+      "createdAt": "2026-09-24T09:05:38.433Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 0.95,
+        "dpr": 1,
+        "num": 3400,
+        "sensorAngle": 32,
+        "sensorDist": 16,
+        "rotAngle": 28,
+        "decay": 0,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.4,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 6,
+          "removed": 6
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 104,
+          "removed": 1624
+        }
+      ]
+    },
+    {
+      "id": "ver_mufcno5f1ca79a03",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 37,
+      "round": 1,
+      "parentId": "ver_mufb42gxcd50f2d6",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Visual intent — \"one river\". The parent is a square-filling cyan tang...",
+      "snapshot": "716f893a4ee3a8751ed4f31f9882635590b5ee818bd73e295219596101edfdae",
+      "createdAt": "2026-09-24T09:48:52.611Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 0.95,
+        "dpr": 1,
+        "num": 3400,
+        "sensorAngle": 32,
+        "sensorDist": 16,
+        "rotAngle": 28,
+        "decay": 0,
+        "spawnRadius": 46,
+        "scale": 1,
+        "gain": 1.4,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 87,
+          "removed": 66
+        }
+      ]
+    },
+    {
+      "id": "ver_mufd2a1qf10201a5",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 38,
+      "round": 1,
+      "parentId": "ver_mufcno5f1ca79a03",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Step 38",
+      "snapshot": "716f893a4ee3a8751ed4f31f9882635590b5ee818bd73e295219596101edfdae",
+      "createdAt": "2026-09-24T10:00:14.174Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 0.95,
+        "dpr": 1,
+        "num": 3400,
+        "sensorAngle": 32,
+        "sensorDist": 16,
+        "rotAngle": 28,
+        "decay": 0,
+        "spawnRadius": 46,
+        "scale": 1,
+        "gain": 1.4,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": []
+    },
+    {
+      "id": "ver_mufd96q356b0b255",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 39,
+      "round": 1,
+      "parentId": "ver_mufd2a1qf10201a5",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Clear difference at a glance: the parent's wide horizontal band of do...",
+      "snapshot": "bc60ff2030c5ad9c7d5302a0359826d42be4ea67253a70c4953c40322a4df8a8",
+      "createdAt": "2026-09-24T10:05:36.459Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 0.95,
+        "dpr": 1,
+        "num": 3400,
+        "sensorAngle": 32,
+        "sensorDist": 16,
+        "rotAngle": 28,
+        "decay": 0,
+        "spawnRadius": 14,
+        "scale": 1,
+        "gain": 1.4,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 17,
+          "removed": 15
+        }
+      ]
+    },
+    {
+      "id": "ver_mufdch4rc331929f",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 40,
+      "round": 2,
+      "parentId": "ver_mufd96q356b0b255",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Visual intent. Turn the parent's single striated river ribbon into a ...",
+      "snapshot": "5c14728e366d9cf399a8dcffaea79d35f9026affde1fcbe1a7bcf6bb90e16daf",
+      "createdAt": "2026-09-24T10:08:09.915Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 0.95,
+        "dpr": 1,
+        "num": 3400,
+        "sensorAngle": 32,
+        "sensorDist": 16,
+        "rotAngle": 28,
+        "decay": 0,
+        "spawnRadius": 14,
+        "scale": 1,
+        "gain": 1.4,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 44,
+          "removed": 59
+        }
+      ]
+    },
+    {
+      "id": "ver_mufdf673810628b4",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 41,
+      "round": 3,
+      "parentId": "ver_mufdch4rc331929f",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The change is complete and coherent. No config change is needed — the...",
+      "snapshot": "3efdf9bc7e76a5e3f00f4dcc1bc7388731afdc66126cbe625be1f138b34596a3",
+      "createdAt": "2026-09-24T10:10:15.712Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 0.95,
+        "dpr": 1,
+        "num": 3400,
+        "sensorAngle": 32,
+        "sensorDist": 16,
+        "rotAngle": 28,
+        "decay": 0,
+        "spawnRadius": 14,
+        "scale": 1,
+        "gain": 1.4,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 37,
+          "removed": 21
+        }
+      ]
+    },
+    {
+      "id": "ver_mufdj4gk8121f0bb",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 42,
+      "round": 4,
+      "parentId": "ver_mufdf673810628b4",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The file is coherent and complete. I reviewed the change against the ...",
+      "snapshot": "0240995a9b06d41feaed65380e551a469a9ff8315abc23c140a4a9952cd3bda7",
+      "createdAt": "2026-09-24T10:13:20.084Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 0.95,
+        "dpr": 1,
+        "num": 3400,
+        "sensorAngle": 32,
+        "sensorDist": 16,
+        "rotAngle": 28,
+        "decay": 0,
+        "spawnRadius": 14,
+        "scale": 1,
+        "gain": 1.4,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 54,
+          "removed": 49
+        }
+      ]
+    },
+    {
+      "id": "ver_mufdltzfdf8e06c6",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 43,
+      "round": 5,
+      "parentId": "ver_mufdj4gk8121f0bb",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Dominant form: one arcing river from the launch roost to the head kno...",
+      "snapshot": "e37186330227537d11a604a22b53eac24792809e7d99dc39799a9a7c98a6bf31",
+      "createdAt": "2026-09-24T10:15:26.476Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 0.95,
+        "dpr": 1,
+        "num": 2800,
+        "sensorAngle": 32,
+        "sensorDist": 16,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 8,
+        "scale": 1,
+        "gain": 1.4,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 4,
+          "removed": 4
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 70,
+          "removed": 50
+        }
+      ]
+    },
+    {
+      "id": "ver_mufdo8jrf5e0f0a8",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 44,
+      "round": 6,
+      "parentId": "ver_mufdltzfdf8e06c6",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Visual intent. Turn the parent's full-canvas warm tangle — three comp...",
+      "snapshot": "5139472c7b423682b37045599efd4bc50b8ec6e4bdd98dd7cdeee73f5f32818d",
+      "createdAt": "2026-09-24T10:17:18.663Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 0.95,
+        "dpr": 1,
+        "num": 3600,
+        "sensorAngle": 32,
+        "sensorDist": 16,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 8,
+        "scale": 1,
+        "gain": 1.4,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 37,
+          "removed": 59
+        }
+      ]
+    },
+    {
+      "id": "ver_mufdrrn602cef91e",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 45,
+      "round": 7,
+      "parentId": "ver_mufdo8jrf5e0f0a8",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Review against the checks",
+      "snapshot": "64c577d5cc6099df29e8735018d94b9545f4f39092e0e8ddfdd7d0619db01051",
+      "createdAt": "2026-09-24T10:20:03.378Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 0.95,
+        "dpr": 1,
+        "num": 4800,
+        "sensorAngle": 32,
+        "sensorDist": 16,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 8,
+        "scale": 1,
+        "gain": 1.4,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 64,
+          "removed": 51
+        }
+      ]
+    },
+    {
+      "id": "ver_mufduy8yf083719b",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 46,
+      "round": 8,
+      "parentId": "ver_mufdrrn602cef91e",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Main difference at a glance: the parent is a symmetric, near-full-can...",
+      "snapshot": "5d1bffa08153d2747090ad6adbcbb48657d2753d7cbe89e12292b14cc567d789",
+      "createdAt": "2026-09-24T10:22:31.906Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 0.95,
+        "dpr": 1,
+        "num": 6400,
+        "sensorAngle": 32,
+        "sensorDist": 16,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 8,
+        "scale": 1,
+        "gain": 1.4,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 2,
+          "removed": 2
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 49,
+          "removed": 131
+        }
+      ]
+    },
+    {
+      "id": "ver_mufdy2q281c3eeac",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 47,
+      "round": 9,
+      "parentId": "ver_mufduy8yf083719b",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Clear difference at a glance: the parent is a diagonal green-blue riv...",
+      "snapshot": "3195c3d00e745962c3a16f874f1dd12f5fd77dc648e089f7b4c2f5b6eecafd5a",
+      "createdAt": "2026-09-24T10:24:57.674Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 0.95,
+        "dpr": 1,
+        "num": 6400,
+        "sensorAngle": 32,
+        "sensorDist": 16,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 8,
+        "scale": 1,
+        "gain": 1.4,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 27,
+          "removed": 34
+        }
+      ]
+    },
+    {
+      "id": "ver_mufgjte28f2a0545",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 48,
+      "round": 1,
+      "parentId": "ver_mufdy2q281c3eeac",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Sensor rules: forward preference (f < l && f < r keeps straight, incl...",
+      "snapshot": "713f2f55f2d69f5bb72c79bcf100c215a579834c8a732123e497ca93e99bc07a",
+      "createdAt": "2026-09-24T11:37:51.242Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 0.95,
+        "dpr": 1,
+        "num": 6400,
+        "sensorAngle": 32,
+        "sensorDist": 20,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.4,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        }
+      ]
+    },
+    {
+      "id": "ver_mufi4sny3b09ee5b",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 49,
+      "round": 1,
+      "parentId": "ver_mufgjte28f2a0545",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I changed the collective behavior from a radial starburst on a satura...",
+      "snapshot": "b08f093f5fc0cf3e0596967844d36936a435df62687661dd1d7928da6a057554",
+      "createdAt": "2026-09-24T12:22:09.694Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 2000,
+        "sensorAngle": 34,
+        "sensorDist": 40,
+        "rotAngle": 30,
+        "decay": 0,
+        "spawnRadius": 40,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 15
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 45,
+          "removed": 53
+        }
+      ]
+    },
+    {
+      "id": "ver_mufinm75f6c9d707",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 50,
+      "round": 1,
+      "parentId": "ver_mufi4sny3b09ee5b",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Edits are in place and re-read. No protected file was touched.",
+      "snapshot": "9b1ab7294af4eb3febda49633cdd8b22d4f1d9d92fdb3724b16916679e31574e",
+      "createdAt": "2026-09-24T12:36:47.777Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 2000,
+        "sensorAngle": 42,
+        "sensorDist": 48,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 160,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 8,
+          "removed": 8
+        }
+      ]
+    },
+    {
+      "id": "ver_mufj5vtb5f550665",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 51,
+      "round": 1,
+      "parentId": "ver_mufinm75f6c9d707",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Step 1: Modify the Color Palette",
+      "snapshot": "9b1ab7294af4eb3febda49633cdd8b22d4f1d9d92fdb3724b16916679e31574e",
+      "createdAt": "2026-09-24T12:51:00.047Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 2000,
+        "sensorAngle": 42,
+        "sensorDist": 48,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 160,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": []
+    },
+    {
+      "id": "ver_mufjddy29d246017",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 52,
+      "round": 1,
+      "parentId": "ver_mufj5vtb5f550665",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are in place and verified. Here is the report.",
+      "snapshot": "2f81de8e86230eb339a3efe0cb037a3a27278dc6c0913ad0107f7b3c346d04e7",
+      "createdAt": "2026-09-24T12:56:50.139Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 1000,
+        "sensorAngle": 40,
+        "sensorDist": 100,
+        "rotAngle": 20,
+        "decay": 0,
+        "spawnRadius": 180,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 15,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 13,
+          "removed": 12
+        }
+      ]
+    },
+    {
+      "id": "ver_mufjqywn4e934f91",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 53,
+      "round": 1,
+      "parentId": "ver_mufjddy29d246017",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The edits are in place. The heading range stays within one wrap of [0...",
+      "snapshot": "825f86c1cc7ae34d2646d02acdf362a0491c5c05498da6baf5588bad5a8b66d9",
+      "createdAt": "2026-09-24T13:07:23.831Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 800,
+        "sensorAngle": 40,
+        "sensorDist": 55,
+        "rotAngle": 35,
+        "decay": 0,
+        "spawnRadius": 70,
+        "scale": 1,
+        "gain": 1,
+        "speed": 3,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 5,
+          "removed": 5
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 5,
+          "removed": 2
+        }
+      ]
+    },
+    {
+      "id": "ver_mufjv99k5e9f279d",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 54,
+      "round": 1,
+      "parentId": "ver_mufjqywn4e934f91",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Visual intent: Replace the repeated point-colony composition (radial ...",
+      "snapshot": "8e893c1512a45b7e3bd2bc93f97dd77afd45ce108291cc5ede3c3749116730f3",
+      "createdAt": "2026-09-24T13:10:43.880Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 800,
+        "sensorAngle": 30,
+        "sensorDist": 75,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 70,
+        "scale": 1,
+        "gain": 1,
+        "speed": 3,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 3,
+          "removed": 3
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 8,
+          "removed": 12
+        }
+      ]
+    },
+    {
+      "id": "ver_mufk0jnda24f734f",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 55,
+      "round": 1,
+      "parentId": "ver_mufjv99k5e9f279d",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Visual Evolution Summary",
+      "snapshot": "2e09b3eba684f85257882cdeaf81dea5eadd85d71e231606d0a14e9fe6234211",
+      "createdAt": "2026-09-24T13:14:50.617Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 800,
+        "sensorAngle": 30,
+        "sensorDist": 50,
+        "rotAngle": 32,
+        "decay": 0,
+        "spawnRadius": 70,
+        "scale": 1,
+        "gain": 1,
+        "speed": 3,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 2,
+          "removed": 2
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 9,
+          "removed": 5
+        }
+      ]
+    },
+    {
+      "id": "ver_mufk3upq096025d8",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 56,
+      "round": 2,
+      "parentId": "ver_mufk0jnda24f734f",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Visual intent: Replace scattered radial lines with a developed horizo...",
+      "snapshot": "5f08a3531212ee1026f33f06e5796dbc0c00df412ba4d9697b54983402c233b9",
+      "createdAt": "2026-09-24T13:17:24.926Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 400,
+        "sensorAngle": 25,
+        "sensorDist": 40,
+        "rotAngle": 28,
+        "decay": 0,
+        "spawnRadius": 50,
+        "scale": 1,
+        "gain": 1,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 16
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 5,
+          "removed": 3
+        }
+      ]
+    },
+    {
+      "id": "ver_mufk5qesf00b3398",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 57,
+      "round": 3,
+      "parentId": "ver_mufk3upq096025d8",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The change is complete. Only config.json was modified within the allo...",
+      "snapshot": "1838b36f9669369bae0b066edc54c21e6002d4b55262d57c029dd1c382dda8ec",
+      "createdAt": "2026-09-24T13:18:52.660Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 600,
+        "sensorAngle": 30,
+        "sensorDist": 15,
+        "rotAngle": 28,
+        "decay": 0,
+        "spawnRadius": 120,
+        "scale": 1,
+        "gain": 1,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        }
+      ]
+    },
+    {
+      "id": "ver_mufpa06ee8311359",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 58,
+      "round": 1,
+      "parentId": "ver_mufk5qesf00b3398",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All exports are preserved: step, reset, resize, checksum, spawn (via ...",
+      "snapshot": "0c7944b601098cca3b16e3a0365837c19014b06bf9113d4221f7e9e49531cbae",
+      "createdAt": "2026-09-24T15:42:10.022Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 350,
+        "sensorAngle": 30,
+        "sensorDist": 40,
+        "rotAngle": 60,
+        "decay": 0,
+        "spawnRadius": 200,
+        "scale": 1,
+        "gain": 1,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        }
+      ]
+    },
+    {
+      "id": "ver_mufpbo7x351787d3",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 59,
+      "round": 2,
+      "parentId": "ver_mufpa06ee8311359",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The config is correctly updated. The physarum.js and renderer.js file...",
+      "snapshot": "11c181c4919c85861fb3932bd5170402974f59ad3133af788cc1bc0d400b9f5e",
+      "createdAt": "2026-09-24T15:43:27.837Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1.2,
+        "dpr": 1,
+        "num": 180,
+        "sensorAngle": 35,
+        "sensorDist": 60,
+        "rotAngle": 35,
+        "decay": 0,
+        "spawnRadius": 80,
+        "scale": 1,
+        "gain": 1.3,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        }
+      ]
+    },
+    {
+      "id": "ver_mufpl28s30eef8bb",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 60,
+      "round": 1,
+      "parentId": "ver_mufpbo7x351787d3",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The edits are confirmed in place. Turn signs are consistent: the left...",
+      "snapshot": "74e6e982b592a4b4bf3fea97de1822a06b8bada9ba11d7d41369dec020c03fd7",
+      "createdAt": "2026-09-24T15:50:45.916Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1.2,
+        "dpr": 1,
+        "num": 240,
+        "sensorAngle": 35,
+        "sensorDist": 30,
+        "rotAngle": 35,
+        "decay": 0,
+        "spawnRadius": 80,
+        "scale": 1,
+        "gain": 1.3,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 2,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 10,
+          "removed": 7
+        }
+      ]
+    },
+    {
+      "id": "ver_mufri06x6a03b473",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 61,
+      "round": 1,
+      "parentId": "ver_mufpl28s30eef8bb",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Visual intent: \"amber veins\" — one asymmetric colony whose shared cor...",
+      "snapshot": "4329abea32614df095ad28da4f547599be761096f5b2c9e6d99e16c2a6a39477",
+      "createdAt": "2026-09-24T16:44:22.521Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1.2,
+        "dpr": 1,
+        "num": 400,
+        "sensorAngle": 24,
+        "sensorDist": 18,
+        "rotAngle": 16,
+        "decay": 0,
+        "spawnRadius": 100,
+        "scale": 1,
+        "gain": 1.3,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 15,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 9,
+          "removed": 27
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 13,
+          "removed": 22
+        }
+      ]
+    },
+    {
+      "id": "ver_mufrzm43647549b8",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 62,
+      "round": 2,
+      "parentId": "ver_mufri06x6a03b473",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Visual intent — \"ember delta\": one dominant rounded dendritic colony ...",
+      "snapshot": "e776de51d4006343b36b1ccaef0e9bf957689ba70e996eb48152bf1d250f13f6",
+      "createdAt": "2026-09-24T16:58:04.084Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1.2,
+        "dpr": 1,
+        "num": 600,
+        "sensorAngle": 34,
+        "sensorDist": 15,
+        "rotAngle": 26,
+        "decay": 0,
+        "spawnRadius": 88,
+        "scale": 1,
+        "gain": 1.3,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 6,
+          "removed": 6
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 22,
+          "removed": 15
+        }
+      ]
+    },
+    {
+      "id": "ver_mufs5h1jf42d21ca",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 63,
+      "round": 3,
+      "parentId": "ver_mufrzm43647549b8",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Sensor decision rules are intact and in original order: forward prefe...",
+      "snapshot": "ea8f2adf6785d54ef097bb9c062ea3b8a30661b90d263aec90ba472211eb7608",
+      "createdAt": "2026-09-24T17:02:37.447Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1.2,
+        "dpr": 1,
+        "num": 600,
+        "sensorAngle": 36,
+        "sensorDist": 24,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 100,
+        "scale": 1,
+        "gain": 1.3,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 5,
+          "removed": 5
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 24,
+          "removed": 25
+        }
+      ]
+    },
+    {
+      "id": "ver_mufsfjjx0b4b757f",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 64,
+      "round": 4,
+      "parentId": "ver_mufs5h1jf42d21ca",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place. The steering block (forward preferen...",
+      "snapshot": "8660c69a97be17b24d75c0e0836fc723bcaaff75d9438a9cd2042cede7d3d850",
+      "createdAt": "2026-09-24T17:10:27.261Z",
+      "configuration": {
+        "palette": "inferno",
+        "gamma": 1.2,
+        "dpr": 1,
+        "num": 700,
+        "sensorAngle": 36,
+        "sensorDist": 40,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 190,
+        "scale": 1,
+        "gain": 1.3,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 4,
+          "removed": 4
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 12,
+          "removed": 12
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 22,
+          "removed": 24
+        }
+      ]
+    },
+    {
+      "id": "ver_mufsuvrh3c1cd8c3",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 65,
+      "round": 5,
+      "parentId": "ver_mufsfjjx0b4b757f",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place. The steering block was not touched, ...",
+      "snapshot": "5aded4cbd6ee7a4aadc649007d6fde71c15a8030ca166b7a15486df76a20923c",
+      "createdAt": "2026-09-24T17:22:22.925Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 700,
+        "sensorAngle": 36,
+        "sensorDist": 26,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 130,
+        "scale": 1,
+        "gain": 1.6,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 5,
+          "removed": 5
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 2,
+          "removed": 2
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 24,
+          "removed": 11
+        }
+      ]
+    },
+    {
+      "id": "ver_muft21r68672da5c",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 66,
+      "round": 6,
+      "parentId": "ver_mufsuvrh3c1cd8c3",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Visual intent — \"braided current\". The parent's weakness, visible in ...",
+      "snapshot": "22afa35b87785c40b250c82795dc0f1a7b884ebc8bec8c1ba8b2de9bc0e96b9e",
+      "createdAt": "2026-09-24T17:27:57.282Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 850,
+        "sensorAngle": 30,
+        "sensorDist": 30,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 120,
+        "scale": 1,
+        "gain": 1.6,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 5,
+          "removed": 5
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 2,
+          "removed": 2
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 23,
+          "removed": 26
+        }
+      ]
+    },
+    {
+      "id": "ver_muft5hgr6b1982c2",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 67,
+      "round": 7,
+      "parentId": "ver_muft21r68672da5c",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Visual intent — \"slackwater estuary\". The parent's weakness is visibl...",
+      "snapshot": "061e4528a5039fa65302b6efa0b1c8610d903ad936732806f626b77374111ba3",
+      "createdAt": "2026-09-24T17:30:37.611Z",
+      "configuration": {
+        "palette": "bone",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 850,
+        "sensorAngle": 30,
+        "sensorDist": 30,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 120,
+        "scale": 1,
+        "gain": 1.6,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 2,
+          "removed": 2
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 31,
+          "removed": 24
+        }
+      ]
+    },
+    {
+      "id": "ver_muftg0jtb32a0fb2",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 68,
+      "round": 8,
+      "parentId": "ver_muft5hgr6b1982c2",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place. The steering block is untouched, exp...",
+      "snapshot": "aaf468728bbf63ce082e2c992367e1f6031263712bd926a8f36a2745428f82e8",
+      "createdAt": "2026-09-24T17:38:48.905Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 620,
+        "sensorAngle": 30,
+        "sensorDist": 34,
+        "rotAngle": 18,
+        "decay": 0,
+        "spawnRadius": 60,
+        "scale": 1,
+        "gain": 1.6,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 5,
+          "removed": 5
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 34,
+          "removed": 34
+        }
+      ]
+    },
+    {
+      "id": "ver_muftk2kg8d0cfd1a",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 69,
+      "round": 9,
+      "parentId": "ver_muftg0jtb32a0fb2",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are confirmed in place by re-reading: the steering block is...",
+      "snapshot": "2647cdce8d7e910e76dd07c011f068baf26252cdde8a5752ad398617dae8a0ae",
+      "createdAt": "2026-09-24T17:41:58.144Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 500,
+        "sensorAngle": 32,
+        "sensorDist": 84,
+        "rotAngle": 7,
+        "decay": 0,
+        "spawnRadius": 60,
+        "scale": 1,
+        "gain": 1.6,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 5,
+          "removed": 5
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 14,
+          "removed": 14
+        }
+      ]
+    },
+    {
+      "id": "ver_muftpc210328ba8c",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 70,
+      "round": 10,
+      "parentId": "ver_muftk2kg8d0cfd1a",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Visual intent — \"moss fan\": one rooted branching fan in a quarter-pla...",
+      "snapshot": "0f6d3d4f20d1697f2e3b0a285c70773aa1bd2de5910af1f05f460cb2a7d5b161",
+      "createdAt": "2026-09-24T17:46:03.721Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 500,
+        "sensorAngle": 42,
+        "sensorDist": 40,
+        "rotAngle": 14,
+        "decay": 0,
+        "spawnRadius": 48,
+        "scale": 1,
+        "gain": 1.6,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 5,
+          "removed": 5
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 2,
+          "removed": 2
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 23,
+          "removed": 25
+        }
+      ]
+    },
+    {
+      "id": "ver_muftwoyk87cf62c2",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 71,
+      "round": 11,
+      "parentId": "ver_muftpc210328ba8c",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Visual intent — \"the island\": The parent's weakness, visible in all t...",
+      "snapshot": "0d31a2df487b2b0a9c9b7ba1c006b0ab1caaae06643c0e8bdac4ceef41cb566f",
+      "createdAt": "2026-09-24T17:51:47.036Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 400,
+        "sensorAngle": 42,
+        "sensorDist": 40,
+        "rotAngle": 14,
+        "decay": 0,
+        "spawnRadius": 48,
+        "scale": 1,
+        "gain": 1.6,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 2,
+          "removed": 2
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 93,
+          "removed": 20
+        }
+      ]
+    },
+    {
+      "id": "ver_mufueu2k3e363d63",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 72,
+      "round": 12,
+      "parentId": "ver_muftwoyk87cf62c2",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Sensor rules: The steering block is byte-identical to the parent — fo...",
+      "snapshot": "b47bce4e2b08c9cbcac7b20cd446579be40c1e666da0e8faece4ca518814d5cc",
+      "createdAt": "2026-09-24T18:05:53.468Z",
+      "configuration": {
+        "palette": "bone",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 400,
+        "sensorAngle": 42,
+        "sensorDist": 40,
+        "rotAngle": 11,
+        "decay": 0,
+        "spawnRadius": 48,
+        "scale": 1,
+        "gain": 1.6,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 2,
+          "removed": 2
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 3,
+          "removed": 2
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 51,
+          "removed": 71
+        }
+      ]
+    },
+    {
+      "id": "ver_mufumftdf461441f",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 73,
+      "round": 13,
+      "parentId": "ver_mufueu2k3e363d63",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place by re-reading the full file. The stee...",
+      "snapshot": "e0bff9d50bd9b7b00306e91aff59626a1948562487954431a7d7e93a2f6439b8",
+      "createdAt": "2026-09-24T18:11:48.241Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 800,
+        "sensorAngle": 42,
+        "sensorDist": 40,
+        "rotAngle": 11,
+        "decay": 0,
+        "spawnRadius": 100,
+        "scale": 1,
+        "gain": 1.6,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 3,
+          "removed": 3
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 50,
+          "removed": 54
+        }
+      ]
+    },
+    {
+      "id": "ver_mufuu2s6b7ec2234",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 74,
+      "round": 14,
+      "parentId": "ver_mufumftdf461441f",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place by re-reading. The steering block is ...",
+      "snapshot": "0bd82e148e0459e6714be20d472b3f4055841931c599fb98fea3e8b6c595a401",
+      "createdAt": "2026-09-24T18:17:44.598Z",
+      "configuration": {
+        "palette": "inferno",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1000,
+        "sensorAngle": 42,
+        "sensorDist": 40,
+        "rotAngle": 11,
+        "decay": 0,
+        "spawnRadius": 100,
+        "scale": 1,
+        "gain": 1.6,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 2,
+          "removed": 2
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 52,
+          "removed": 81
+        }
+      ]
+    },
+    {
+      "id": "ver_mufuzq5g8f92e699",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 75,
+      "round": 15,
+      "parentId": "ver_mufuu2s6b7ec2234",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place by re-reading. The steering block in ...",
+      "snapshot": "85605dafd5c6739797fe6988aafd229c580c31200d45257da4f2005045b52728",
+      "createdAt": "2026-09-24T18:22:08.165Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1000,
+        "sensorAngle": 42,
+        "sensorDist": 30,
+        "rotAngle": 14,
+        "decay": 0,
+        "spawnRadius": 26,
+        "scale": 1,
+        "gain": 1.6,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 4,
+          "removed": 4
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 2,
+          "removed": 2
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 65,
+          "removed": 62
+        }
+      ]
+    },
+    {
+      "id": "ver_mufv65216582caf4",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 76,
+      "round": 16,
+      "parentId": "ver_mufuzq5g8f92e699",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The steering block is byte-identical to the parent: forward preferenc...",
+      "snapshot": "d68168865e0235b4b8ac40a7ca3e8b00c150e13428abf5a49bec041215eac3a6",
+      "createdAt": "2026-09-24T18:27:07.417Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1000,
+        "sensorAngle": 24,
+        "sensorDist": 22,
+        "rotAngle": 26,
+        "decay": 0,
+        "spawnRadius": 20,
+        "scale": 1,
+        "gain": 1.6,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 5,
+          "removed": 5
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 39,
+          "removed": 54
+        }
+      ]
+    },
+    {
+      "id": "ver_mufvmkdqb1f362d2",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 77,
+      "round": 17,
+      "parentId": "ver_mufv65216582caf4",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Visual direction — \"hearth and scout arcs\": The parent's visible weak...",
+      "snapshot": "7612b389643afea4270e5229c8f4285f2b4bea33285a29436549204e939fe319",
+      "createdAt": "2026-09-24T18:39:53.774Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1000,
+        "sensorAngle": 24,
+        "sensorDist": 22,
+        "rotAngle": 26,
+        "decay": 0,
+        "spawnRadius": 20,
+        "scale": 1,
+        "gain": 1.6,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 16
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 2,
+          "removed": 2
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 24,
+          "removed": 18
+        }
+      ]
+    },
+    {
+      "id": "ver_mufvthjg7519b5ef",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 78,
+      "round": 18,
+      "parentId": "ver_mufvmkdqb1f362d2",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The re-read confirms all edits are in place. The steering block is by...",
+      "snapshot": "b9dc1d4c1e61a893dcdade711485ed340c4492bb0ebfb888ebbb490a99c8fa73",
+      "createdAt": "2026-09-24T18:45:16.684Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 800,
+        "sensorAngle": 30,
+        "sensorDist": 30,
+        "rotAngle": 18,
+        "decay": 0,
+        "spawnRadius": 14,
+        "scale": 1,
+        "gain": 1.6,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 16,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 61,
+          "removed": 29
+        }
+      ]
+    },
+    {
+      "id": "ver_mufw2km8164c05fe",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 79,
+      "round": 19,
+      "parentId": "ver_mufvthjg7519b5ef",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place by re-reading. The steering block kee...",
+      "snapshot": "4ad66bf1a70ed71ae76d9c48c6f398108f6d0864bfaee3adfc8d69b3dff38dfc",
+      "createdAt": "2026-09-24T18:52:20.576Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 800,
+        "sensorAngle": 30,
+        "sensorDist": 30,
+        "rotAngle": 12,
+        "decay": 0,
+        "spawnRadius": 14,
+        "scale": 1,
+        "gain": 1.6,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 2,
+          "removed": 2
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 118,
+          "removed": 71
+        }
+      ]
+    },
+    {
+      "id": "ver_mufwemd4c40f7ded",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 80,
+      "round": 20,
+      "parentId": "ver_mufw2km8164c05fe",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place by re-reading the full file. The stee...",
+      "snapshot": "0282f27f2861cc3cf786afce4d892d09bd3da65fd0de1a4af8d2cf8fda383d4f",
+      "createdAt": "2026-09-24T19:01:42.712Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 800,
+        "sensorAngle": 30,
+        "sensorDist": 30,
+        "rotAngle": 12,
+        "decay": 0,
+        "spawnRadius": 14,
+        "scale": 1,
+        "gain": 1.7,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 2,
+          "removed": 2
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 54,
+          "removed": 86
+        }
+      ]
+    },
+    {
+      "id": "ver_mufx4cmt6ef2f4df",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 81,
+      "round": 21,
+      "parentId": "ver_mufwemd4c40f7ded",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Main change. The collective geometry changed from a recycled comet to...",
+      "snapshot": "44867e41ffc412516b15f1e1a3df2f63f4ee0942b2bba40f73226277c18d0de9",
+      "createdAt": "2026-09-24T19:21:43.157Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1100,
+        "sensorAngle": 30,
+        "sensorDist": 30,
+        "rotAngle": 12,
+        "decay": 0,
+        "spawnRadius": 55,
+        "scale": 1,
+        "gain": 1.7,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 2,
+          "removed": 2
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 63,
+          "removed": 92
+        }
+      ]
+    },
+    {
+      "id": "ver_mufybgmjbccffdb5",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 82,
+      "round": 22,
+      "parentId": "ver_mufx4cmt6ef2f4df",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place by re-reading. The steering block is ...",
+      "snapshot": "a6cb73f0d9c7385e0d0daf8fd84864abe452d135bbe0d06dff5c8df00f6b1e70",
+      "createdAt": "2026-09-24T19:55:14.539Z",
+      "configuration": {
+        "palette": "bone",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 750,
+        "sensorAngle": 30,
+        "sensorDist": 30,
+        "rotAngle": 12,
+        "decay": 0,
+        "spawnRadius": 55,
+        "scale": 1,
+        "gain": 1.7,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 2,
+          "removed": 2
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 28,
+          "removed": 26
+        }
+      ]
+    },
+    {
+      "id": "ver_mufygqyuedea6136",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 83,
+      "round": 23,
+      "parentId": "ver_mufybgmjbccffdb5",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place by re-reading the full file. The stee...",
+      "snapshot": "170e44ab08605f34480c1b5aaf5c812a159d609a6307d40f2774e0da18e9dfe1",
+      "createdAt": "2026-09-24T19:59:21.222Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 750,
+        "sensorAngle": 30,
+        "sensorDist": 30,
+        "rotAngle": 12,
+        "decay": 0,
+        "spawnRadius": 55,
+        "scale": 1,
+        "gain": 1.7,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 47,
+          "removed": 33
+        }
+      ]
+    },
+    {
+      "id": "ver_mufyugp21540a157",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 84,
+      "round": 24,
+      "parentId": "ver_mufygqyuedea6136",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place by re-reading the full file. The stee...",
+      "snapshot": "ef3ccf50a563fba397087ddbab93a8fd9793e918e67564923269687fc424061d",
+      "createdAt": "2026-09-24T20:10:01.094Z",
+      "configuration": {
+        "palette": "bone",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 750,
+        "sensorAngle": 30,
+        "sensorDist": 30,
+        "rotAngle": 12,
+        "decay": 0,
+        "spawnRadius": 40,
+        "scale": 1,
+        "gain": 1.7,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 2,
+          "removed": 2
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 34,
+          "removed": 45
+        }
+      ]
+    },
+    {
+      "id": "ver_mufz53g4c4e9fdca",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 85,
+      "round": 25,
+      "parentId": "ver_mufyugp21540a157",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Sharpness, opacity, decay, asymmetry: single-pixel full-opacity depos...",
+      "snapshot": "a2559704c49c8c7bf1c8e905f534ed7b16294d5c44d04366580d51dc4a5699e9",
+      "createdAt": "2026-09-24T20:18:17.140Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 750,
+        "sensorAngle": 30,
+        "sensorDist": 30,
+        "rotAngle": 12,
+        "decay": 0,
+        "spawnRadius": 40,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 2,
+          "removed": 2
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 8,
+          "removed": 7
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 69,
+          "removed": 49
+        }
+      ]
+    },
+    {
+      "id": "ver_mufzj2k989e9f24d",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 86,
+      "round": 26,
+      "parentId": "ver_mufz53g4c4e9fdca",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The re-reads confirm all edits are in place: the single root and flow...",
+      "snapshot": "df98a6978cd86df6bb461bcd60231b8aa23538d8d526f0843fac6cc8f8d7854c",
+      "createdAt": "2026-09-24T20:29:09.177Z",
+      "configuration": {
+        "palette": "magma",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 750,
+        "sensorAngle": 28,
+        "sensorDist": 26,
+        "rotAngle": 7,
+        "decay": 0,
+        "spawnRadius": 30,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 5,
+          "removed": 5
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 4,
+          "removed": 3
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 69,
+          "removed": 92
+        }
+      ]
+    },
+    {
+      "id": "ver_mufzss8w7b201957",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 87,
+      "round": 27,
+      "parentId": "ver_mufzj2k989e9f24d",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I've read the three core files. Now let me check the protected adapte...",
+      "snapshot": "df98a6978cd86df6bb461bcd60231b8aa23538d8d526f0843fac6cc8f8d7854c",
+      "createdAt": "2026-09-24T20:36:42.368Z",
+      "configuration": {
+        "palette": "magma",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 750,
+        "sensorAngle": 28,
+        "sensorDist": 26,
+        "rotAngle": 7,
+        "decay": 0,
+        "spawnRadius": 30,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": []
+    },
+    {
+      "id": "ver_mug06ilg39305d16",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 88,
+      "round": 28,
+      "parentId": "ver_mufzss8w7b201957",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All changes are verified in place by re-reading. The sensor block is ...",
+      "snapshot": "9512780ca8899ec13968c146a807bedc16c0e805f7b2edfbc13048273b31cd77",
+      "createdAt": "2026-09-24T20:47:23.044Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 750,
+        "sensorAngle": 28,
+        "sensorDist": 26,
+        "rotAngle": 7,
+        "decay": 0,
+        "spawnRadius": 30,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 56,
+          "removed": 45
+        }
+      ]
+    },
+    {
+      "id": "ver_mug0wpxk74f54a84",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 89,
+      "round": 29,
+      "parentId": "ver_mug06ilg39305d16",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Sensor ladder byte-identical: f >= l && f >= r holds the heading (for...",
+      "snapshot": "6297fd8d4237c8e767d25f890903c18669316daf93aa25174313a8f41f150aeb",
+      "createdAt": "2026-09-24T21:07:45.609Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 450,
+        "sensorAngle": 28,
+        "sensorDist": 26,
+        "rotAngle": 7,
+        "decay": 0,
+        "spawnRadius": 30,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 16
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 44,
+          "removed": 60
+        }
+      ]
+    },
+    {
+      "id": "ver_mug1824k5d18e974",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 90,
+      "round": 30,
+      "parentId": "ver_mug0wpxk74f54a84",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Exports and methods preserved: step, reset, resize, checksum, spawn, ...",
+      "snapshot": "e63ae48a9efba96200e282de0f13d2dec528ed6bbb7159ab047b3e64c5829b45",
+      "createdAt": "2026-09-24T21:16:34.628Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 450,
+        "sensorAngle": 28,
+        "sensorDist": 26,
+        "rotAngle": 7,
+        "decay": 0,
+        "spawnRadius": 30,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 47,
+          "removed": 39
+        }
+      ]
+    },
+    {
+      "id": "ver_mug1gltca3dd5aa5",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 91,
+      "round": 31,
+      "parentId": "ver_mug1824k5d18e974",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place by re-reading. The steering ladder is...",
+      "snapshot": "a8bc30cebe5d4a12653b21268f41bdcf4f4f540e5a599bee24a7ca2861d4bd3d",
+      "createdAt": "2026-09-24T21:23:13.392Z",
+      "configuration": {
+        "palette": "bone",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 450,
+        "sensorAngle": 28,
+        "sensorDist": 26,
+        "rotAngle": 11,
+        "decay": 0,
+        "spawnRadius": 40,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 16,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 56,
+          "removed": 68
+        }
+      ]
+    },
+    {
+      "id": "ver_mug1ocid31138406",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 92,
+      "round": 32,
+      "parentId": "ver_mug1gltca3dd5aa5",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Visual intent — \"the rising colony\". The parent's visible weakness is...",
+      "snapshot": "53386d9851a891b43c1ee3f3b114f792ab9e1d53aff3d5eb316c1eee55664119",
+      "createdAt": "2026-09-24T21:29:14.581Z",
+      "configuration": {
+        "palette": "bone",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 650,
+        "sensorAngle": 28,
+        "sensorDist": 26,
+        "rotAngle": 11,
+        "decay": 0,
+        "spawnRadius": 40,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 46,
+          "removed": 49
+        }
+      ]
+    },
+    {
+      "id": "ver_mug1vl3y99246857",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 93,
+      "round": 33,
+      "parentId": "ver_mug1ocid31138406",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Source contains the edits — confirmed above: dome spawn, basin guide,...",
+      "snapshot": "e4ae3d97bcb997609263413a3f1f97fe027955984215392fca2990efb02f9eee",
+      "createdAt": "2026-09-24T21:34:52.318Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 650,
+        "sensorAngle": 28,
+        "sensorDist": 26,
+        "rotAngle": 11,
+        "decay": 0,
+        "spawnRadius": 40,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 4,
+          "removed": 5
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 71,
+          "removed": 47
+        }
+      ]
+    },
+    {
+      "id": "ver_mug23i0k073ab337",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 94,
+      "round": 34,
+      "parentId": "ver_mug1vl3y99246857",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place by re-reading. The steering ladder is...",
+      "snapshot": "347d024cdb1afab16a451e20251827bce55ffa7e02eaae5ffac4393947aeff0c",
+      "createdAt": "2026-09-24T21:41:01.556Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 650,
+        "sensorAngle": 28,
+        "sensorDist": 26,
+        "rotAngle": 11,
+        "decay": 0,
+        "spawnRadius": 40,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 3,
+          "removed": 3
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 47,
+          "removed": 42
+        }
+      ]
+    },
+    {
+      "id": "ver_mug2fzon8de70718",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 95,
+      "round": 35,
+      "parentId": "ver_mug23i0k073ab337",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Source contains the edits — verified by re-reading the full file: new...",
+      "snapshot": "5a3efb121202e0a6febf8dab8819f1553d12640844dabfb6bd50339bc6570d27",
+      "createdAt": "2026-09-24T21:50:44.327Z",
+      "configuration": {
+        "palette": "bone",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 650,
+        "sensorAngle": 28,
+        "sensorDist": 26,
+        "rotAngle": 11,
+        "decay": 0,
+        "spawnRadius": 40,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 125,
+          "removed": 58
+        }
+      ]
+    },
+    {
+      "id": "ver_mug37okm7b425c36",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 96,
+      "round": 36,
+      "parentId": "ver_mug2fzon8de70718",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Visual intent — \"one vortex\": The parent's visible weakness is even, ...",
+      "snapshot": "f5ccd257e471ee96aa42723ada63d29a29d67c4a8218b048775c34572fd9ce9d",
+      "createdAt": "2026-09-24T22:12:16.294Z",
+      "configuration": {
+        "palette": "magma",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 780,
+        "sensorAngle": 28,
+        "sensorDist": 26,
+        "rotAngle": 11,
+        "decay": 0,
+        "spawnRadius": 430,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 3,
+          "removed": 3
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 59,
+          "removed": 118
+        }
+      ]
+    },
+    {
+      "id": "ver_mug3gd8l32d79060",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 97,
+      "round": 37,
+      "parentId": "ver_mug37okm7b425c36",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Sharpness/opacity/decay: single-pixel, full-opacity deposits, zero de...",
+      "snapshot": "9faac00dc20012fa7e0415decd7783af568dfb51dd92de45237c91e1de7f872e",
+      "createdAt": "2026-09-24T22:19:01.509Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 460,
+        "sensorAngle": 30,
+        "sensorDist": 30,
+        "rotAngle": 12,
+        "decay": 0,
+        "spawnRadius": 70,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 6,
+          "removed": 6
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 3,
+          "removed": 3
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 116,
+          "removed": 63
+        }
+      ]
+    },
+    {
+      "id": "ver_mug3odkac4cc1266",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 98,
+      "round": 38,
+      "parentId": "ver_mug3gd8l32d79060",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place by re-reading. The re-read confirms: ...",
+      "snapshot": "1a3cf4a3aa8edb06433301627f3f88668ee274ebfe4eb01256050e4a62d85dc9",
+      "createdAt": "2026-09-24T22:25:15.178Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 300,
+        "sensorAngle": 30,
+        "sensorDist": 30,
+        "rotAngle": 14,
+        "decay": 0,
+        "spawnRadius": 16,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 4,
+          "removed": 4
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 3,
+          "removed": 3
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 61,
+          "removed": 132
+        }
+      ]
+    },
+    {
+      "id": "ver_mug3vhdi0c7d398e",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 99,
+      "round": 39,
+      "parentId": "ver_mug3odkac4cc1266",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place by re-reading the full files. The ste...",
+      "snapshot": "093ab49d66a849a0404c72bfc87e1c83bc564bcc075b653824011ee82246b385",
+      "createdAt": "2026-09-24T22:30:46.711Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 380,
+        "sensorAngle": 30,
+        "sensorDist": 30,
+        "rotAngle": 14,
+        "decay": 0,
+        "spawnRadius": 12,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 3,
+          "removed": 3
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 3,
+          "removed": 3
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 75,
+          "removed": 63
+        }
+      ]
+    },
+    {
+      "id": "ver_mug4292f523db709",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 100,
+      "round": 40,
+      "parentId": "ver_mug3vhdi0c7d398e",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place by re-reading the full files. The sen...",
+      "snapshot": "239d1e6178f91faafd9ffbe6bf6532282f8216fbbb9148f68bbfd4fb92968183",
+      "createdAt": "2026-09-24T22:36:02.535Z",
+      "configuration": {
+        "palette": "inferno",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 430,
+        "sensorAngle": 30,
+        "sensorDist": 30,
+        "rotAngle": 14,
+        "decay": 0,
+        "spawnRadius": 24,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 3,
+          "removed": 3
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 11,
+          "removed": 12
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 66,
+          "removed": 65
+        }
+      ]
+    },
+    {
+      "id": "ver_mug4d9wlf9bc457e",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 101,
+      "round": 41,
+      "parentId": "ver_mug4292f523db709",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Sensor ladder byte-identical to the parent: f >= l && f >= r → hold, ...",
+      "snapshot": "d8947472e2c95f8ebc25e4d58b475d18143a3ff57c1e88c3fd69954ffd44c1ee",
+      "createdAt": "2026-09-24T22:44:36.837Z",
+      "configuration": {
+        "palette": "bone",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1100,
+        "sensorAngle": 45,
+        "sensorDist": 18,
+        "rotAngle": 32,
+        "decay": 0,
+        "spawnRadius": 26,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 6,
+          "removed": 6
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 3,
+          "removed": 3
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 43,
+          "removed": 85
+        }
+      ]
+    },
+    {
+      "id": "ver_mug4j4dk6a5c826a",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 102,
+      "round": 42,
+      "parentId": "ver_mug4d9wlf9bc457e",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Visual intent — \"lichen crust\". The parent's visible weakness (confir...",
+      "snapshot": "979757d703d6ecdd8863c085706339ff2745140a5bb7b09767b86b469408683f",
+      "createdAt": "2026-09-24T22:49:09.608Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1100,
+        "sensorAngle": 45,
+        "sensorDist": 22,
+        "rotAngle": 32,
+        "decay": 0,
+        "spawnRadius": 34,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 3,
+          "removed": 3
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 3,
+          "removed": 3
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 51,
+          "removed": 33
+        }
+      ]
+    },
+    {
+      "id": "ver_mug4qkxk078de73d",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 103,
+      "round": 43,
+      "parentId": "ver_mug4j4dk6a5c826a",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place by re-reading. The steering ladder is...",
+      "snapshot": "494ba814d8eeaa93a5239004c815a1ae25b6cb2961538cc71f7385f26a997416",
+      "createdAt": "2026-09-24T22:54:57.656Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1100,
+        "sensorAngle": 22,
+        "sensorDist": 24,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 20,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 5,
+          "removed": 5
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 17,
+          "removed": 16
+        }
+      ]
+    },
+    {
+      "id": "ver_mug4u7or6fba0137",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 104,
+      "round": 44,
+      "parentId": "ver_mug4qkxk078de73d",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Guide cannot substitute for trail feedback — the axis fold exists onl...",
+      "snapshot": "19280240d5c29a4ef98ac85f6605e7f29d80addc23c48d5a40cbc5a268219f25",
+      "createdAt": "2026-09-24T22:57:47.115Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1100,
+        "sensorAngle": 22,
+        "sensorDist": 24,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 34,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 53,
+          "removed": 31
+        }
+      ]
+    },
+    {
+      "id": "ver_mug4yupba2671271",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 105,
+      "round": 45,
+      "parentId": "ver_mug4u7or6fba0137",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place by re-reading. The re-read confirms: ...",
+      "snapshot": "660ba96bb426b498e316475172ecd83a9d3e5239b302634a0a3cdd550a262e77",
+      "createdAt": "2026-09-24T23:01:23.567Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 850,
+        "sensorAngle": 22,
+        "sensorDist": 24,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 30,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 3,
+          "removed": 3
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 43,
+          "removed": 27
+        }
+      ]
+    },
+    {
+      "id": "ver_mug53xdj72386769",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 106,
+      "round": 46,
+      "parentId": "ver_mug4yupba2671271",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place by re-reading the full changed sectio...",
+      "snapshot": "660ae696fd280d8a28b7c6671b7545980c5ce0f7f28f12d66c0bf91b3e735c1d",
+      "createdAt": "2026-09-24T23:05:20.311Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 850,
+        "sensorAngle": 20,
+        "sensorDist": 30,
+        "rotAngle": 14,
+        "decay": 0,
+        "spawnRadius": 24,
+        "scale": 1,
+        "gain": 1.9,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 5,
+          "removed": 5
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 3,
+          "removed": 3
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 42,
+          "removed": 37
+        }
+      ]
+    },
+    {
+      "id": "ver_mug58b9m3a9e4107",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 107,
+      "round": 47,
+      "parentId": "ver_mug53xdj72386769",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Structural difference without color — parent: a full-width horizontal...",
+      "snapshot": "ffeaa437ef54f06c08b78e845af0cb591efec528e60f69ee8e1c285e20302bb3",
+      "createdAt": "2026-09-24T23:08:44.938Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 900,
+        "sensorAngle": 30,
+        "sensorDist": 22,
+        "rotAngle": 26,
+        "decay": 0,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1.5,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 6,
+          "removed": 6
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 3,
+          "removed": 3
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 30,
+          "removed": 39
+        }
+      ]
+    },
+    {
+      "id": "ver_mug5cx9a424ee34e",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 108,
+      "round": 48,
+      "parentId": "ver_mug58b9m3a9e4107",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Source contains the edits — confirmed: leaf geometry frame (updateSou...",
+      "snapshot": "701b1f4cb5539004f1f3fae8c7a2ce25bc745679c71c4783be46071c813cc5ee",
+      "createdAt": "2026-09-24T23:12:20.062Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 900,
+        "sensorAngle": 30,
+        "sensorDist": 22,
+        "rotAngle": 26,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1.8,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 3,
+          "removed": 3
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 98,
+          "removed": 52
+        }
+      ]
+    },
+    {
+      "id": "ver_mug5lzam36cb1c6b",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 109,
+      "round": 49,
+      "parentId": "ver_mug5cx9a424ee34e",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Sensor ladder — byte-identical to the parent: f >= l && f >= r → hold...",
+      "snapshot": "e29295b6796de0ebab1a530ae61f2e4b3074f308a83f84b2df858d4121c49c55",
+      "createdAt": "2026-09-24T23:19:22.606Z",
+      "configuration": {
+        "palette": "inferno",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 900,
+        "sensorAngle": 30,
+        "sensorDist": 22,
+        "rotAngle": 26,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1.8,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 50,
+          "removed": 106
+        }
+      ]
+    },
+    {
+      "id": "ver_mug5v878dcd61758",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 110,
+      "round": 50,
+      "parentId": "ver_mug5lzam36cb1c6b",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Visual intent — \"the watershed\". The parent's visible weakness: a bri...",
+      "snapshot": "065ee7c394194d6962bbad4b251da2c8019d40e14122fde7f557adea10140bcf",
+      "createdAt": "2026-09-24T23:26:34.052Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 900,
+        "sensorAngle": 30,
+        "sensorDist": 22,
+        "rotAngle": 26,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1.8,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 35,
+          "removed": 32
+        }
+      ]
+    },
+    {
+      "id": "ver_mug655yg95bf4b0e",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 111,
+      "round": 51,
+      "parentId": "ver_mug5v878dcd61758",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Visual intent — \"the headwaters\". The parent's weakness, visible in a...",
+      "snapshot": "8a3acddfd56fb29833bba0b92161b7d8c8899b95fc5c9cec3277124c51d02780",
+      "createdAt": "2026-09-24T23:34:17.704Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1200,
+        "sensorAngle": 30,
+        "sensorDist": 22,
+        "rotAngle": 26,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1.8,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 2,
+          "removed": 2
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 38,
+          "removed": 35
+        }
+      ]
+    },
+    {
+      "id": "ver_mug6fffr041a9d36",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 112,
+      "round": 52,
+      "parentId": "ver_mug655yg95bf4b0e",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place by re-reading. The sensor ladder is b...",
+      "snapshot": "b175aa09e0ce3dd973fd9485bd471f4915c073bd81f73a3a117512e05a7b2c81",
+      "createdAt": "2026-09-24T23:42:16.551Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1200,
+        "sensorAngle": 30,
+        "sensorDist": 22,
+        "rotAngle": 26,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1.8,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 51,
+          "removed": 67
+        }
+      ]
+    },
+    {
+      "id": "ver_mug6s0at6f746653",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 113,
+      "round": 53,
+      "parentId": "ver_mug6fffr041a9d36",
+      "status": "failed",
+      "onLineage": false,
+      "title": "All edits are verified in place by re-reading. The steering ladder is...",
+      "snapshot": "4bb69855a70ca3fcd60578fd1c468f7960b180bb1018a9076fc74edf36ebbff9",
+      "createdAt": "2026-09-24T23:52:03.461Z",
+      "configuration": {
+        "palette": "inferno",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1200,
+        "sensorAngle": 34,
+        "sensorDist": 16,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 8,
+        "scale": 1,
+        "gain": 1.8,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 5,
+          "removed": 5
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 66,
+          "removed": 54
+        }
+      ]
+    },
+    {
+      "id": "ver_mug9rkddef4084c8",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 113,
+      "round": 54,
+      "parentId": "ver_mug6fffr041a9d36",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Sensor rules intact — the ladder is byte-identical: f >= l && f >= r ...",
+      "snapshot": "f6d90b9eb3d56a26e26a841bcc8fed201454f578039a0070da38fb0f2833b660",
+      "createdAt": "2026-09-25T01:15:41.665Z",
+      "configuration": {
+        "palette": "inferno",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1200,
+        "sensorAngle": 30,
+        "sensorDist": 22,
+        "rotAngle": 26,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1.8,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 16
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 3,
+          "removed": 3
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 81,
+          "removed": 54
+        }
+      ]
+    },
+    {
+      "id": "ver_muga3ixn76450cad",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 114,
+      "round": 55,
+      "parentId": "ver_mug9rkddef4084c8",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Step 114",
+      "snapshot": "aa6fa704d986fe711c24f11ff5473fb005476ee9c1aea1ed177e3eed3f19ab3e",
+      "createdAt": "2026-09-25T01:24:59.675Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1200,
+        "sensorAngle": 30,
+        "sensorDist": 22,
+        "rotAngle": 26,
+        "decay": 0,
+        "spawnRadius": 11,
+        "scale": 1,
+        "gain": 1.8,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 16,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 10,
+          "removed": 8
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 66,
+          "removed": 79
+        }
+      ]
+    },
+    {
+      "id": "ver_mugahukt64336eda",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 115,
+      "round": 56,
+      "parentId": "ver_muga3ixn76450cad",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place by re-reading. The steering ladder is...",
+      "snapshot": "669903d419f9789f0ed03b384a3c87d184878111ab36aff2551284bb58176b8c",
+      "createdAt": "2026-09-25T01:36:07.949Z",
+      "configuration": {
+        "palette": "bone",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1200,
+        "sensorAngle": 30,
+        "sensorDist": 22,
+        "rotAngle": 26,
+        "decay": 0,
+        "spawnRadius": 11,
+        "scale": 1,
+        "gain": 1.8,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 117,
+          "removed": 54
+        }
+      ]
+    },
+    {
+      "id": "ver_mugaq7fr0fd906d1",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 116,
+      "round": 57,
+      "parentId": "ver_mugahukt64336eda",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Outcome. Implemented \"one mycelium\": a substantial structural evoluti...",
+      "snapshot": "4ef1ede89c14e2044bee9b135cfb094811d8fe8673a60b9f09a6a135bb048ce7",
+      "createdAt": "2026-09-25T01:42:37.863Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1000,
+        "sensorAngle": 58,
+        "sensorDist": 55,
+        "rotAngle": 42,
+        "decay": 0,
+        "spawnRadius": 11,
+        "scale": 1,
+        "gain": 1.8,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 5,
+          "removed": 5
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 83,
+          "removed": 133
+        }
+      ]
+    },
+    {
+      "id": "ver_mugb0du64990acbd",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 117,
+      "round": 58,
+      "parentId": "ver_mugaq7fr0fd906d1",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Sensor ladder: byte-identical to the parent — f >= l && f >= r holds ...",
+      "snapshot": "b26f18a5fede6493a4afff9702adb06aebb181a433db94eb3f592ef41d2485fc",
+      "createdAt": "2026-09-25T01:50:32.718Z",
+      "configuration": {
+        "palette": "bone",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1000,
+        "sensorAngle": 30,
+        "sensorDist": 24,
+        "rotAngle": 26,
+        "decay": 0,
+        "spawnRadius": 11,
+        "scale": 1,
+        "gain": 1.8,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 4,
+          "removed": 4
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 3,
+          "removed": 3
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 109,
+          "removed": 49
+        }
+      ]
+    },
+    {
+      "id": "ver_mugbevujf4dea6c8",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 118,
+      "round": 59,
+      "parentId": "ver_mugb0du64990acbd",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Source contains the edits — confirmed: the NODES island table, the ch...",
+      "snapshot": "259743d350a44f412c9c7c83d9fc0fba336e65469af3f42dd14b371c032cd104",
+      "createdAt": "2026-09-25T02:01:49.243Z",
+      "configuration": {
+        "palette": "magma",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1000,
+        "sensorAngle": 32,
+        "sensorDist": 28,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 11,
+        "scale": 1,
+        "gain": 2,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 5,
+          "removed": 5
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 3,
+          "removed": 3
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 85,
+          "removed": 126
+        }
+      ]
+    },
+    {
+      "id": "ver_mugbollq9e8c40d5",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 119,
+      "round": 60,
+      "parentId": "ver_mugbevujf4dea6c8",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "src/physarum.js — lintel/cords home system, drip/sway drift, vertical...",
+      "snapshot": "31cc12370617a9974a0c616a58f364ffaf1cef872536422d308ad71c015c2e4f",
+      "createdAt": "2026-09-25T02:09:22.526Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1000,
+        "sensorAngle": 32,
+        "sensorDist": 28,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 11,
+        "scale": 1,
+        "gain": 2,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 16
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 2,
+          "removed": 2
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 66,
+          "removed": 61
+        }
+      ]
+    },
+    {
+      "id": "ver_mugbxq462fd72b68",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 120,
+      "round": 61,
+      "parentId": "ver_mugbollq9e8c40d5",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place by re-reading the changed sections. T...",
+      "snapshot": "2a39c62aaaf022223ecef39aef039cdd4aaf3c34931ae780b4e571bcd5c3d535",
+      "createdAt": "2026-09-25T02:16:28.278Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1000,
+        "sensorAngle": 32,
+        "sensorDist": 28,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 11,
+        "scale": 1,
+        "gain": 2,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 10,
+          "removed": 0
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 166,
+          "removed": 63
+        }
+      ]
+    },
+    {
+      "id": "ver_mugc7ruw786528ea",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 121,
+      "round": 62,
+      "parentId": "ver_mugbxq462fd72b68",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "All edits are verified in place by re-reading. The sensor ladder in s...",
+      "snapshot": "3b47dcd794e83058f0f8eaa447137d39ecfc6ee4809afd3802e3078f634198c6",
+      "createdAt": "2026-09-25T02:24:17.096Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1000,
+        "sensorAngle": 32,
+        "sensorDist": 28,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 11,
+        "scale": 1,
+        "gain": 2,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 128,
+          "removed": 174
+        }
+      ]
+    },
+    {
+      "id": "ver_mugcl0uqcfbe26d6",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 122,
+      "round": 63,
+      "parentId": "ver_mugc7ruw786528ea",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The steering ladder is confirmed byte-identical to the parent: f >= l...",
+      "snapshot": "4471b762017950a12bf74ca7a1bd306b10bf96cbeda2fe0943685131071aebd8",
+      "createdAt": "2026-09-25T02:34:35.282Z",
+      "configuration": {
+        "palette": "magma",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1000,
+        "sensorAngle": 32,
+        "sensorDist": 28,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 11,
+        "scale": 1,
+        "gain": 2,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 49,
+          "removed": 49
+        }
+      ]
+    },
+    {
+      "id": "ver_mugcpjcn1ce46d4c",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 123,
+      "round": 64,
+      "parentId": "ver_mugcl0uqcfbe26d6",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Source contains the intended edits — confirmed by the full re-read: t...",
+      "snapshot": "2ee4b83040bf50a77323563f60a7b3af16f1bd6395c7e5532dc5ed18ee74141e",
+      "createdAt": "2026-09-25T02:38:05.879Z",
+      "configuration": {
+        "palette": "magma",
+        "gamma": 1.1,
+        "dpr": 1,
+        "num": 1000,
+        "sensorAngle": 34,
+        "sensorDist": 24,
+        "rotAngle": 26,
+        "decay": 0,
+        "spawnRadius": 11,
+        "scale": 1,
+        "gain": 2,
+        "speed": 2,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 16,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 96,
+          "removed": 90
+        }
+      ]
+    }
+  ]
+}

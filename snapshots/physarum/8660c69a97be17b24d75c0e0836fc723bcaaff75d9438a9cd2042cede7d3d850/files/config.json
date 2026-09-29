@@ -1,0 +1,15 @@
+{
+  "palette": "inferno",
+  "gamma": 1.2,
+  "dpr": 1,
+  "num": 700,
+  "sensorAngle": 36,
+  "sensorDist": 40,
+  "rotAngle": 24,
+  "decay": 0,
+  "spawnRadius": 190,
+  "scale": 1,
+  "gain": 1.3,
+  "speed": 2,
+  "seed": 1337
+}

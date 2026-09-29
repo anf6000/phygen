@@ -1,0 +1,15 @@
+{
+  "palette": "viridis",
+  "gamma": 1.1,
+  "dpr": 1,
+  "num": 300,
+  "sensorAngle": 30,
+  "sensorDist": 30,
+  "rotAngle": 14,
+  "decay": 0,
+  "spawnRadius": 16,
+  "scale": 1,
+  "gain": 1.9,
+  "speed": 2,
+  "seed": 1337
+}
