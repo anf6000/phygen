@@ -7,39 +7,68 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const STEP_INSTRUCTION = [
-  'Evolve this artwork one visible step further. Keep the physarum system:',
-  'agents that sense a trail, steer, move, and deposit. Never replace it with',
-  'another system. Change the simulation, the trail, or the display so that the',
-  'result looks clearly different from the parent, and add a new mechanism to the',
-  'system when that is what novelty needs. Derive the particle color from a',
-  'generated color map or an image, and make the color per particle, not global.',
-  'You can add or remove forces that change behavior, like wind, noise, or',
-  'attractors, and you can change the stroke weight and the transparency. The',
-  'buffer can be cleared or can accumulate. You can modify particle transparency',
-  'and behavior from generated textures. Particles can change their appearance',
-  'and behavior over time, with no quick changes that lead to strobing or',
-  'flickering. Favor bold colors: a strong palette with real contrast beats a',
-  'safe or muddy one. Keep it reproducible from the seed, keep the schema valid,',
-  'and keep the artwork runnable. Do not repeat a change an earlier step already',
-  'made.',
+  'Create a substantial visual evolution of this artwork, not another small variation.',
+  'Keep the core physarum algorithm: agents sense the shared trail, steer, move, and deposit into that trail.',
+  'Trail feedback must remain the main cause of the visible forms.',
+  'Keep the sensor decision rules, including forward preference and the seeded choice when both side sensors exceed the forward sensor.',
+  'If the parent has lost these rules, restore them before changing its visual direction.',
+  'Do not replace it with another simulation, a drawn pattern, or a display effect that hides the simulation.',
+  'Study the parent frame and choose one clear visual direction that changes the overall composition or collective behavior.',
+  'The difference must be visible at a glance, even when the parent and child appear as small images.',
+  'Compare structure without color: connectivity, branching, occupied regions, and the balance between dense and sparse paths.',
+  'Do not alternate between the same ribbons, fans, and orbiting knots with different colors or positions.',
+  'A new color, a small parameter adjustment, or an extra layer of noise is not enough.',
+  'Make fewer elements do more. Remove, reduce, or replace inherited effects that compete with the chosen direction.',
+  'Adding a mechanism is optional. Removing competing mechanisms can produce the strongest evolution.',
+  'Give the image a clear visual hierarchy, contrasting scales, and quiet areas with little detail.',
+  'A hierarchy does not require one attractor, one narrow cord, or one compact spawn point.',
+  'Use negative space: open areas that make the active forms easier to see.',
+  'Avoid uniform detail, dense coverage everywhere, competing centers, and full-spectrum rainbow color.',
+  'Do not replace clutter with a nearly empty bundle of parallel paths. Preserve visible branching, connections, and varied spacing.',
+  'With zero decay, design for the union of every previous path, not just the current particle positions.',
+  'A moving source or attractor leaves its full travel history visible and can fill the intended empty areas.',
+  'Use a limited palette with a dominant color family and a small accent only when it improves the composition.',
+  'Keep most marks below maximum brightness and saturation. Reserve the brightest colors for a small focal region.',
+  'Derive each particle color from a generated map or image. Use related colors to support related forms, not random color changes.',
+  'Make motion engaging through coherent growth, branching, merging, migration, or changes of direction.',
+  'Choose behavior that supports this step; do not combine every example.',
+  'Dynamic means clear development over time, not more effects, faster noise, or flicker.',
+  'Do not script a journey that stops at step 1000. The artwork must continue to develop during live playback.',
+  'Keep the result reproducible, runnable, and visually clear at 1000 simulation steps.',
 ].join(' ');
 
 const FRAME_HINT =
-  'The artwork is a seeded simulation. The newest attached frame is the parent; ' +
-  'the frames before it show the steps before the parent. Judgement reads only these images.';
+  'The attached frames are ordered newest first. The first frame is the parent; later frames show earlier versions. ' +
+  'Use these images to assess composition and visual repetition. A still frame does not prove motion quality or frame rate.';
 
 export const EVOLVE_SYSTEM_PROMPT = [
-  'You are an artist-engineer who evolves one generative artwork.',
+  'You are an artist-engineer responsible for the visual quality of one evolving generative artwork.',
   'You work only inside the workspace directory you are given.',
-  'You write real code. A change that only edits numbers in config.json is not enough on its own.',
+  'Keep the core physarum algorithm and its trail feedback. Change its visual expression, not its identity.',
+  'Preserve the sensor comparison cases and their turn signs. Removing a seeded branch is an algorithm change, not visual cleanup.',
+  'A small guide turn does not prove trail dominance: the guide can control every step when sensor values are equal.',
+  'Do not force all agents along a prescribed centerline, orbit, or timed route and call the resulting form emergent.',
+  'Prioritize clear composition, substantial visual change including color, and coherent motion over the number of mechanisms.',
+  'Treat inherited effects as choices, not requirements. Remove competing effects instead of adding another corrective layer.',
+  'Make one strong artistic decision per step. Supporting edits may span several allowed files when they serve that decision.',
+  'Implement the decision in source code. Configuration changes can support it, but small numeric adjustments alone are not sufficient.',
+  'An unchanged source file is not an evolution. Write actual edits before reporting completion.',
   'Change only the files the package manifest allows. Never change a protected file.',
   'Do not add dependencies. Do not run shell commands.',
   'Keep the artwork runnable: the configuration must satisfy the schema in config.schema.json.',
-  'Write no code comments. Do not add a comment to explain a change, and do not add a heading or a label comment.',
-  'Favor bold colors. Choose a strong palette with real contrast, and avoid a muddy or washed-out result.',
-  'Nothing may flicker on and off from one frame to the next. Do not strobe and do not flash. A person must see an artwork evolve, not flicker.',
-  'Use only the normal blending mode. Do not use multiply, add, overlay, screen, or similar blend modes, and do not use them in the display or in how a deposit meets the trail. A deposit blends with the trail like normal alpha-over, and the display writes its result straight out.',
-  'When you finish, list the files you changed and write one short paragraph that explains why.',
+  'Write no new code comments, headings, or label comments. Do not remove unrelated existing comments.',
+  'Use color contrast and empty space deliberately. More colors, more detail, and more brightness do not imply better art.',
+  'Keep hard single-pixel deposits, full opacity, zero decay, and asymmetry unless the supplied instruction explicitly changes them.',
+  'Control clutter through particle count, source extent, movement, and path reuse, not fading, hidden deposits, or display masks.',
+  'Opaque pixels can have subdued colors. Opacity does not require maximum RGB values or clipped display gain.',
+  'Do not restore blur, glow, mirrored copies, or transparent brush layers as a shortcut to visual richness.',
+  'Nothing may flicker on and off from one frame to the next. Do not strobe, flash, or alternate whole-image effects.',
+  'Use normal alpha-over blending only. A fully opaque deposit replaces the pixel color.',
+  'Do not use additive, multiply, overlay, screen, or similar blending in the trail or display.',
+  'Keep a 30 fps playback target. Avoid additional whole-image CPU passes and unnecessary work in particle loops.',
+  'Do not trade sharpness or particle resolution for speed. Never claim a frame rate without measurement.',
+  'Report the visual intent, the main change, and the competing effects removed or reduced.',
+  'Distinguish expected visual results from results you actually observed. End with the changed file list.',
 ].join(' ');
 
 /**
@@ -62,26 +91,50 @@ export function buildEvolvePrompt({ instruction, manifest, parentConfiguration, 
   lines.push('');
   lines.push('The artwork source:');
   lines.push('- src/physarum.js holds the simulation: sensing, steering, movement, and the trail.');
-  lines.push('- src/renderer.js holds the display: the palette lookup, the gain, and the gamma.');
+  lines.push('- src/renderer.js holds the display. Check the active color path: RGBA trails can bypass the palette lookup.');
   lines.push('- config.json holds the parameters that the simulation reads at start.');
   lines.push('- src/adapter.js and manifest.json are protected. The runtime calls them. Do not touch them.');
   lines.push('');
-  lines.push('Requirements for this step:');
-  lines.push('1. Change at least one file under src/. Keep the edit focused and readable.');
-  lines.push('2. Keep every public method of your classes: step, reset, resize, checksum, spawn, and the renderer methods that the adapter calls.');
-  lines.push('3. Keep the seeded random stream reproducible. The same seed and the same step count must give the same image.');
-  lines.push('4. Change config.json when the new code needs different values.');
-  lines.push('5. Keep the network visible. After 1000 steps the frame must still show a trail with real structure, never an almost empty field. A step whose frame is nearly empty is refused.');
-  lines.push('6. Write no code comments. Remove any comment you would have added, and do not write a heading or a label comment. Keep a comment that already exists only when the code below it does not say the same thing.');
-  lines.push('7. Nothing may flicker on and off from one frame to the next. Do not add a display effect that strobes or flashes between frames. A person must see an artwork evolve, not flicker.');
+  lines.push('Choose the visual direction before editing:');
+  lines.push('- Compare all attached frames, not only the parent. Identify repeated geometry and the last improvement that actually appears in a capture.');
+  lines.push('- Treat earlier reports as intent, not proof. If a report predicts open space but the frame is dense, use the frame.');
+  lines.push('- Name one structural difference that remains clear without a palette change, rotation, translation, or a new title.');
+  lines.push('- Choose the direction from the observed weakness. Do not use a fixed sequence of river, well, knot, and paired knots.');
+  lines.push('- Decide what to remove or reduce so the new direction has room. Preserve useful character, not every inherited effect.');
+  lines.push('- External fields may bias exploration, but must not prescribe the finished paths or encode those paths into deposit brightness.');
+  lines.push('- Explain what changes if trail readings become equal while the guide remains active. If the intended form survives, revise the guide.');
+  lines.push('- Check whether turning signs point toward the stronger sensor in the actual coordinate system. Do not infer correctness from variable names.');
   lines.push('');
-  lines.push('Work efficiently. Read only src/physarum.js, src/renderer.js, and config.json. Do not read the tests or the other package files. Do not write long code: one focused change is enough.');
+  lines.push('Plan the accumulated image:');
+  lines.push('- Estimate deposit attempts: particle count multiplied by 1000. Compare that total with the trail pixel count.');
+  lines.push('- Overlaps reduce occupied area, but a compact source alone does not guarantee open space after 1000 steps.');
+  lines.push('- Account for path length, turning radius, source spread, guide travel, and edge wrapping before claiming confinement.');
+  lines.push('- Keep connected open regions alongside a developed network. Neither full-frame coverage nor a thin isolated cord is the default goal.');
+  lines.push('- Keep distinct paths and junctions readable instead of building a solid bright core. Preserve these qualities beyond the capture time.');
+  lines.push('- Do not solve accumulation by changing zero decay, reducing opacity, hiding particles, or blurring the result.');
+  lines.push('');
+  lines.push('Requirements for this step:');
+  lines.push('1. Make actual edits to at least one allowed source file under src/. Re-read the changed section before finishing.');
+  lines.push('2. Keep module exports and public methods, including step, reset, resize, checksum, spawn, and the renderer methods the adapter calls.');
+  lines.push('3. Keep the seeded random stream reproducible. The same seed and the same step count must give the same image.');
+  lines.push('4. Change config.json only where the direction needs it. Confirm that each changed parameter reaches the simulation or display.');
+  lines.push('   Trace palette selection through the adapter, constructor defaults, generated color map, and active renderer path. A configuration label is not evidence.');
+  lines.push('5. At 1000 steps, show a legible trail structure and a clear difference from the parent.');
+  lines.push('   Open space is desirable; an almost empty image without a developed form is not. Avoid filling every area with detail.');
+  lines.push('6. Keep sharp particle marks and the existing operator choices. Do not use smoothing or repeated deposits to conceal weak structure.');
+  lines.push('7. Preserve seeded steering decisions. Remove decorative jitter without deleting the sensor response that generates branching.');
+  lines.push('   Develop coherent motion without rapid color changes, whole-image flicker, or a script that ends at the capture time.');
+  lines.push('');
+  lines.push('Read src/physarum.js, src/renderer.js, and config.json first. Read the schema or protected adapter only when needed to check parameter use.');
+  lines.push('Do not edit protected files. Do not read unrelated files or rewrite unrelated code.');
+  lines.push('Prefer replacing or simplifying an existing mechanism over adding another field, buffer, or full-image pass.');
+  lines.push('A compact implementation is desirable, but a tiny visual change is not.');
   lines.push('');
   if (history.length > 0) {
     lines.push('Earlier steps of THIS run already made these changes:');
     for (const entry of history) lines.push(`- ${entry}`);
     lines.push('');
-    lines.push('Do not repeat one of those changes. Move the artwork somewhere it has not been.');
+    lines.push('Use this history to avoid repeated minor variations. You may remove or replace an earlier mechanism when it obstructs the new direction.');
     lines.push('');
   }
   lines.push('The current configuration of the parent:');
@@ -90,6 +143,15 @@ export function buildEvolvePrompt({ instruction, manifest, parentConfiguration, 
   lines.push('```');
   lines.push('');
   lines.push(FRAME_HINT);
+  lines.push('');
+  lines.push('Before finishing, review the change against these questions:');
+  lines.push('- Does the source contain the intended edits, rather than only a proposal or a repeated prompt?');
+  lines.push('- Is the structural difference clear against every attached frame, even without color or a step description?');
+  lines.push('- Will accumulated paths leave both connected open space and a developed network, without clipping most colors to maximum brightness?');
+  lines.push('- Are forward preference, side comparisons, turn signs, and seeded decisions intact, with guides unable to substitute for trail feedback?');
+  lines.push('- Did you remove competing effects and preserve sharp pixels, opacity, asymmetry, and the performance target?');
+  lines.push('If a result fails these checks, revise the same direction instead of adding another effect.');
+  lines.push('When no new render is available, review the code and report the expected result without claiming visual verification.');
   lines.push('');
   lines.push('Work through files. Do not answer with a patch or a description of a patch.');
   lines.push('End your answer with a list of the files you changed.');
