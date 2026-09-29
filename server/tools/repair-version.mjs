@@ -361,6 +361,262 @@ const ALIGN_RAIL_TO = `        const dxr = 0;
 const PALETTE_SIM_FROM = `  palette: 'inferno',`;
 const PALETTE_SIM_TO = `  palette: 'ember',`;
 
+/**
+ * The sharp-warm operator edit: the frame reads as a full rainbow with blurred
+ * lines and an axial mirror. The palette window no longer wraps into green,
+ * and the clashing rival image is gone, so the color stays inside the warm
+ * window and follows the particle position. The trail keeps every deposit
+ * (config.json decay 0). The diffusion smear and the display glow are off, so
+ * the lines stay sharp. The mirror deposit is off, and the resonance field
+ * carries a fixed tilt phase, so the picture is no longer axially symmetric.
+ */
+const SW_PALETTE_FROM = `  palette: 'inferno',`;
+const SW_PALETTE_TO = `  palette: 'ember',`;
+const SW_IMG_FROM = `      const img = hue[i] < 0.5 ? rivalImage : colorImage;`;
+const SW_IMG_TO = `      const img = colorImage;`;
+const SW_MAIN_FROM = `      const c = sampleColor(sp ? rivalImage : colorImage, COLOR_IMG, hu, hv, this._c);`;
+const SW_MAIN_TO = `      const c = sampleColor(colorImage, COLOR_IMG, px / W, py / H, this._c);`;
+const SW_TAIL_FROM = `      const tc = sampleColor(
+        sp ? rivalImage : colorImage,
+        COLOR_IMG,
+        hu + hx * rib,
+        hv + hy * rib,
+        this._c,
+      );`;
+const SW_TAIL_TO = `      const tc = sampleColor(
+        colorImage,
+        COLOR_IMG,
+        px / W + hx * rib * 0.08,
+        py / H + hy * rib * 0.08,
+        this._c,
+      );`;
+const SW_DIFFUSE_FROM = `const DIFFUSE = 0.18;`;
+const SW_DIFFUSE_TO = `const DIFFUSE = 0;`;
+const SW_MIRROR_FROM = `const MIRROR_BASE = 0.82;`;
+const SW_MIRROR_TO = `const MIRROR_BASE = 0;`;
+const SW_TILT_CONST_FROM = `const CYM_HUE = 0.24;`;
+const SW_TILT_CONST_TO = `const CYM_HUE = 0.24;
+const CYM_TILT = 0.7;`;
+const SW_C1V_FROM = `      const c1v = Math.cos(CYM_M * Math.PI * vCym);`;
+const SW_C1V_TO = `      const c1v = Math.cos(CYM_M * Math.PI * vCym + CYM_TILT);`;
+const SW_S1V_FROM = `      const s1v = Math.sin(CYM_M * Math.PI * vCym);`;
+const SW_S1V_TO = `      const s1v = Math.sin(CYM_M * Math.PI * vCym + CYM_TILT);`;
+const SW_C2V_FROM = `      const c2v = Math.cos(CYM_N * Math.PI * vCym + cymPhi);`;
+const SW_C2V_TO = `      const c2v = Math.cos(CYM_N * Math.PI * vCym + cymPhi + CYM_TILT);`;
+const SW_S2V_FROM = `      const s2v = Math.sin(CYM_N * Math.PI * vCym + cymPhi);`;
+const SW_S2V_TO = `      const s2v = Math.sin(CYM_N * Math.PI * vCym + cymPhi + CYM_TILT);`;
+const SW_GLOW_FROM = `        uGlow: { value: 0.38 },`;
+const SW_GLOW_TO = `        uGlow: { value: 0 },`;
+
+/**
+ * The single-ramp operator edit, for a source that --sharp-warm already
+ * patched: half the particles still blend the rival color ramp into their
+ * color, and that ramp opens the opposite half of the color wheel, so the
+ * frame keeps its cool greens and blues. Every particle reads the one warm
+ * ramp now.
+ */
+const SR_MAP_FROM = `      const map = sp ? this.rivalMap : this.colorMap;`;
+const SR_MAP_TO = `      const map = this.colorMap;`;
+
+/**
+ * The hard-pixel operator edit: every particle becomes one hard pixel that is
+ * 100 percent opaque. The brush stays 1x1, the rail offset and the second rail
+ * are gone, and the streak leaves one tap at the particle position, so one
+ * deposit lands on one pixel per step. The deposit weight is forced to 1, so
+ * the pixel takes the particle color exactly, and the channel offsets are
+ * zero, so the three channels land on the same pixel.
+ */
+const HP_RADIUS_FROM = `      radius[i] = grainT < HAIRLINE_MAX ? 0 : grainT < RIBBON_MIN ? 1 : 2;`;
+const HP_RADIUS_TO = `      radius[i] = 0;`;
+const HP_RESONANCE_FROM = `      if (resSmooth > 0.65 && radius[i] < 2) radius[i] = 2;`;
+const HP_RESONANCE_TO = `      if (resSmooth > 0.65 && radius[i] < 2) radius[i] = 0;`;
+const HP_SEP_FROM = `      const sep = rail[i] * (0.6 + 0.4 * Math.cos(cphase[i] + spinT * BRAID_SPIN));`;
+const HP_SEP_TO = `      const sep = 0;`;
+const HP_DXR_FROM = `      const dxr = Math.round(-ay * psp);`;
+const HP_DXR_TO = `      const dxr = 0;`;
+const HP_DYR_FROM = `      const dyr = Math.round(ax * psp);`;
+const HP_DYR_TO = `      const dyr = 0;`;
+const HP_RAIL_LOOP_FROM = `      for (let rl = 0; rl < 2; rl++) {`;
+const HP_RAIL_LOOP_TO = `      for (let rl = 0; rl < 1; rl++) {`;
+const HP_TAP_LOOP_FROM = `        for (let s = 0; s < STREAK_TAPS; s++) {`;
+const HP_TAP_LOOP_TO = `        for (let s = 0; s < 1; s++) {`;
+const HP_TAP_F_FROM = `          const f = s / (STREAK_TAPS - 1);`;
+const HP_TAP_F_TO = `          const f = 0;`;
+const HP_WEIGHT_FROM = `            const w = (brush ? brush[m] : 1) * strength;`;
+const HP_WEIGHT_TO = `            const w = 1;`;
+
+/**
+ * The lean-step operator edit: with decay 0 and no diffusion the per-pixel
+ * trail pass has nothing to do that the frame wants — its only effects are a
+ * bilinear resample that softens lines and a decay that the configuration
+ * already turned off. The pass runs a whole-field loop over every pixel every
+ * step, and it is the largest single cost of a step. When diffusion is off
+ * and decay is 0 the loop is skipped, so the step is faster and the trail
+ * keeps every deposit exactly. A later step that raises decay or diffusion
+ * brings the pass back on its own.
+ */
+const LS_LOOP_FROM = `      for (let y = 0; y < H; y++) {`;
+const LS_LOOP_TO = `      if (DIFFUSE > 0 || this.decay > 0) for (let y = 0; y < H; y++) {`;
+
+/**
+ * The noise-color operator edit: the color map is one radial ramp with no
+ * noise and no change over time. The color becomes a mix of colored value
+ * noise at four scales, so the coarse octaves carry the broad color regions
+ * and the fine octaves carry the texture. Every particle still reads its own
+ * color from the map, and a bounded sine drift turns the hue slowly over time,
+ * so the accumulated image shows the color history without a flicker.
+ */
+const NC_HELPERS_FROM = `function hsvToRgb(h, s, v, out) {`;
+const NC_HELPERS_TO = `const HUE_SWING = 0.14;
+const HUE_RATE = TAU / 1300;
+
+function noiseAt(field, g, u, v) {
+  const fx = u * g - 0.5;
+  const fy = v * g - 0.5;
+  const x0 = Math.floor(fx);
+  const y0 = Math.floor(fy);
+  const tx = fx - x0;
+  const ty = fy - y0;
+  const sx = tx * tx * (3 - 2 * tx);
+  const sy = ty * ty * (3 - 2 * ty);
+  const xa = ((x0 % g) + g) % g;
+  const ya = ((y0 % g) + g) % g;
+  const xb = (xa + 1) % g;
+  const yb = (ya + 1) % g;
+  const v00 = field[ya * g + xa];
+  const v10 = field[ya * g + xb];
+  const v01 = field[yb * g + xa];
+  const v11 = field[yb * g + xb];
+  const a = v00 + (v10 - v00) * sx;
+  const b = v01 + (v11 - v01) * sx;
+  return a + (b - a) * sy;
+}
+
+function clampByte(v) {
+  const r = Math.round(v);
+  return r < 0 ? 0 : r > 255 ? 255 : r;
+}
+
+function hsvToRgb(h, s, v, out) {`;
+const NC_BUILD_FROM = `export function buildColorImage(rng, n, from, to, p1 = 0) {
+  const img = new Uint8Array(n * n * 3);
+  const rgb = [0, 0, 0];
+  const cx = COLONY_UV[0] * n - 0.5;
+  const cy = COLONY_UV[1] * n - 0.5;
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const dx = x - cx;
+      const dy = y - cy;
+      let t = Math.sqrt(dx * dx + dy * dy) / (MAP_REACH * n);
+      if (t > 1) t = 1;
+      const hue = from + (to - from) * (1 - t);
+      const sat = 0.88 - 0.2 * t;
+      const val = 0.66 - 0.46 * t;
+      hsvToRgb(hue, sat, val, rgb);
+      const o = (y * n + x) * 3;
+      img[o] = Math.round(rgb[0]);
+      img[o + 1] = Math.round(rgb[1]);
+      img[o + 2] = Math.round(rgb[2]);
+    }
+  }
+  return img;
+}`;
+const NC_BUILD_TO = `export function buildColorImage(rng, n, from, to, p1 = 0) {
+  const img = new Uint8Array(n * n * 3);
+  const rgb = [0, 0, 0];
+  const cx = COLONY_UV[0] * n - 0.5;
+  const cy = COLONY_UV[1] * n - 0.5;
+  const grids = [3, 7, 17, 41];
+  const nrng = makeRng(Math.floor(p1 * 1000000007));
+  const fields = grids.map((g) => {
+    const f = new Float32Array(g * g);
+    for (let i = 0; i < f.length; i++) f[i] = nrng();
+    return f;
+  });
+  for (let y = 0; y < n; y++) {
+    const v = (y + 0.5) / n;
+    for (let x = 0; x < n; x++) {
+      const u = (x + 0.5) / n;
+      const a1 = noiseAt(fields[0], grids[0], u, v);
+      const a2 = noiseAt(fields[1], grids[1], u, v);
+      const a3 = noiseAt(fields[2], grids[2], u, v);
+      const a4 = noiseAt(fields[3], grids[3], u, v);
+      const mix = a1 * 0.5 + a2 * 0.28 + a3 * 0.15 + a4 * 0.07;
+      const dx = x - cx;
+      const dy = y - cy;
+      let t = Math.sqrt(dx * dx + dy * dy) / (MAP_REACH * n);
+      if (t > 1) t = 1;
+      const hue = from + (to - from) * mix;
+      const sat = 0.82 + 0.14 * (a3 - 0.5);
+      const val = (0.4 + 0.6 * (a2 * 0.4 + a3 * 0.35 + a4 * 0.25)) * (1 - 0.55 * t);
+      hsvToRgb(hue, sat, val, rgb);
+      const o = (y * n + x) * 3;
+      img[o] = Math.round(rgb[0]);
+      img[o + 1] = Math.round(rgb[1]);
+      img[o + 2] = Math.round(rgb[2]);
+    }
+  }
+  return img;
+}`;
+const NC_MATRIX_FROM = `    const pace = this.speed ?? 1;`;
+const NC_MATRIX_TO = `    const pace = this.speed ?? 1;
+    const hshift = HUE_SWING * TAU * Math.sin(this.iteration * HUE_RATE);
+    const hcos = Math.cos(hshift);
+    const hsin = Math.sin(hshift);
+    const m00 = 0.213 + hcos * 0.787 - hsin * 0.213;
+    const m01 = 0.715 - hcos * 0.715 - hsin * 0.715;
+    const m02 = 0.072 - hcos * 0.072 + hsin * 0.928;
+    const m10 = 0.213 - hcos * 0.213 + hsin * 0.143;
+    const m11 = 0.715 + hcos * 0.285 + hsin * 0.14;
+    const m12 = 0.072 - hcos * 0.072 - hsin * 0.283;
+    const m20 = 0.213 - hcos * 0.213 - hsin * 0.787;
+    const m21 = 0.715 - hcos * 0.715 + hsin * 0.715;
+    const m22 = 0.072 + hcos * 0.928 + hsin * 0.072;`;
+const NC_COLOR_FROM = `      y[i] = (((y[i] + Math.sin(a) * pace) % H) + H) % H;
+
+      sampleColor(colorImage, COLOR_IMG, x[i] / W, y[i] / H, this._c);
+      cr[i] = Math.min(255, Math.round(this._c[0]));
+      cg[i] = Math.min(255, Math.round(this._c[1]));
+      cb[i] = Math.min(255, Math.round(this._c[2]));`;
+const NC_COLOR_TO = `      y[i] = (((y[i] + Math.sin(a) * pace) % H) + H) % H;
+
+      sampleColor(colorImage, COLOR_IMG, x[i] / W, y[i] / H, this._c);
+      const c0 = this._c[0];
+      const c1 = this._c[1];
+      const c2 = this._c[2];
+      cr[i] = clampByte(c0 * m00 + c1 * m01 + c2 * m02);
+      cg[i] = clampByte(c0 * m10 + c1 * m11 + c2 * m12);
+      cb[i] = clampByte(c0 * m20 + c1 * m21 + c2 * m22);`;
+
+/**
+ * The noise-color-rng operator edit, for a source that --noise-color already
+ * patched with the shared random stream: the noise map reads the same stream
+ * that places the particles, so the color change also moved the particles and
+ * reshaped the composition. The map reads its own stream, derived from the
+ * seed, so the particles keep their positions and only the color changes.
+ */
+const NC_RNG_FROM = `  const grids = [3, 7, 17, 41];
+  const fields = grids.map((g) => {
+    const f = new Float32Array(g * g);
+    for (let i = 0; i < f.length; i++) f[i] = rng();
+    return f;
+  });`;
+const NC_RNG_TO = `  const grids = [3, 7, 17, 41];
+  const nrng = makeRng(Math.floor(p1 * 1000000007));
+  const fields = grids.map((g) => {
+    const f = new Float32Array(g * g);
+    for (let i = 0; i < f.length; i++) f[i] = nrng();
+    return f;
+  });`;
+
+/**
+ * The hue-swing operator edit: the slow hue drift is wider than the color
+ * window, so at the far end the hue wraps past yellow into olive-green and the
+ * frame loses its color family. The swing value sets how far the drift turns,
+ * so the palette stays inside the warm window.
+ */
+const HUE_SWING_PATTERN = /const HUE_SWING = [0-9.]+;/;
+
 function argument(name) {
   const index = process.argv.indexOf(`--${name}`);
   return index >= 0 ? process.argv[index + 1] : null;
@@ -406,9 +662,17 @@ const senseLead = process.argv.includes('--sense-lead');
 const unifyColor = process.argv.includes('--unify-color');
 const alignChannels = process.argv.includes('--align-channels');
 const configPalette = process.argv.includes('--sim-palette');
+const sharpWarm = process.argv.includes('--sharp-warm');
+const singleRamp = process.argv.includes('--single-ramp');
+const hardPixel = process.argv.includes('--hard-pixel');
+const leanStep = process.argv.includes('--lean-step');
+const noiseColor = process.argv.includes('--noise-color');
+const noiseColorRng = process.argv.includes('--noise-color-rng');
+const hueSwingIndex = process.argv.indexOf('--hue-swing');
+const hueSwing = hueSwingIndex >= 0 ? Number(process.argv[hueSwingIndex + 1]) : null;
 
 if (!versionId) {
-  process.stderr.write('Usage: node tools/repair-version.mjs --version <versionId> [--capture-only | --refactor | --revive | --kill-strobe | --calm-steps | --drift-lines | --fix-blend | --fix-aa | --remove-settle | --soften-clear <decay> | --calm-forces | --sharpen | --solo-sensing | --sense-lead | --unify-color | --align-channels | --sim-palette]\n');
+  process.stderr.write('Usage: node tools/repair-version.mjs --version <versionId> [--capture-only | --refactor | --revive | --kill-strobe | --calm-steps | --drift-lines | --fix-blend | --fix-aa | --remove-settle | --soften-clear <decay> | --calm-forces | --sharpen | --solo-sensing | --sense-lead | --unify-color | --align-channels | --sim-palette | --sharp-warm | --single-ramp | --hard-pixel | --lean-step | --noise-color | --noise-color-rng | --hue-swing <value>]\n');
   process.exit(1);
 }
 
@@ -832,6 +1096,227 @@ try {
       logger('info', `The sim-palette fix is in: ${result.version.id} keeps its place at step ${result.version.generation} with a new frame`);
     } else {
       logger('error', `The sim-palette fix of ${versionId} failed: ${result.error?.code} ${result.error?.message}`);
+      process.exitCode = 1;
+    }
+  } else if (sharpWarm) {
+    logger('info', `Warm color, sharp lines, and no mirror on ${versionId} (${version.title}) in place`);
+    const result = await controller.fixVersion({
+      versionId,
+      note: 'An operator fixed this step in place: the color map window no longer wraps into green, and the clashing rival image is gone. Particles sample the color map at their position, so neighbors share a color. The trail keeps every deposit, because config.json decay is now 0. The diffusion smear and the display glow are off, so the lines stay sharp. The mirror deposit is off, and the resonance field carries a fixed tilt, so the picture is asymmetric.',
+      apply: async ({ workspaceDir }) => {
+        const simFile = join(workspaceDir, 'src', 'physarum.js');
+        let sim = await readFile(simFile, 'utf8');
+        const simPatches = [
+          ['palette default', SW_PALETTE_FROM, SW_PALETTE_TO],
+          ['spawn image choice', SW_IMG_FROM, SW_IMG_TO],
+          ['main color sample', SW_MAIN_FROM, SW_MAIN_TO],
+          ['trail color sample', SW_TAIL_FROM, SW_TAIL_TO],
+          ['diffusion', SW_DIFFUSE_FROM, SW_DIFFUSE_TO],
+          ['mirror deposit', SW_MIRROR_FROM, SW_MIRROR_TO],
+          ['tilt constant', SW_TILT_CONST_FROM, SW_TILT_CONST_TO],
+          ['field cosine v', SW_C1V_FROM, SW_C1V_TO],
+          ['field sine v', SW_S1V_FROM, SW_S1V_TO],
+          ['second cosine v', SW_C2V_FROM, SW_C2V_TO],
+          ['second sine v', SW_S2V_FROM, SW_S2V_TO],
+        ];
+        for (const [name, from, to] of simPatches) {
+          if (!sim.includes(from)) {
+            const error = new Error(`The ${name} does not hold the text this fix replaces:\n${from}`);
+            error.code = 'patch_not_found';
+            throw error;
+          }
+          sim = sim.replace(from, to);
+        }
+        await writeFile(simFile, sim, 'utf8');
+
+        const rendererFile = join(workspaceDir, 'src', 'renderer.js');
+        let renderer = await readFile(rendererFile, 'utf8');
+        if (!renderer.includes(SW_GLOW_FROM)) {
+          const error = new Error(`The display glow does not hold the text this fix replaces:\n${SW_GLOW_FROM}`);
+          error.code = 'patch_not_found';
+          throw error;
+        }
+        renderer = renderer.replace(SW_GLOW_FROM, SW_GLOW_TO);
+        await writeFile(rendererFile, renderer, 'utf8');
+
+        const configFile = join(workspaceDir, 'config.json');
+        const config = JSON.parse(await readFile(configFile, 'utf8'));
+        config.decay = 0;
+        await writeFile(configFile, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+        logger('info', 'The color is warm and positional, the trail accumulates, the lines are sharp, and the mirror is off');
+      },
+    });
+    if (result.ok) {
+      logger('info', `The sharp-warm fix is in: ${result.version.id} keeps its place at step ${result.version.generation} with a new frame`);
+    } else {
+      logger('error', `The sharp-warm fix of ${versionId} failed: ${result.error?.code} ${result.error?.message}`);
+      process.exitCode = 1;
+    }
+  } else if (singleRamp) {
+    logger('info', `Pointing every particle at the one warm ramp on ${versionId} (${version.title}) in place`);
+    const result = await controller.fixVersion({
+      versionId,
+      note: 'An operator fixed this step in place: half the particles still blended the rival color ramp, which opens the opposite half of the color wheel, so the frame kept its cool greens and blues. Every particle reads the one warm ramp now.',
+      apply: async ({ workspaceDir }) => {
+        const simFile = join(workspaceDir, 'src', 'physarum.js');
+        let sim = await readFile(simFile, 'utf8');
+        if (!sim.includes(SR_MAP_FROM)) {
+          const error = new Error(`The map choice does not hold the text this fix replaces:\n${SR_MAP_FROM}`);
+          error.code = 'patch_not_found';
+          throw error;
+        }
+        sim = sim.replace(SR_MAP_FROM, SR_MAP_TO);
+        await writeFile(simFile, sim, 'utf8');
+        logger('info', 'Every particle reads the one warm ramp now');
+      },
+    });
+    if (result.ok) {
+      logger('info', `The single-ramp fix is in: ${result.version.id} keeps its place at step ${result.version.generation} with a new frame`);
+    } else {
+      logger('error', `The single-ramp fix of ${versionId} failed: ${result.error?.code} ${result.error?.message}`);
+      process.exitCode = 1;
+    }
+  } else if (hardPixel) {
+    logger('info', `Making every particle one hard opaque pixel on ${versionId} (${version.title}) in place`);
+    const result = await controller.fixVersion({
+      versionId,
+      note: 'An operator fixed this step in place: every particle is now one hard pixel that is 100 percent opaque. The brush stays 1x1, the rail offset and the second rail are gone, and the streak leaves one tap at the particle position. The deposit weight is 1, so the pixel takes the particle color exactly, and the three channels land on the same pixel.',
+      apply: async ({ workspaceDir }) => {
+        const simFile = join(workspaceDir, 'src', 'physarum.js');
+        let sim = await readFile(simFile, 'utf8');
+        for (const [name, from, to] of [
+          ['brush radius', HP_RADIUS_FROM, HP_RADIUS_TO],
+          ['resonance brush', HP_RESONANCE_FROM, HP_RESONANCE_TO],
+          ['rail offset', HP_SEP_FROM, HP_SEP_TO],
+          ['red channel offset', HP_DXR_FROM, HP_DXR_TO],
+          ['channel y offset', HP_DYR_FROM, HP_DYR_TO],
+          ['rail loop', HP_RAIL_LOOP_FROM, HP_RAIL_LOOP_TO],
+          ['tap loop', HP_TAP_LOOP_FROM, HP_TAP_LOOP_TO],
+          ['tap blend', HP_TAP_F_FROM, HP_TAP_F_TO],
+          ['deposit weight', HP_WEIGHT_FROM, HP_WEIGHT_TO],
+        ]) {
+          if (!sim.includes(from)) {
+            const error = new Error(`The ${name} does not hold the text this fix replaces:\n${from}`);
+            error.code = 'patch_not_found';
+            throw error;
+          }
+          sim = sim.replace(from, to);
+        }
+        await writeFile(simFile, sim, 'utf8');
+        logger('info', 'Every particle deposits one opaque pixel per step now');
+      },
+    });
+    if (result.ok) {
+      logger('info', `The hard-pixel fix is in: ${result.version.id} keeps its place at step ${result.version.generation} with a new frame`);
+    } else {
+      logger('error', `The hard-pixel fix of ${versionId} failed: ${result.error?.code} ${result.error?.message}`);
+      process.exitCode = 1;
+    }
+  } else if (leanStep) {
+    logger('info', `Skipping the idle trail pass on ${versionId} (${version.title}) in place`);
+    const result = await controller.fixVersion({
+      versionId,
+      note: 'An operator fixed this step in place: with decay 0 and no diffusion, the whole-field trail pass had no wanted effect — only a bilinear resample that softened lines and a decay the configuration already turned off. The pass is skipped when diffusion is off and decay is 0, so a step is faster and the trail keeps every deposit exactly.',
+      apply: async ({ workspaceDir }) => {
+        const simFile = join(workspaceDir, 'src', 'physarum.js');
+        let sim = await readFile(simFile, 'utf8');
+        if (!sim.includes(LS_LOOP_FROM)) {
+          const error = new Error(`The trail pass does not hold the text this fix replaces:\n${LS_LOOP_FROM}`);
+          error.code = 'patch_not_found';
+          throw error;
+        }
+        sim = sim.replace(LS_LOOP_FROM, LS_LOOP_TO);
+        await writeFile(simFile, sim, 'utf8');
+        logger('info', 'The trail pass is skipped while diffusion is off and decay is 0');
+      },
+    });
+    if (result.ok) {
+      logger('info', `The lean-step fix is in: ${result.version.id} keeps its place at step ${result.version.generation} with a new frame`);
+    } else {
+      logger('error', `The lean-step fix of ${versionId} failed: ${result.error?.code} ${result.error?.message}`);
+      process.exitCode = 1;
+    }
+  } else if (noiseColor) {
+    logger('info', `Mixing colored noise at several scales on ${versionId} (${version.title}) in place`);
+    const result = await controller.fixVersion({
+      versionId,
+      note: 'An operator fixed this step in place: the color map was one radial ramp with no noise. The color is now a mix of colored value noise at four scales, so the coarse octaves carry the broad color regions and the fine octaves carry the texture. Every particle still reads its own color from the map, and a bounded sine drift turns the hue slowly over time, so the accumulated image shows the color history without a flicker.',
+      apply: async ({ workspaceDir }) => {
+        const simFile = join(workspaceDir, 'src', 'physarum.js');
+        let sim = await readFile(simFile, 'utf8');
+        for (const [name, from, to] of [
+          ['noise helpers', NC_HELPERS_FROM, NC_HELPERS_TO],
+          ['color map', NC_BUILD_FROM, NC_BUILD_TO],
+          ['hue matrix', NC_MATRIX_FROM, NC_MATRIX_TO],
+          ['particle color', NC_COLOR_FROM, NC_COLOR_TO],
+        ]) {
+          if (!sim.includes(from)) {
+            const error = new Error(`The ${name} does not hold the text this fix replaces:\n${from}`);
+            error.code = 'patch_not_found';
+            throw error;
+          }
+          sim = sim.replace(from, to);
+        }
+        await writeFile(simFile, sim, 'utf8');
+        logger('info', 'The color mixes four noise scales, and the hue drifts slowly over time');
+      },
+    });
+    if (result.ok) {
+      logger('info', `The noise-color fix is in: ${result.version.id} keeps its place at step ${result.version.generation} with a new frame`);
+    } else {
+      logger('error', `The noise-color fix of ${versionId} failed: ${result.error?.code} ${result.error?.message}`);
+      process.exitCode = 1;
+    }
+  } else if (noiseColorRng) {
+    logger('info', `Giving the noise map its own random stream on ${versionId} (${version.title}) in place`);
+    const result = await controller.fixVersion({
+      versionId,
+      note: 'An operator fixed this step in place: the noise color map read the same random stream that places the particles, so the color change also moved the particles and reshaped the composition. The map reads its own stream, derived from the seed, so the particles keep their positions and only the color changes.',
+      apply: async ({ workspaceDir }) => {
+        const simFile = join(workspaceDir, 'src', 'physarum.js');
+        let sim = await readFile(simFile, 'utf8');
+        if (!sim.includes(NC_RNG_FROM)) {
+          const error = new Error(`The noise map does not hold the text this fix replaces:\n${NC_RNG_FROM}`);
+          error.code = 'patch_not_found';
+          throw error;
+        }
+        sim = sim.replace(NC_RNG_FROM, NC_RNG_TO);
+        await writeFile(simFile, sim, 'utf8');
+        logger('info', 'The noise map reads its own stream now');
+      },
+    });
+    if (result.ok) {
+      logger('info', `The noise-color-rng fix is in: ${result.version.id} keeps its place at step ${result.version.generation} with a new frame`);
+    } else {
+      logger('error', `The noise-color-rng fix of ${versionId} failed: ${result.error?.code} ${result.error?.message}`);
+      process.exitCode = 1;
+    }
+  } else if (hueSwing !== null) {
+    if (!Number.isFinite(hueSwing) || hueSwing < 0 || hueSwing > 0.5) {
+      console.error('--hue-swing needs a value between 0 and 0.5, in turns of the color wheel.');
+      process.exit(1);
+    }
+    logger('info', `Setting the hue drift to ${hueSwing} turn on ${versionId} (${version.title}) in place`);
+    const result = await controller.fixVersion({
+      versionId,
+      note: `An operator fixed this step in place: the slow hue drift turned ${hueSwing} of the color wheel, so the far end of the drift stayed inside the warm color window instead of wrapping past yellow into olive-green.`,
+      apply: async ({ workspaceDir }) => {
+        const simFile = join(workspaceDir, 'src', 'physarum.js');
+        let sim = await readFile(simFile, 'utf8');
+        if (!HUE_SWING_PATTERN.test(sim)) {
+          const error = new Error('The hue drift constant is not in this source.');
+          error.code = 'patch_not_found';
+          throw error;
+        }
+        sim = sim.replace(HUE_SWING_PATTERN, `const HUE_SWING = ${hueSwing};`);
+        await writeFile(simFile, sim, 'utf8');
+        logger('info', `The hue drift turns ${hueSwing} of the wheel now`);
+      },
+    });
+    if (result.ok) {
+      logger('info', `The hue-swing fix is in: ${result.version.id} keeps its place at step ${result.version.generation} with a new frame`);
+    } else {
+      logger('error', `The hue-swing fix of ${versionId} failed: ${result.error?.code} ${result.error?.message}`);
       process.exitCode = 1;
     }
   } else {

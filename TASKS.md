@@ -54,6 +54,17 @@ prompt, the step instruction, and requirement 7 of the step prompt.
 `tools/calm-steps.mjs` and the `--calm-steps` flag of the repair tool remain the
 manual way to add a settle.
 
+The evolution instructions in `server/src/controller/prompts.mjs` were rewritten
+on 2026-09-24, after the frames from steps 36 to 43 stayed busy or repeated
+earlier geometry. The step instruction now asks for a substantial visual change
+with a clear hierarchy, contrasting scales, and quiet areas, and it names the
+failure modes: uniform detail, a nearly empty bundle of parallel paths, a
+scripted route, and a repeated shape with a new color. The system prompt asks
+for the sensor decisions to survive, so a guide cannot replace the trail. The
+step prompt asks for the real pixel budget (particle count times 1000) to be
+compared with the trail, for the active color path to be traced, and for the
+report to separate what was observed from what was expected.
+
 Applied to **step 49** (`ver_mudtkezme7c41392`) on 2026-09-23 and 2026-09-24,
 because the frame read as dim, jittery colored static. Step 49 was later removed
 from the chain with the truncate below, but the fix modes remain in the repair
@@ -81,6 +92,47 @@ tool for future use:
 
 Each fix publishes a new snapshot hash, so an older snapshot's `physarum.js` is
 a stale patch anchor. Always re-read `versions.snapshot_path` before a fix.
+
+Applied to **step 35** (`ver_muf7q68t82efe910`) on 2026-09-24, because the frame
+read as a full rainbow with blurred lines and an axial mirror:
+
+- `--sharp-warm`: the simulation palette default changed to `ember`, so the
+  color window no longer wraps into green; the clashing rival image is gone and
+  particles sample the color map at their position; `config.json` decay is 0,
+  so the trail keeps every deposit; the diffusion smear (`DIFFUSE`) and the
+  display glow (`uGlow`) are off, so the lines stay sharp; the mirror deposit
+  (`MIRROR_BASE`) is off; and the Chladni resonance field carries a fixed tilt
+  phase (`CYM_TILT`) on its v terms, so the pattern is no longer axially
+  symmetric.
+- `--single-ramp`: half the particles still blended the rival color ramp, which
+  opens the opposite half of the color wheel; every particle reads the one warm
+  ramp now.
+- `--hard-pixel`: every particle is one hard 1x1 pixel that is 100 percent
+  opaque. The brush stays 1x1, the rail offset and the second rail are gone,
+  the streak leaves one tap at the particle position, the deposit weight is 1,
+  and the three channels land on the same pixel.
+- `--lean-step`: with decay 0 and diffusion 0, the whole-field trail pass had
+  no wanted effect — only a bilinear resample that softened lines and a decay
+  the configuration already turned off. The pass is skipped when diffusion is
+  off and decay is 0, so a later step that raises either brings it back on its
+  own. Measured on this machine: one step went from 43 ms to 23 ms median, and
+  the live page went from 28 to 42 fps.
+
+Applied to **step 48** (`ver_mufgjte28f2a0545`) on 2026-09-24, to give it a
+color scheme that mixes colored noise at several scales:
+
+- `--noise-color`: the color map was one radial ramp with no noise. It is now a
+  mix of colored value noise at four scales (`noiseAt` over 3, 7, 17, and 41
+  cell grids): the coarse octaves carry the broad color regions, the fine
+  octaves carry the texture. Each particle still reads its own color from the
+  map, and a bounded sine drift turns the hue slowly over time, so the
+  accumulated image shows the color history without a flicker.
+- `--noise-color-rng`: the noise map first read the same random stream that
+  places the particles, so the color change also moved the particles. The map
+  reads its own stream, derived from the seed, so only the color changes.
+- `--hue-swing <value>`: sets how far the hue drift turns, in turns of the
+  color wheel. Step 48 uses 0.07, so the drift stays inside the warm window
+  instead of wrapping past yellow into olive-green.
 
 The chain was **truncated after step 34** on 2026-09-24 with
 `node tools/truncate-chain.mjs --keep-through 34`: every version above
