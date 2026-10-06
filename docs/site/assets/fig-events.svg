@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1060 500" role="img" aria-label="How an event is appended, fanned out, and replayed to a reconnecting client">
+  <style>
+    text { font-family: "JetBrains Mono", ui-monospace, Consolas, monospace; fill: #000; }
+    .n   { fill: #fff; stroke: #000; stroke-width: 1; }
+    .n.q { fill: #f2f2f2; }
+    .n.a { stroke: #0000ff; stroke-width: 2; }
+    .nt  { font-size: 12px; font-weight: 700; }
+    .ns  { font-size: 10px; fill: #767676; }
+    .th  { font-size: 15px; font-weight: 700; }
+    .sd  { font-size: 11px; fill: #767676; }
+    .w   { fill: none; stroke: #000; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+    .w.a { stroke: #0000ff; }
+    .w.d { stroke: #767676; stroke-dasharray: 3 3; }
+    .lbl { font-size: 10.5px; fill: #767676; }
+    .tag { font-size: 10.5px; fill: #0000ff; }
+  </style>
+  <defs>
+    <marker id="ah" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7.5,3 L0,6 z" fill="#000"/></marker>
+    <marker id="aha" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7.5,3 L0,6 z" fill="#0000ff"/></marker>
+  </defs>
+
+  <text class="th" x="30" y="40">The event stream</text>
+  <text class="sd" x="30" y="58">the controller writes an event once, then every client replays exactly what it missed</text>
+
+  <rect class="n q" x="20" y="110" width="180" height="120"/>
+  <text class="nt" x="32" y="134">the controller</text>
+  <text class="ns" x="32" y="152">run loop · jobs</text>
+  <text class="ns" x="32" y="166">capture · provider</text>
+  <text class="ns" x="32" y="180">sessions</text>
+  <text class="ns" x="32" y="200">emit one event per</text>
+  <text class="ns" x="32" y="214">state change</text>
+
+  <rect class="n a" x="290" y="130" width="220" height="70"/>
+  <text class="nt" x="302" y="156">EventBus.emit</text>
+  <text class="ns" x="302" y="174">append the event to the</text>
+  <text class="ns" x="302" y="188">store BEFORE any fan-out</text>
+
+  <rect class="n" x="620" y="60" width="250" height="70"/>
+  <text class="nt" x="632" y="86">the events table</text>
+  <text class="ns" x="632" y="104">run_id · seq · type · at</text>
+  <text class="ns" x="632" y="118">payload_json · durable</text>
+
+  <rect class="n" x="620" y="200" width="250" height="70"/>
+  <text class="nt" x="632" y="226">per-run subscribers</text>
+  <text class="ns" x="632" y="244">live fan-out to open</text>
+  <text class="ns" x="632" y="258">connections, in order</text>
+
+  <rect class="n a" x="260" y="300" width="300" height="90"/>
+  <text class="nt" x="272" y="326">SSE client</text>
+  <text class="ns" x="272" y="344">GET /api/runs/:runId/events</text>
+  <text class="ns" x="272" y="362">sends Last-Event-ID to resume;</text>
+  <text class="ns" x="272" y="376">must not lose or duplicate a row</text>
+
+  <line class="w a" x1="180" y1="170" x2="290" y2="170" marker-end="url(#aha)"/>
+  <text class="tag" x="196" y="164">emit</text>
+
+  <polyline class="w" points="400,130 400,95 620,95" marker-end="url(#ah)"/>
+  <text class="lbl" x="406" y="90">append first (seq)</text>
+
+  <line class="w" x1="510" y1="165" x2="620" y2="165" marker-end="url(#ah)"/>
+  <text class="lbl" x="516" y="159">fan out</text>
+
+  <polyline class="w" points="745,130 745,200" marker-end="url(#ah)"/>
+  <text class="lbl" x="751" y="168">live</text>
+
+  <polyline class="w d" points="745,270 745,290 410,290 410,300" marker-end="url(#ah)"/>
+  <rect x="470" y="281" width="224" height="18" fill="#fff"/>
+  <text class="lbl" x="478" y="294">subscribe, then replay the gap</text>
+
+  <rect class="n q" x="620" y="320" width="250" height="90"/>
+  <text class="nt" x="632" y="344">keep-alive and overrun</text>
+  <text class="ns" x="632" y="362">a : comment every 15 s</text>
+  <text class="ns" x="632" y="376">a client too far behind is</text>
+  <text class="ns" x="632" y="390">closed, never trimmed: it</text>
+  <text class="ns" x="632" y="404">reconnects and gets the gap</text>
+
+  <text class="lbl" x="30" y="440">Event types: run.state · run.round · run.completed · version.created · version.state · capture.ready ·</text>
+  <text class="lbl" x="30" y="456">job.state · agent · file · usage · budget · error · log</text>
+</svg>

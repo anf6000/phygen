@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 520" role="img" aria-label="Version statuses in the chain, the failed path, and the operator repair that is the only way back">
+  <style>
+    text { font-family: "JetBrains Mono", ui-monospace, Consolas, monospace; fill: #000; }
+    .n   { fill: #fff; stroke: #000; stroke-width: 1; }
+    .n.a { stroke: #0000ff; stroke-width: 2; }
+    .n.e { fill: #fdf2f2; stroke: #a33; }
+    .nt  { font-size: 12px; font-weight: 700; }
+    .ns  { font-size: 10px; fill: #767676; }
+    .th  { font-size: 15px; font-weight: 700; }
+    .sd  { font-size: 11px; fill: #767676; }
+    .w   { fill: none; stroke: #000; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+    .w.a { stroke: #0000ff; }
+    .w.e { stroke: #a33; stroke-dasharray: 4 3; }
+    .lbl { font-size: 10.5px; fill: #767676; }
+    .tag { font-size: 10.5px; fill: #0000ff; }
+    .bad { font-size: 10.5px; fill: #a33; }
+  </style>
+  <defs>
+    <marker id="ah" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7.5,3 L0,6 z" fill="#000"/></marker>
+    <marker id="aha" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7.5,3 L0,6 z" fill="#0000ff"/></marker>
+    <marker id="ahe" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7.5,3 L0,6 z" fill="#a33"/></marker>
+  </defs>
+
+  <text class="th" x="30" y="42">The life of one version</text>
+  <text class="sd" x="30" y="60">status is one of: queued · authoring · validating · capturing · promoted · failed</text>
+
+  <rect class="n" x="20" y="90" width="140" height="62"/>
+  <text class="nt" x="32" y="114">queued</text>
+  <text class="ns" x="32" y="132">waiting for a worker</text>
+
+  <rect class="n" x="190" y="90" width="140" height="62"/>
+  <text class="nt" x="202" y="114">authoring</text>
+  <text class="ns" x="202" y="132">one session edits</text>
+
+  <rect class="n" x="360" y="90" width="140" height="62"/>
+  <text class="nt" x="372" y="114">validating</text>
+  <text class="ns" x="372" y="132">checks the package</text>
+
+  <rect class="n" x="530" y="90" width="140" height="62"/>
+  <text class="nt" x="542" y="114">capturing</text>
+  <text class="ns" x="542" y="132">renders the frame</text>
+
+  <rect class="n a" x="700" y="90" width="180" height="62"/>
+  <text class="nt" x="712" y="114">promoted</text>
+  <text class="ns" x="712" y="132">the chain head · plays live</text>
+
+  <line class="w" x1="160" y1="121" x2="190" y2="121" marker-end="url(#ah)"/>
+  <line class="w" x1="330" y1="121" x2="360" y2="121" marker-end="url(#ah)"/>
+  <line class="w" x1="500" y1="121" x2="530" y2="121" marker-end="url(#ah)"/>
+  <line class="w" x1="670" y1="121" x2="700" y2="121" marker-end="url(#ah)"/>
+
+  <!-- failed -->
+  <rect class="n e" x="300" y="300" width="380" height="84"/>
+  <text class="nt" x="314" y="322">failed</text>
+  <text class="ns" x="314" y="340">a technical fault that a second attempt did not fix.</text>
+  <text class="ns" x="314" y="356">The head does not move. The next step reuses</text>
+  <text class="ns" x="314" y="372">the last good version.</text>
+
+  <polyline class="w e" points="260,152 260,250 490,250 490,300" marker-end="url(#ahe)"/>
+  <polyline class="w e" points="430,152 430,250" />
+  <polyline class="w e" points="600,152 600,250 490,250" />
+  <text class="bad" x="270" y="244">a fault at author, validate, or capture</text>
+
+  <!-- repair -->
+  <rect class="n" x="750" y="300" width="360" height="76"/>
+  <text class="nt" x="764" y="324">repair · the only way back</text>
+  <text class="ns" x="764" y="342">the failed candidate's own snapshot becomes the</text>
+  <text class="ns" x="764" y="358">workspace, then repair, validate, publish, promote.</text>
+
+  <line class="w" x1="680" y1="335" x2="750" y2="335" marker-end="url(#ah)"/>
+  <text class="lbl" x="684" y="328">operator</text>
+  <polyline class="w a" points="920,300 920,210 790,210 790,152" marker-end="url(#aha)"/>
+  <text class="tag" x="798" y="204">repaired</text>
+
+  <text class="lbl" x="30" y="420">Exactly one version plays live: the newest one with status promoted. Every other version shows its still frame, its stage, or its failure reason.</text>
+  <text class="lbl" x="30" y="440">A failed step is not drawn in the chain: the chain holds the work that was kept. The operator tools can also reset to the root and truncate the chain.</text>
+</svg>

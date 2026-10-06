@@ -23,3 +23,10 @@ docs/videos/
 backups/
 # Local verification helpers and their screenshots. Not part of the product.
 .verify/
+
+# The rendered artworks and the documentation images belong in the repository.
+# They are stored in Git LFS (see .gitattributes). The recording frames, the
+# screencast videos, and the local backup copies above stay untracked.
+!docs/*.png
+!docs/image-renders/**/*.png
+!docs/site/captures/**/*.jpg

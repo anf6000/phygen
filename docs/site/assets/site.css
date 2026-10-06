@@ -1,0 +1,182 @@
+/* phygen documentation site.
+   The palette, the font, the sizes, and the hard edges come from the
+   project's own web/src/styles.css. Keep them in step with that file. */
+
+:root {
+  --bg: #ffffff;
+  --panel: #ffffff;
+  --ink: #000000;
+  --line: #000000;
+  --accent: #0000ff;
+  --muted: #767676;
+  --quiet: #f2f2f2;
+  --err-line: #a33;
+  --err-bg: #fdf2f2;
+  --err-ink: #611;
+  color-scheme: light;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+}
+
+* {
+  box-sizing: border-box;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background-image: none !important;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--muted); }
+a:hover, a:focus-visible { color: var(--accent); border-bottom-color: var(--accent); outline: none; }
+
+code, kbd, pre { font-family: inherit; }
+code { background: var(--quiet); border: 1px solid var(--line); padding: 0 3px; font-size: 13px; }
+kbd { border: 1px solid var(--line); padding: 0 4px; font-size: 12px; }
+
+h1, h2, h3, h4 { font-weight: 700; line-height: 1.25; margin: 0 0 10px; }
+h1 { font-size: 22px; }
+h2 { font-size: 18px; margin-top: 34px; border-top: 1px solid var(--line); padding-top: 14px; }
+h3 { font-size: 15px; margin-top: 22px; }
+h4 { font-size: 13px; margin-top: 18px; }
+p { margin: 0 0 12px; }
+ul, ol { margin: 0 0 12px; padding-left: 22px; }
+li { margin: 3px 0; }
+hr { border: 0; border-top: 1px solid var(--line); margin: 22px 0; }
+
+/* ── The fixed top bar, like the app header ─────────────────────────────── */
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: baseline;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.bar .brand { font-weight: 700; }
+.bar .crumb { color: var(--muted); }
+
+/* ── Chips, pills, and states ────────────────────────────────────────────── */
+.chip {
+  display: inline-block;
+  border: 1px solid var(--line);
+  padding: 1px 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.chip.accent { color: var(--accent); border-color: var(--accent); }
+.chip.muted { color: var(--muted); border-color: var(--muted); }
+.pill { display: inline-block; border: 1px solid var(--line); padding: 0 6px; font-size: 11px; }
+.pill.master { background: var(--ink); color: var(--bg); }
+.pill.simple { background: var(--quiet); }
+.pill.slot { border-color: var(--accent); color: var(--accent); }
+.pill.behavior { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+/* ── Layout: a sticky table of contents and the reading column ──────────── */
+.layout { display: flex; align-items: flex-start; gap: 0; max-width: 1500px; margin: 0 auto; }
+.toc {
+  position: sticky;
+  top: 43px;
+  flex: 0 0 288px;
+  max-height: calc(100vh - 43px);
+  overflow: auto;
+  border-right: 1px solid var(--line);
+  padding: 16px 14px 40px 16px;
+}
+.toc h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); border: 0; margin: 16px 0 6px; padding: 0; }
+.toc h2:first-child { margin-top: 0; }
+.toc ol { list-style: none; padding: 0; margin: 0; counter-reset: sec; }
+.toc ol li { margin: 1px 0; counter-increment: sec; }
+.toc ol a { border: 0; display: block; padding: 1px 4px; font-size: 12.5px; }
+.toc ol a::before { content: counter(sec) "  "; color: var(--muted); }
+.toc ol a:hover, .toc ol a:focus-visible { background: var(--quiet); color: var(--accent); }
+.toc .sub { padding-left: 16px; }
+.toc .sub a::before { content: none; }
+.toc .sub a { color: var(--muted); }
+
+main { flex: 1 1 auto; min-width: 0; padding: 18px 28px 80px; max-width: 1080px; }
+.lede { font-size: 15px; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.tiny { font-size: 11px; }
+.mono-block { background: var(--quiet); border: 1px solid var(--line); padding: 10px 12px; overflow: auto; font-size: 12.5px; white-space: pre; }
+
+/* ── Cards and grids ────────────────────────────────────────────────────── */
+.grid { display: grid; gap: 14px; }
+.grid.two { grid-template-columns: 1fr 1fr; }
+.grid.three { grid-template-columns: repeat(3, 1fr); }
+.card { border: 1px solid var(--line); background: var(--panel); padding: 12px 14px; }
+.card > h3:first-child, .card > h4:first-child { margin-top: 0; }
+.card .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; border-bottom: 1px solid var(--line); padding-bottom: 6px; margin-bottom: 8px; }
+.card .head h3 { margin: 0; }
+.card.branch-master { border-left: 6px solid var(--ink); }
+.card.branch-simple { border-left: 6px solid var(--muted); }
+.card.branch-slot { border-left: 6px solid var(--accent); }
+.card.branch-behavior { border-left: 6px solid var(--accent); background: var(--quiet); }
+
+.note { border: 1px solid var(--line); border-left: 6px solid var(--accent); padding: 10px 12px; margin: 14px 0; }
+.note.warn { border-left-color: var(--err-line); background: var(--err-bg); color: var(--err-ink); }
+.note.ok { border-left-color: var(--ink); background: var(--quiet); }
+
+/* ── Tables ─────────────────────────────────────────────────────────────── */
+table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 12.5px; }
+th, td { border: 1px solid var(--line); text-align: left; vertical-align: top; padding: 5px 8px; }
+th { background: var(--quiet); font-size: 12px; }
+td code { border: 0; background: transparent; padding: 0; }
+tr.branch-row.master td:first-child { box-shadow: inset 6px 0 0 var(--ink); }
+tr.branch-row.simple td:first-child { box-shadow: inset 6px 0 0 var(--muted); }
+tr.branch-row.slot td:first-child { box-shadow: inset 6px 0 0 var(--accent); }
+tr.branch-row.behavior td:first-child { box-shadow: inset 6px 0 0 var(--accent); }
+
+/* ── Figures: the SVG flow charts ───────────────────────────────────────── */
+figure { margin: 18px 0; border: 1px solid var(--line); background: var(--panel); }
+figure img, figure object, figure svg { display: block; width: 100%; height: auto; }
+figcaption { border-top: 1px solid var(--line); padding: 7px 10px; font-size: 12px; color: var(--muted); }
+figcaption b { color: var(--ink); }
+
+/* ── Media ──────────────────────────────────────────────────────────────── */
+.shot { cursor: zoom-in; }
+
+/* ── Full-width screenshot column ───────────────────────────────────────── */
+.shots { display: block; }
+.shots figure { margin: 0 0 20px; }
+.shots figure img { width: 100%; height: auto; border: 1px solid var(--line); }
+
+/* ── Artwork captures: twelve square frames per branch ──────────────────── */
+.captures { display: grid; gap: 10px; grid-template-columns: repeat(4, 1fr); }
+.captures figure { margin: 0; }
+.captures img { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border: 1px solid var(--line); cursor: zoom-in; }
+.captures figcaption { border: 0; padding: 4px 1px 0; font-size: 10.5px; color: var(--muted); }
+dialog.lightbox { border: 1px solid var(--line); padding: 0; max-width: 96vw; max-height: 96vh; background: var(--panel); }
+dialog.lightbox img { display: block; max-width: 96vw; max-height: 88vh; }
+dialog.lightbox .close { position: absolute; top: 6px; right: 6px; }
+
+/* ── Timeline and commit logs ───────────────────────────────────────────── */
+.log { border: 1px solid var(--line); max-height: 320px; overflow: auto; font-size: 12px; }
+.log div { border-bottom: 1px dashed var(--muted); padding: 3px 8px; }
+.log div:last-child { border-bottom: 0; }
+.log .sha { color: var(--accent); }
+.log .br { display: inline-block; min-width: 92px; }
+
+footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 12px; color: var(--muted); font-size: 12px; }
+
+@media (max-width: 1000px) {
+  .layout { display: block; }
+  .toc { position: static; max-height: none; border-right: 0; border-bottom: 1px solid var(--line); }
+  .grid.two, .grid.three { grid-template-columns: 1fr; }
+  .captures { grid-template-columns: repeat(3, 1fr); }
+  main { padding: 16px; }
+}

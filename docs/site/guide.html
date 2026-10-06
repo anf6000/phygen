@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>phygen — a plain guide</title>
+<meta name="description" content="A plain guide to phygen: what it is, how one step works, and what the four designs changed.">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+
+<div class="bar">
+  <span class="brand">phygen</span>
+  <span class="crumb">a plain guide</span>
+  <span class="chip muted">for a wide audience</span>
+  <a class="chip accent" href="index.html">full documentation</a>
+</div>
+
+<div class="layout">
+
+  <nav class="toc" aria-label="Contents">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#idea">The idea</a></li>
+      <li><a href="#step">How one step works</a></li>
+      <li><a href="#designs">Four designs of the idea</a></li>
+      <li><a href="#parts">The parts of the system</a></li>
+      <li><a href="#screenshots">Screenshots</a></li>
+      <li><a href="#captures">Captures of the artworks</a></li>
+      <li><a href="#words">Words you will see</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+  <h1>phygen — a plain guide</h1>
+  <p class="lede">phygen grows a moving artwork with the help of an AI assistant. At each
+  step, the assistant changes the artwork code a little. The program saves the result as a
+  new version and makes one picture of it. The program keeps the whole history.</p>
+
+  <p>This guide explains the idea in simple words. It shows the structure diagrams and the
+  screenshots. It does not give the technical detail. For the full detail, read the
+  <a href="index.html">full documentation</a>.</p>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="idea">1 · The idea</h2>
+
+  <p>phygen is a program that grows a computer artwork over time. The artwork is a moving
+  pattern. Many small parts move together and leave trails, like cells. The picture changes
+  every second.</p>
+
+  <p>An AI assistant writes the artwork code. The program runs the code and makes one picture
+  of the result. If the picture is acceptable, the program keeps the new version. Then it
+  starts again from the newest version.</p>
+
+  <p>The program also writes a record of every step. The record holds the code, the picture,
+  the cost, and the notes from the assistant. Nothing is lost. You can see how the artwork
+  grew, step by step.</p>
+
+  <div class="note"><b>The main point.</b> The program does not only remember the artwork. It
+  records it. Each version is a real file that you can open, compare, and run again.</div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="step">2 · How one step works</h2>
+
+  <p>Each step has the same simple shape:</p>
+  <ol>
+    <li>The program reads the newest good version.</li>
+    <li>The assistant changes a copy of the code.</li>
+    <li>The program checks the change.</li>
+    <li>The program makes one picture of the new version.</li>
+    <li>The program keeps the new version and shows it on the screen.</li>
+  </ol>
+
+  <p>A step can fail. If a step fails, the program keeps the last good version. The artwork
+  does not break. A person can repair the failed version later.</p>
+
+  <figure>
+    <img src="assets/fig-step.svg" alt="The life of one step: admission, chain head, author, validate, publish, capture, promote, with the repair and failure paths.">
+    <figcaption><b>Figure 1.</b> The life of one step. The black path is the normal path.
+    The red paths are failures. A failure gets one repair attempt. A second failure stops the
+    step, and the last good version stays in place.</figcaption>
+  </figure>
+
+  <h3>The safe place</h3>
+  <p>The artwork code is new, and the program does not trust it. So the code runs in its own
+  safe place, away from the records and the keys. The program takes the picture from that safe
+  place. If the code behaves badly, the rest of the program stays safe.</p>
+
+  <figure>
+    <img src="assets/fig-origins.svg" alt="The controller origin, the separate artwork origin, and the sandboxed capture.">
+    <figcaption><b>Figure 2.</b> Two separate places. The controller holds the records and the
+    keys. The artwork runs in a separate place with no keys and no access to the files. The
+    program takes the picture from the separate place.</figcaption>
+  </figure>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="designs">3 · Four designs of the idea</h2>
+
+  <p>The project tried four designs, one after the other. Each design kept what worked and
+  changed the rest. The four designs are stages of one idea, not four choices.</p>
+
+  <div class="grid two">
+    <div class="card branch-master">
+      <div class="head"><h3><span class="pill master">master</span> the judged tree</h3></div>
+      <p>The program made three variants at once. A second AI looked at the pictures and chose
+      one winner. Every variant stayed in the tree. A person gave the direction.</p>
+    </div>
+    <div class="card branch-simple">
+      <div class="head"><h3><span class="pill simple">simple</span> novelty and archive</h3></div>
+      <p>The tree ran itself. The program chose its own parent and wrote its own direction. A
+      new version had to be good, and it also had to be different from the older ones.</p>
+    </div>
+    <div class="card branch-slot">
+      <div class="head"><h3><span class="pill slot">slotmachine</span> the forward chain</h3></div>
+      <p>The program made one child each step. It kept every child. There was no judge. The
+      artwork grew as one chain, and the screen became a column of cards.</p>
+    </div>
+    <div class="card branch-behavior">
+      <div class="head"><h3><span class="pill behavior">behavior</span> the operator</h3></div>
+      <p>The chain stayed. A person can now repair a failed version, fix a kept version, or
+      reset the chain. This is the current design.</p>
+    </div>
+  </div>
+
+  <figure>
+    <img src="assets/fig-evolution.svg" alt="Four branches in sequence: master, simple, slotmachine, behavior, each with its thesis and traits, over a durable core.">
+    <figcaption><b>Figure 3.</b> The four designs. Each design kept the same base and changed
+    how a new version is chosen. The base was written first and stayed in every design.</figcaption>
+  </figure>
+
+  <figure>
+    <img src="assets/fig-approaches.svg" alt="Left: the judged tree with three variants and a blind judge. Right: the forward chain of one-child steps.">
+    <figcaption><b>Figure 4.</b> The two main approaches. On the left, the program makes
+    several variants and a judge chooses one. On the right, the program makes one child each
+    step and keeps it.</figcaption>
+  </figure>
+
+  <p>The project moved from the tree to the chain, and it did not go back. The reason is
+  simple. Many variants cost more, and a person often did not prefer the winner. One child at
+  a time gives a clear history and a lower cost.</p>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="parts">4 · The parts of the system</h2>
+
+  <p>phygen has four main parts:</p>
+  <ul>
+    <li>The <b>rules</b>: what an artwork must have and how it must behave.</li>
+    <li>The <b>artwork</b>: the code that draws the moving pattern.</li>
+    <li>The <b>controller</b>: the program that runs the steps and keeps the records.</li>
+    <li>The <b>screen</b>: the page that shows the chain and the pictures.</li>
+  </ul>
+
+  <figure>
+    <img src="assets/fig-layers.svg" alt="The four layers of phygen: runtime, threejs, server, and web, with the records and files they share.">
+    <figcaption><b>Figure 5.</b> The four parts. The rules join the artwork and the
+    controller. The screen talks to the controller. The controller reads and writes the
+    records and the kept copies.</figcaption>
+  </figure>
+
+  <h3>More structure diagrams</h3>
+  <p>The next diagrams show more of the structure. Each one has a short note.</p>
+
+  <figure>
+    <img src="assets/fig-chain.svg" alt="Version statuses queued, authoring, validating, capturing, promoted, the failed path, and the operator repair that is the only way back.">
+    <figcaption><b>Figure 6.</b> The states of one version. A version that fails can be
+    repaired and can return to the chain.</figcaption>
+  </figure>
+
+  <figure>
+    <img src="assets/fig-data.svg" alt="The record tables and their main relations.">
+    <figcaption><b>Figure 7.</b> The records. Each table stores one kind of fact, for example
+    the versions, the steps, or the pictures.</figcaption>
+  </figure>
+
+  <figure>
+    <img src="assets/fig-events.svg" alt="An event is appended to the events table, then fanned out and replayed to a reconnecting client.">
+    <figcaption><b>Figure 8.</b> The live updates. The screen receives every change in order.
+    If the screen loses the connection for a moment, it receives the changes that it
+    missed.</figcaption>
+  </figure>
+
+  <figure>
+    <img src="assets/fig-snapshot.svg" alt="How a child package is published as an immutable snapshot and then captured from it.">
+    <figcaption><b>Figure 9.</b> The kept copy. Each kept version is copied once and never
+    changed. The picture comes from that copy.</figcaption>
+  </figure>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="screenshots">5 · Screenshots</h2>
+
+  <p>These images show the screen. Some come from the older tree design, and some from the
+  newer chain design. Click an image to open it larger.</p>
+
+  <div class="shots">
+    <figure><img class="shot" src="../2026-09-16%2018_53_24-seagull_selected2-8761-crop.psd%20@%2033,3%25%20(UPSCALE_IMAGE_FIZZY-V1_00006_,%20RGB_8%23)%20.png" alt="An early judged tree"><figcaption>An early judged tree. A brood of variants on the canvas, a grid of their rendered frames, and the version detail panel at the right.</figcaption></figure>
+    <figure><img class="shot" src="../2026-09-17%2016_51_42-.png" alt="The radial rings"><figcaption>The radial rings. In the judged era the tree is drawn as concentric rings. The two large frames are the current renders of the selected version.</figcaption></figure>
+    <figure><img class="shot" src="../2026-09-17%2016_52_03-.png" alt="The radial rings, a wider brood"><figcaption>The radial rings, a wider brood.</figcaption></figure>
+    <figure><img class="shot" src="../2026-09-17%2016_52_55-.png" alt="The radial rings, another run"><figcaption>The radial rings, another run.</figcaption></figure>
+    <figure><img class="shot" src="../2026-09-18%2015_50_53-.png" alt="The forward chain"><figcaption>The forward chain. The interface became a vertical chain of cards, one card per step.</figcaption></figure>
+    <figure><img class="shot" src="../2026-09-18%2017_48_38-.png" alt="The chain, early"><figcaption>The chain, early. A small cluster of cards before the layout settled.</figcaption></figure>
+    <figure><img class="shot" src="../2026-09-18%2017_48_57-.png" alt="The frames grid"><figcaption>The frames grid. Every captured frame of a run, shown at once.</figcaption></figure>
+    <figure><img class="shot" src="../2026-09-18%2017_49_16-.png" alt="A kept version and its frames"><figcaption>A kept version and its frames.</figcaption></figure>
+    <figure><img class="shot" src="../2026-09-18%2017_49_43-.png" alt="The chain with its frames"><figcaption>The chain with its frames.</figcaption></figure>
+    <figure><img class="shot" src="../variants-tree.png" alt="A judged brood with WINNER and YEETED badges"><figcaption>A judged brood. The selected version spawns the variants. One variant carries <b>WINNER!</b> and a rejected sibling carries <b>YEETED!</b>.</figcaption></figure>
+    <figure><img class="shot" src="../page-live.png" alt="The live artwork in its sandboxed modal"><figcaption>The live artwork. One version plays in the sandboxed modal on the separate artwork origin.</figcaption></figure>
+    <figure><img class="shot" src="../page-record.png" alt="The recorded agent feed"><figcaption>The recorded feed. The stored agent rows of a finished version.</figcaption></figure>
+    <figure><img class="shot" src="../diag-doc-centred.png" alt="Documentation mode centred on the working version"><figcaption>Centred on the work. The documentation view held on the working version.</figcaption></figure>
+    <figure><img class="shot" src="../diag-first.png" alt="The documentation run, first state"><figcaption>Run, first state. The start of the recorded documentation run.</figcaption></figure>
+    <figure><img class="shot" src="../diag-zoom-fixed.png" alt="The zoom no longer oscillates"><figcaption>Fixed zoom. The view no longer oscillates between two zooms.</figcaption></figure>
+    <figure><img class="shot" src="../2026-09-20%2009_40_23-.png" alt="A capture close up"><figcaption>A capture close up. The physarum network at full resolution.</figcaption></figure>
+    <figure><img class="shot" src="../2026-09-22%2016_43_18-phygen%20%E2%80%94%20artwork%20evolution%20(127.0.0.1_8787)%20-%20phygen%20-%20Visual%20Studio%20Code.png" alt="A later artwork"><figcaption>A later artwork. The simulation grown into a closed form.</figcaption></figure>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="captures">6 · Captures of the running artworks</h2>
+
+  <p>These are pictures of the artworks themselves, not the screen. Each design kept its own history, so the twelve images below come from that design's own data. They are ordered from the first to the last, so each row shows how the design changed. Every picture shows the same moving pattern; the designs differ only in how a new version is chosen.</p>
+  <p class="small muted">The older designs make 768×768 pictures. The newer designs make 1024×1024 pictures. Every picture uses the same starting value, so two designs are easy to compare.</p>
+
+  <h3>master</h3>
+  <p class="small muted">The judged tree. Twelve of 73 versions, chosen to show variety, oldest first. Click one to open it larger.</p>
+  <div class="captures">
+      <figure><img class="shot" src="captures/master/01.jpg" title="ver_mu3poxzdb9ee0283" alt="master capture 1"><figcaption>01 · mu3poxzdb9ee…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/02.jpg" title="ver_mu3pr62t36a7cd9e" alt="master capture 2"><figcaption>02 · mu3pr62t36a7…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/03.jpg" title="ver_mu42e9abc9481b75" alt="master capture 3"><figcaption>03 · mu42e9abc948…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/04.jpg" title="ver_mu4fa8v6734f5d31" alt="master capture 4"><figcaption>04 · mu4fa8v6734f…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/05.jpg" title="ver_mu4fhz4xb58e325c" alt="master capture 5"><figcaption>05 · mu4fhz4xb58e…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/06.jpg" title="ver_mu4fvti39faa1352" alt="master capture 6"><figcaption>06 · mu4fvti39faa…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/07.jpg" title="ver_mu53gllc85a3a33a" alt="master capture 7"><figcaption>07 · mu53gllc85a3…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/08.jpg" title="ver_mu5j4kdteee64c5f" alt="master capture 8"><figcaption>08 · mu5j4kdteee6…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/09.jpg" title="ver_mu5j64jp4ac04371" alt="master capture 9"><figcaption>09 · mu5j64jp4ac0…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/10.jpg" title="ver_mu5ka62ve5098abe" alt="master capture 10"><figcaption>10 · mu5ka62ve509…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/11.jpg" title="ver_mu5kd7mj1d03a411" alt="master capture 11"><figcaption>11 · mu5kd7mj1d03…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/12.jpg" title="ver_mu6mbisn613ef5cb" alt="master capture 12"><figcaption>12 · mu6mbisn613e…</figcaption></figure>
+  </div>
+
+  <h3>simple</h3>
+  <p class="small muted">The judged tree with novelty floors. Twelve of 55 versions, chosen to show variety. Click one to open it larger.</p>
+  <div class="captures">
+      <figure><img class="shot" src="captures/simple/01.jpg" title="ver_mu6mz7r121322de7" alt="simple capture 1"><figcaption>01 · mu6mz7r12132…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/02.jpg" title="ver_mu6nucly2a048013" alt="simple capture 2"><figcaption>02 · mu6nucly2a04…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/03.jpg" title="ver_mu6ogxese6af583d" alt="simple capture 3"><figcaption>03 · mu6ogxese6af…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/04.jpg" title="ver_mu6p0ljp1964cbbe" alt="simple capture 4"><figcaption>04 · mu6p0ljp1964…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/05.jpg" title="ver_mu6p0ljs58339e15" alt="simple capture 5"><figcaption>05 · mu6p0ljs5833…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/06.jpg" title="ver_mu6zmnq3c4e24bc8" alt="simple capture 6"><figcaption>06 · mu6zmnq3c4e2…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/07.jpg" title="ver_mu714bu726340727" alt="simple capture 7"><figcaption>07 · mu714bu72634…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/08.jpg" title="ver_mu714bua99eda36d" alt="simple capture 8"><figcaption>08 · mu714bua99ed…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/09.jpg" title="ver_mu72ro0540722c92" alt="simple capture 9"><figcaption>09 · mu72ro054072…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/10.jpg" title="ver_mu73wpx754414d09" alt="simple capture 10"><figcaption>10 · mu73wpx75441…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/11.jpg" title="ver_mu746c6n6a32b1d4" alt="simple capture 11"><figcaption>11 · mu746c6n6a32…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/12.jpg" title="ver_mu74jxldb8550692" alt="simple capture 12"><figcaption>12 · mu74jxldb855…</figcaption></figure>
+  </div>
+
+  <h3>slotmachine</h3>
+  <p class="small muted">The forward chain. Twelve of 157 versions, chosen to show variety, in chain order. Click one to open it larger.</p>
+  <div class="captures">
+      <figure><img class="shot" src="captures/slotmachine/01.jpg" title="ver_mu7yy6qkaa12f051" alt="slotmachine capture 1"><figcaption>01 · mu7yy6qkaa12…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/02.jpg" title="ver_mu7z0bo8adc567d8" alt="slotmachine capture 2"><figcaption>02 · mu7z0bo8adc5…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/03.jpg" title="ver_mu7z5wjed56e8cab" alt="slotmachine capture 3"><figcaption>03 · mu7z5wjed56e…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/04.jpg" title="ver_mu7zg03a86571a1c" alt="slotmachine capture 4"><figcaption>04 · mu7zg03a8657…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/05.jpg" title="ver_mu80zwd2068dea3c" alt="slotmachine capture 5"><figcaption>05 · mu80zwd2068d…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/06.jpg" title="ver_mu815r5qd21b74ff" alt="slotmachine capture 6"><figcaption>06 · mu815r5qd21b…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/07.jpg" title="ver_mu819vxh871d33ee" alt="slotmachine capture 7"><figcaption>07 · mu819vxh871d…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/08.jpg" title="ver_mu81f3uh3531af7c" alt="slotmachine capture 8"><figcaption>08 · mu81f3uh3531…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/09.jpg" title="ver_mu81jm71c7110859" alt="slotmachine capture 9"><figcaption>09 · mu81jm71c711…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/10.jpg" title="ver_mu81pyf331dde2a3" alt="slotmachine capture 10"><figcaption>10 · mu81pyf331dd…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/11.jpg" title="ver_mu81ubkz9eb92da2" alt="slotmachine capture 11"><figcaption>11 · mu81ubkz9eb9…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/12.jpg" title="ver_muckb4h2768b09c0" alt="slotmachine capture 12"><figcaption>12 · muckb4h2768b…</figcaption></figure>
+  </div>
+
+  <h3>behavior</h3>
+  <p class="small muted">The operator era. Twelve of 52 versions, chosen to show variety, in chain order. Click one to open it larger.</p>
+  <div class="captures">
+      <figure><img class="shot" src="captures/behavior/01.jpg" title="ver_mu7yy6qkaa12f051" alt="behavior capture 1"><figcaption>01 · mu7yy6qkaa12…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/02.jpg" title="ver_mucp2lwd6dbee104" alt="behavior capture 2"><figcaption>02 · mucp2lwd6dbe…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/03.jpg" title="ver_mucr342k6c000c2a" alt="behavior capture 3"><figcaption>03 · mucr342k6c00…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/04.jpg" title="ver_mucs2kb93b1f217d" alt="behavior capture 4"><figcaption>04 · mucs2kb93b1f…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/05.jpg" title="ver_mucvchwe46bf4240" alt="behavior capture 5"><figcaption>05 · mucvchwe46bf…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/06.jpg" title="ver_mucvn4lqb2dd7d6a" alt="behavior capture 6"><figcaption>06 · mucvn4lqb2dd…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/07.jpg" title="ver_mucvsovjbb74961b" alt="behavior capture 7"><figcaption>07 · mucvsovjbb74…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/08.jpg" title="ver_mudnxtlt68d93bca" alt="behavior capture 8"><figcaption>08 · mudnxtlt68d9…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/09.jpg" title="ver_mudoa4t5b834d0e8" alt="behavior capture 9"><figcaption>09 · mudoa4t5b834…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/10.jpg" title="ver_mudpm5ecdba932c1" alt="behavior capture 10"><figcaption>10 · mudpm5ecdba9…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/11.jpg" title="ver_mudroclfbac74eeb" alt="behavior capture 11"><figcaption>11 · mudroclfbac7…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/12.jpg" title="ver_mudtkezme7c41392" alt="behavior capture 12"><figcaption>12 · mudtkezme7c4…</figcaption></figure>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="words">7 · Words you will see</h2>
+
+  <table>
+    <thead><tr><th>Word</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td>AI assistant</td><td>A computer program that writes and changes code from a written request.</td></tr>
+      <tr><td>artwork</td><td>One picture program that grows. The example is a moving pattern of trails.</td></tr>
+      <tr><td>version</td><td>One saved state of the artwork: its code, its picture, and its notes.</td></tr>
+      <tr><td>step</td><td>One turn of work. One step makes one new version.</td></tr>
+      <tr><td>chain</td><td>The line of kept versions, from the first to the newest.</td></tr>
+      <tr><td>tree</td><td>An older shape. One version could have several children at once.</td></tr>
+      <tr><td>capture</td><td>One picture of one version.</td></tr>
+      <tr><td>promote</td><td>To keep a new version and make it the newest one.</td></tr>
+      <tr><td>snapshot</td><td>A copy that never changes.</td></tr>
+      <tr><td>judge</td><td>An AI that looks at the pictures and chooses one. Only the old designs used a judge.</td></tr>
+      <tr><td>operator</td><td>The person who can repair or change a version.</td></tr>
+    </tbody>
+  </table>
+
+  <footer>
+    <p>This is the plain guide. The <a href="index.html">full documentation</a> gives the
+    technical detail. The palette, the font, and the hard edges are copied from the project
+    interface.</p>
+  </footer>
+
+  </main>
+</div>
+
+<script>
+  // Click a screenshot to open it larger.
+  (function () {
+    var dlg = document.createElement('dialog');
+    dlg.className = 'lightbox';
+    var img = document.createElement('img');
+    var btn = document.createElement('button');
+    btn.textContent = 'Close';
+    btn.className = 'close';
+    dlg.appendChild(img); dlg.appendChild(btn);
+    document.body.appendChild(dlg);
+    btn.addEventListener('click', function () { dlg.close(); });
+    dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });
+    document.addEventListener('click', function (e) {
+      var t = e.target;
+      if (t && t.tagName === 'IMG' && t.classList.contains('shot')) {
+        img.src = t.getAttribute('src');
+        img.alt = t.getAttribute('alt') || '';
+        dlg.showModal();
+      }
+    });
+  })();
+</script>
+</body>
+</html>

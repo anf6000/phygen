@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What the Next Image Inherits | phygen</title>
+  <meta name="description" content="An artist's account of phygen: shared trails, autonomous code changes, the removal of the judge, and the lineage as artwork.">
+  <link rel="stylesheet" href="assets/site.css">
+  <style>
+    .essay { max-width: 860px; margin: 0 auto; padding: 40px 28px 64px; }
+    .essay h1 { font-size: clamp(26px, 4vw, 40px); max-width: 22ch; margin-bottom: 18px; }
+    .essay p { line-height: 1.7; margin-bottom: 18px; }
+    .essay .lede { font-size: 17px; }
+    .essay .byline { color: var(--muted); font-size: 12px; }
+    .essay .part { color: var(--accent); margin-top: 42px; font-size: 12px; letter-spacing: 0.04em; }
+    .essay h3 { font-size: 19px; margin-top: 30px; margin-bottom: 16px; }
+    .essay blockquote { margin: 26px 0; padding: 16px 20px; border-left: 3px solid var(--accent); background: var(--quiet); }
+    .essay blockquote p { margin: 0; }
+    .essay .artworks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .essay .artworks img { display: block; width: 100%; height: auto; }
+    @media (max-width: 600px) {
+      .essay { padding: 28px 16px 48px; }
+      .essay .artworks { grid-template-columns: 1fr; }
+    }
+    @media print {
+      .bar, .essay footer { display: none; }
+      .essay { max-width: none; padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="bar" aria-label="Project pages">
+    <span class="brand">phygen</span>
+    <span class="crumb">an essay on autonomous art</span>
+    <a class="chip muted" href="guide.html">Plain guide</a>
+    <a class="chip muted" href="index.html">Project documentation</a>
+  </nav>
+
+  <main class="essay">
+    <article aria-labelledby="title">
+      <header>
+        <p class="byline">Andreas Nicolas Fischer</p>
+        <h1 id="title">What the Next Image Inherits</h1>
+        <p class="lede">A studio in which model agents change a moving artwork, and the artist changes the conditions under which that work continues.</p>
+      </header>
+
+      <p>I began phygen with a familiar idea: make several variants, compare them, and let the strongest become the parent of the next generation. The system would not only produce images. It would choose a direction through them.</p>
+      <p>By the current version, I had removed the judge. Each step now makes one child from the newest working version. If the child passes the program checks, it stays. No score declares it better than its parent.</p>
+      <p>That change did not remove the artistic question. It made the question harder to avoid. If a system can continue without choosing a winner, where does the artist act?</p>
+
+      <p class="part">Part I: The artistic concept</p>
+      <h2>A Program That Changes Its Own Conditions</h2>
+
+      <h3>1. The image is a shared trail</h3>
+      <p>phygen starts with a simulation inspired by physarum, a slime mold that forms transport networks. Small agents sense a shared trail, turn, move, and deposit into that trail. The marks left by one agent become conditions for the movement of another. The image develops through this repeated exchange.</p>
+      <p>The trail is therefore more than a surface for drawing. It is also a form of memory inside the artwork. A deposit changes the picture and changes what later agents encounter. The visible structure and the conditions that produce it are closely connected.</p>
+      <p>This is different from particles moving along a shape that I have already drawn. A moving line can look alive while following a fixed route. Here, the shared trail must remain the main cause of the visible forms. The distinction matters because it separates the appearance of self-organization from the process itself.</p>
+      <p>There are also two meanings of agent in this studio. The simulated agents produce the trail. The model agent edits the program that governs their behavior and appearance. One acts inside the image; the other changes the conditions of the image.</p>
+
+      <h3>2. The apparatus becomes editable</h3>
+      <p>Vil&eacute;m Flusser's account of technical images gives me a useful starting point. The picture comes from an apparatus and its program, not from a hand placing each mark. To work with that apparatus is to explore the possibilities its program permits.</p>
+      <p>phygen adds another relation to that account. The model agent does not only choose settings within a fixed program. It can change permitted parts of the program itself. A new version can change how the artwork develops, not only which colors appear in a familiar result.</p>
+      <p>Yet the apparatus is not completely open. Some rules remain protected. The model receives a copy of the previous version, recent pictures, a history of changes, and an artistic brief. It works within those conditions rather than inventing a studio from nothing.</p>
+      <p>The seed fixes a starting choice for the simulation. Comparable captures help separate changes in the program from changes in the starting conditions. They do not make every difference self-explanatory, but they make comparison more useful.</p>
+      <p>The work now has two connected spaces of possibility: the images a program can produce, and the programs the agent is allowed to make.</p>
+
+      <h3>3. Removing the judge changes the meaning of evolution</h3>
+      <p>The first design, <em>master</em>, made a tree of variants. A separate model judged pictures without seeing their code and selected a winner. The next design, <em>simple</em>, added a requirement for novelty. It also chose parents from a small archive and wrote its own direction.</p>
+      <p>This seemed like a fuller form of autonomy. The studio could propose, compare, select, and continue. But the additional work cost more, and the winners were not always the versions I preferred. A judgment could be complete in software and remain unconvincing as an artistic choice.</p>
+      <p>The problem was not simply that the judge needed a better score. Novelty and quality were different questions. A picture could differ from its parent without becoming more interesting. A judge could prefer a picture without giving me a reason to continue from it.</p>
+      <p>In <em>slotmachine</em>, I removed that selection process. One step makes one child. Every child that passes the program checks becomes the next parent. The current design, <em>behavior</em>, keeps that chain and adds more direct ways for an artist to intervene.</p>
+      <p>This is no longer evolution through aesthetic competition. It is a sequence of inherited changes. Calling it evolution names a history of transformation, not a measured rise in quality. Keeping a version means the work can continue from it; it does not mean the version won an artistic contest.</p>
+
+      <figure>
+        <img src="assets/fig-approaches.svg" alt="A tree of judged variants beside a chain that keeps one working child at each step.">
+        <figcaption>From selection to continuation: the tree chooses a winner; the chain records the next working version.</figcaption>
+      </figure>
+
+      <p class="part">Part II: What the studio taught me</p>
+      <h2>Authorship Without Choosing Every Child</h2>
+
+      <h3>4. The brief is an artistic decision</h3>
+      <p>Once the judge was gone, the brief became more important. I could not ask for a vague improvement and expect a later comparison to correct the direction. The instructions had to say what kind of change belonged to this work.</p>
+      <p>The brief asks for a substantial visual change while preserving the shared-trail process. It asks for differences in branching, connections, occupied regions, and the balance between dense and sparse paths. A new color alone does not satisfy that request.</p>
+      <p>It also asks for one clear artistic decision, rather than several effects added together. That includes permission to remove inherited effects. A previous version may contain a choice worth undoing, not a feature that every child must preserve.</p>
+      <p>This became an important lesson about accumulated marks. A source can move away from a region while its earlier deposits remain visible. An empty area in the plan can become a dense area in the finished picture. The agent must consider the whole history of the trail, not only the current positions of particles.</p>
+      <p>The instruction to use fewer competing elements is therefore not a general preference for minimalism. It follows from the material behavior of this particular artwork. The trail retains earlier actions. Each additional effect must work with that history.</p>
+      <p>The artist is present before the next image appears: in what must remain, what can change, and what does not count as a meaningful change.</p>
+
+      <figure>
+        <div class="artworks">
+          <img src="captures/behavior/03.jpg" alt="A recorded artwork from the current design, example three." loading="lazy">
+          <img src="captures/behavior/06.jpg" alt="A recorded artwork from the current design, example six." loading="lazy">
+          <img src="captures/behavior/11.jpg" alt="A recorded artwork from the current design, example eleven." loading="lazy">
+        </div>
+        <figcaption>Three versions from the current chain. Each carries a different expression of the same shared-trail process.</figcaption>
+      </figure>
+
+      <h3>5. Continuation is not consent</h3>
+      <p>There is a real difference between a studio that waits for the artist to select each parent and one that continues by itself. phygen now follows the second model. During a run, the next working version becomes the parent without a new aesthetic approval.</p>
+      <p>I do not want to describe that as the artist choosing every result through the brief. The agent still makes choices I have not specified. Those choices become conditions for later work, including choices I may dislike.</p>
+      <p>The artist's role moves, but it does not become unlimited control at a distance. I set the direction and decide how long the process should continue. I can inspect the chain, stop the run, repair failed work, or return the chain to an earlier point.</p>
+      <p>Repair also has a specific meaning here. It starts from the failed version's own saved work, rather than replacing the attempt with a new one. The aim is to make that attempt run while retaining its intent. Repair and aesthetic revision are not the same action.</p>
+      <p>Autonomy in this studio is permission to continue within a defined process. It is not permission to define artistic value. The distinction leaves room for surprise without asking a status label to stand in for judgment.</p>
+
+      <h3>6. The lineage is a second surface</h3>
+      <p>A single image does not show what the model inherited or what it changed. The chain does. Each version keeps its source, settings, captured picture, cost, and the record of the agent's work.</p>
+      <p>The image and the record answer different questions. The image shows a result. The record lets me inspect the change that produced it. The agent's explanation states an intention, but that intention still has to meet the actual work.</p>
+      <p>Gilbert Simondon's attention to the becoming of technical objects offers another useful connection. I read the artwork through its successive states, not only through its finished appearance. The previous version is not background information. It is part of the material from which the next version was made.</p>
+      <p>The interface gives this relation a visible form. The old tree displayed competing branches. The current column displays succession. Earlier pictures remain available while the live work develops. The agent's activity appears beside the artwork, rather than disappearing behind a final image.</p>
+      <p>That record is not a complete account of the model's reasoning. Nor does a still picture prove that movement is good. A composition can look convincing in one frame and fail when watched over time. Looking at the picture, watching the work, and reading the change remain separate acts.</p>
+      <p>The lineage is therefore more than documentation around the art. It is a second surface on which the work can be read.</p>
+
+      <figure>
+        <img src="../page-record.png" alt="The phygen interface showing the recorded activity of an agent beside the artwork history." loading="lazy">
+        <figcaption>The recorded agent activity remains available beside the images. A stated intention can be compared with a visible result.</figcaption>
+      </figure>
+
+      <h3>7. The artist designs the relation</h3>
+      <p>The framework that emerged from phygen has three connected levels. Inside the artwork, simulated agents respond to shared trails. Outside it, model agents change the program. Around both, the artist defines the conditions of continuation and the occasions for intervention.</p>
+      <p>None of those levels explains the work alone. The simulation supplies a material behavior. The model proposes changes to that behavior and its expression. The artist decides what kind of process is worth sustaining.</p>
+      <p>The change from a judged tree to an autonomous chain did not prove that selection is unnecessary. It showed that selection can occur at different places. I can choose each child, or I can choose the process and later decide which parts of its history matter.</p>
+      <p>Those are different artistic positions. The first directs the next generation through repeated choices. The second permits a longer development before returning to judgment. Neither position removes the need to look.</p>
+      <p>I no longer ask phygen to certify that the next image is better. I ask it to make a substantial change, retain the identity of the work, and leave a record I can inspect.</p>
+      <p>The next image inherits more than code. It inherits earlier choices and the conditions under which the artist lets the work continue. Designing those conditions is part of the work, as much as choosing which images deserve attention.</p>
+    </article>
+
+    <footer>
+      <p>Further reading: the <a href="guide.html">plain guide</a> and the <a href="index.html">project documentation</a>.</p>
+    </footer>
+  </main>
+</body>
+</html>

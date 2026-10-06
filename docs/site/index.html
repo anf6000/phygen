@@ -1,0 +1,994 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>phygen — system documentation</title>
+<meta name="description" content="Extensive documentation for phygen: the four branches, their approaches, and the current architecture.">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+
+<div class="bar">
+  <span class="brand">phygen</span>
+  <span class="crumb">documentation</span>
+  <span class="chip muted">contract 1.0.0</span>
+  <span class="chip accent">current branch: behavior</span>
+  <span class="chip muted">4 branches compared</span>
+  <a class="chip muted" href="guide.html">plain guide</a>
+</div>
+
+<div class="layout">
+
+  <nav class="toc" aria-label="Contents">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#overview">Overview</a></li>
+      <li><a href="#repo">Repository map</a></li>
+      <li><a href="#branches">The four branches</a>
+        <div class="sub">
+          <a href="#evolution">Evolution timeline</a>
+          <a href="#approaches">Two approaches</a>
+          <a href="#branch-cards">Per-branch detail</a>
+          <a href="#compare">Side-by-side</a>
+          <a href="#contributed">What each contributed</a>
+        </div>
+      </li>
+      <li><a href="#arch">Current architecture</a>
+        <div class="sub">
+          <a href="#step">Life of one step</a>
+          <a href="#prompts">The prompts</a>
+          <a href="#origins">Origins and capture</a>
+          <a href="#chain">Version statuses</a>
+          <a href="#data">Data model</a>
+          <a href="#events">Event stream</a>
+          <a href="#snapshots">Snapshots</a>
+          <a href="#recovery">Control and recovery</a>
+        </div>
+      </li>
+      <li><a href="#interface">The interface</a></li>
+      <li><a href="#screenshots">Screenshots</a></li>
+      <li><a href="#captures">Captures of the artworks</a></li>
+      <li><a href="#measurements">Capture measurements</a></li>
+      <li><a href="#api">API reference</a></li>
+      <li><a href="#settings">Settings</a></li>
+      <li><a href="#tools">Operator tools</a></li>
+      <li><a href="#appendix">Appendix: commit logs</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+  <h1>phygen — system documentation</h1>
+  <p class="lede">phygen evolves a generative artwork. A language-model session edits a small
+  JavaScript package that renders a physarum transport network. Every accepted edit becomes
+  a version. Versions keep their source, their configuration, their rendered frame, their
+  cost, and the agent feed that made them. The result is a recorded history of an artwork,
+  not a memory of one.</p>
+
+  <p>This document does four jobs. It explains the idea. It compares the four local git
+  branches and the approach of each one. It describes the current architecture in detail.
+  It collects the screenshots and the artwork captures.</p>
+
+  <div class="note">
+    <b>Read this first.</b> The repository has four branches. They are a single line of
+    history: <code>master</code> → <code>simple</code> → <code>slotmachine</code> →
+    <code>behavior</code>. The current branch is <code>behavior</code>. The screenshots in
+    <code>docs/</code> and the screencasts were recorded on the older tree interface, so they
+    show <code>master</code>'s user interface. The section
+    <a href="#interface">The interface</a> tells the two interfaces apart.
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="overview">1 · Overview</h2>
+
+  <p>One <b>run</b> makes a forward chain of <b>versions</b>. Each <b>step</b> authors exactly
+  one child of the newest good version. The server renders the child, records it, and keeps
+  it. A person judges the frames. There is no judge model on the current branch.</p>
+
+  <p id="tldr">The four branches in one line each:</p>
+  <div class="grid two">
+    <div class="card branch-master">
+      <div class="head"><h3><span class="pill master">master</span> the judged tree</h3><span class="muted small">Sep 15–17 · 26 commits</span></div>
+      <p>Select a version, give a direction, and spawn a brood of three variants. A blind
+      vision judge compares the rendered images and picks the winner. The tree keeps every
+      sibling.</p>
+    </div>
+    <div class="card branch-simple">
+      <div class="head"><h3><span class="pill simple">simple</span> novelty and archive</h3><span class="muted small">Sep 18 · 5 commits</span></div>
+      <p>The judged tree runs itself. Promotion needs novelty as well as quality. The run
+      picks its own parent from a small archive and writes its own direction.</p>
+    </div>
+    <div class="card branch-slot">
+      <div class="head"><h3><span class="pill slot">slotmachine</span> the forward chain</h3><span class="muted small">Sep 20–22 · 5 commits</span></div>
+      <p>Kill the slot machine. One child per step, always kept, no judge and no variants.
+      The artwork grows as one forward chain, and the interface becomes a column of cards.</p>
+    </div>
+    <div class="card branch-behavior">
+      <div class="head"><h3><span class="pill behavior">behavior</span> the operator</h3><span class="muted small">Sep 22–29 · 4 commits · current</span></div>
+      <p>Keep the chain. Quality is an operator's job plus a stricter art brief. The operator
+      can repair, fix, and refactor a version, and the chain is committed to git as text.</p>
+    </div>
+  </div>
+
+  <h3>The vocabulary</h3>
+  <table>
+    <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td>artwork</td><td>One package under evolution, for example the <code>physarum</code> package in <code>threejs/</code>.</td></tr>
+      <tr><td>root version</td><td>The imported package exactly as it was. The mother of the chain. It has <code>step = null</code>.</td></tr>
+      <tr><td>version</td><td>One recorded state of the package: source, configuration, frame, cost, and history.</td></tr>
+      <tr><td>parent</td><td>The version a new child was made from. On the chain, the parent is the newest promoted version.</td></tr>
+      <tr><td>step</td><td>One position in the chain, from 1. One step authors one child. The run counts its own steps as <code>rounds</code>.</td></tr>
+      <tr><td>promote</td><td>Accept a child as the new chain head. A promoted version can play live.</td></tr>
+      <tr><td>snapshot</td><td>An immutable copy of a published package, named by its content hash.</td></tr>
+      <tr><td>capture</td><td>One rendered frame of one version, made in the sandboxed artwork page.</td></tr>
+      <tr><td>lineage</td><td>The spine of promoted versions. <code>onLineage</code> marks them.</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="repo">2 · Repository map</h2>
+
+  <table>
+    <thead><tr><th>Path</th><th>What it holds</th></tr></thead>
+    <tbody>
+      <tr><td><code>runtime/</code></td><td>The artwork contract. Shared by the server and the artwork: the adapter method list, the schema validator, the strict configuration loader, and the manifest rules.</td></tr>
+      <tr><td><code>threejs/</code></td><td>One artwork package. The <code>physarum</code> simulation, the renderer, the adapter, the manifest, the configuration schema, and a <code>config.json</code>.</td></tr>
+      <tr><td><code>server/</code></td><td>The controller. It owns the records, the provider sessions, the capture, the budget, the events, and the API.</td></tr>
+      <tr><td><code>web/</code></td><td>The interface. React and TypeScript. The chain of cards, the agent shell, and the live view.</td></tr>
+      <tr><td><code>docs/</code></td><td>The API contract, the architecture notes, the measurements, the screenshots, the screencasts, and this site.</td></tr>
+      <tr><td><code>data-evolve/</code></td><td>The SQLite database, the captured frames, and the temporary workspaces. Not source.</td></tr>
+      <tr><td><code>snapshots/</code></td><td>The immutable published packages, one directory per content hash. Not source.</td></tr>
+    </tbody>
+  </table>
+
+  <figure>
+    <img src="assets/fig-layers.svg" alt="The four layers of phygen: runtime, threejs, server, and web, with the records and files they share.">
+    <figcaption><b>Figure 1.</b> The layers. The contract in <code>runtime/</code> is implemented by an artwork package and enforced by the controller. The interface talks to the controller over HTTP and a server-sent event stream. The controller reads and writes the records and the snapshots.</figcaption>
+  </figure>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="branches">3 · The four branches</h2>
+
+  <p>The four local branches are not alternatives in parallel. They are one line of work.
+  Each branch is a design decision that the next branch inherited, changed, or reversed.
+  The ancestry is exact: <code>master</code> is an ancestor of <code>simple</code>,
+  <code>simple</code> of <code>slotmachine</code>, and <code>slotmachine</code> of
+  <code>behavior</code>.</p>
+
+  <table>
+    <thead><tr><th>Branch</th><th>Commits</th><th>Head</th><th>Era</th><th>Thesis</th></tr></thead>
+    <tbody>
+      <tr class="branch-row master"><td><b>master</b></td><td>26</td><td><code>e97bb01</code></td><td>Sep 15–17</td><td>A clickable artwork tree with a brood of variants and a blind vision judge.</td></tr>
+      <tr class="branch-row simple"><td><b>simple</b></td><td>33 total (+7)</td><td><code>e8056f6</code></td><td>Sep 18</td><td>Promote on novelty and quality; the run picks its own parent and direction.</td></tr>
+      <tr class="branch-row slot"><td><b>slotmachine</b></td><td>38 total (+5)</td><td><code>3c021cd</code></td><td>Sep 20–22</td><td>One child per step, always kept, no judge; a forward chain and a card interface.</td></tr>
+      <tr class="branch-row behavior"><td><b>behavior</b></td><td>42 total (+4)</td><td><code>ad3de1e</code></td><td>Sep 22–29</td><td>Operator repair, fix, and refactor; a stricter art brief; the chain in git.</td></tr>
+    </tbody>
+  </table>
+
+  <h3 id="evolution">3.1 · Evolution timeline</h3>
+
+  <figure>
+    <img src="assets/fig-evolution.svg" alt="Four branches in sequence: master, simple, slotmachine, behavior, each with its thesis and traits, over a durable core.">
+    <figcaption><b>Figure 2.</b> The four approaches. Each branch keeps the durable core and changes the selection model. The core — the package contract, immutable snapshots, the sandboxed capture, the event stream, the agent feed, and budget accounting — was written on <code>master</code> and survived every branch after it.</figcaption>
+  </figure>
+
+  <h3 id="approaches">3.2 · The two approaches</h3>
+
+  <p>The design question of the whole project is how a new version is chosen. There are two
+  answers in the history. The first is the <b>judged tree</b>: make several variants, let a
+  vision model judge them, and keep the tree. The second is the <b>forward chain</b>: make
+  one child, keep it, and let a person judge the frames. The project moved from the first to
+  the second and did not go back.</p>
+
+  <figure>
+    <img src="assets/fig-approaches.svg" alt="Left: the judged tree with three variants and a blind judge. Right: the forward chain of one-child steps.">
+    <figcaption><b>Figure 3.</b> The two approaches side by side. On the left, a brood of variants is judged and the winner becomes the parent; every sibling is kept in the tree. On the right, each step makes one child of the newest good version, and every child that passes the package checks is kept.</figcaption>
+  </figure>
+
+  <h3 id="branch-cards">3.3 · Per-branch detail</h3>
+
+  <div class="grid two">
+
+    <div class="card branch-master">
+      <div class="head"><h3><span class="pill master">master</span> the judged tree</h3></div>
+      <p><b>Thesis.</b> A clickable artwork tree. You select a version, give a direction, and
+      spawn a small brood of variants. A blind vision judge picks the winner. The tree keeps
+      every sibling.</p>
+      <p><b>Evolution model.</b> Three variants per evolution by default, clamped to 1–8.
+      Each variant gets a fixed slot — refinement, structure, or experiment. A structural
+      redirect fires after two unchanged levels. The judge is a separate model with its own
+      picker. Judging is blind: anonymous labels, a randomised order, images only, and a
+      strict JSON verdict. It runs in two phases — a round comparison of all variants with
+      the parent as a reference, then a finalist against the parent with the order reversed
+      and a tie-break.</p>
+      <p><b>Parent.</b> The winning variant, or any node you click: a run can branch from a
+      selected version.</p>
+      <p><b>Data model.</b> Adds <code>versions.round</code>, <code>versions.slot</code>,
+      <code>versions.direction</code>, <code>versions.on_lineage</code>,
+      <code>runs.direction</code>, <code>runs.unchanged_rounds</code>,
+      <code>rounds.candidate_ids_json</code>, <code>jobs.slot</code>, and the
+      <code>comparisons</code>, <code>evaluations</code>, <code>analysis_runs</code>, and
+      <code>pair_measurements</code> tables.</p>
+      <p><b>Interface.</b> React Flow draws a radial tree: generation rings of cards around
+      the root. Side panels show the detail, the relationships (config distance and source
+      similarity), the captures, and a mobile generation list. A <code>?doc=1</code> recorder
+      records the interface for the documentation.</p>
+      <p><b>Prompt.</b> The author gets a direction, a slot assignment, an anti-repetition
+      history, and the parent configuration as JSON.</p>
+      <p class="muted small">Key commits: “Add the phygen evolution system”; “Lay the tree out
+      under each parent, and branch from the selected version”; “Draw each parent's children
+      as a ring, and make the interface answer a click”; “Call children variants and levels
+      evolutions, and drop the cost guardrails”; “Write down how the system works, and what
+      it measured”.</p>
+    </div>
+
+    <div class="card branch-simple">
+      <div class="head"><h3><span class="pill simple">simple</span> novelty and archive</h3></div>
+      <p><b>Thesis.</b> Make the judged tree run itself. Promotion needs novelty as well as
+      quality, and the run picks its own parent from a small archive and writes its own
+      direction.</p>
+      <p><b>Evolution model.</b> Still a tree with variant broods, and still a judge. Two
+      changes matter. First, a promotion must pass a novelty floor and a quality floor, so a
+      near duplicate is refused. Second, the run chooses its own parent from an archive of up
+      to eight members, either the furthest member or the best by quality. A comparison that
+      never answers no longer stalls the run.</p>
+      <p><b>Parent.</b> The run's own archive choice. The direction is written by the run.</p>
+      <p><b>Data model.</b> The archive survives as a JSON artifact with fields
+      <code>quality</code>, <code>votes</code>, <code>wins</code>, <code>losses</code>,
+      <code>confidence</code>, <code>novelty</code>, and <code>addedBy</code>. The judge
+      vocabulary and the floors live beside it.</p>
+      <p><b>Interface.</b> The same React Flow rings, plus an appearance panel driven by a
+      bounded vision call, follow-without-zoom, and a brood block beside its one branching
+      child.</p>
+      <p><b>Prompt.</b> The direction is authored by the run rather than typed by a person.</p>
+      <p class="muted small">Key commits: “Promote on novelty as well as quality, and survive
+      a comparison that never answered”; “Let a run choose its own parent from an archive, and
+      write its own direction”; “Measure how different two versions LOOK, with a bounded
+      vision call”; “Make the judge pick a variant…”; “Follow the work without moving the
+      zoom, and record the tree”.</p>
+      <div class="note ok"><b>The lesson.</b> The work of this branch did not survive in code.
+      Its lesson did: novelty floors and parallel broods doubled the cost for winners that a
+      person often did not prefer. That drove the next branch to the single-child chain.</div>
+    </div>
+
+    <div class="card branch-slot">
+      <div class="head"><h3><span class="pill slot">slotmachine</span> the forward chain</h3></div>
+      <p><b>Thesis.</b> Kill the slot machine. One button starts X steps. Each step makes
+      exactly one child of the newest good version, and the child is always kept. No judge, no
+      variants, no archive: the artwork grows as a forward chain, and the interface becomes a
+      column of cards.</p>
+      <p><b>Evolution model.</b> One child per step from the chain head. A child that passes
+      the package checks is kept, whatever it looks like. There is no quality gate. The
+      records still hold a round per step, with one candidate and whether it was promoted.</p>
+      <p><b>Data model.</b> Removes <code>comparisons</code>, <code>evaluations</code>,
+      <code>analysis_runs</code>, <code>pair_measurements</code>, <code>versions.slot</code>,
+      <code>versions.direction</code>, <code>jobs.slot</code>, and
+      <code>runs.direction</code> and <code>runs.unchanged_rounds</code>. Renames the run
+      count from <code>evolutions</code> to <code>steps</code> in the interface. Renames the
+      records directory from <code>data/</code> to <code>data-evolve/</code>.</p>
+      <p><b>Interface.</b> A vertical chain of large cards, newest at the top. Exactly one
+      card plays live: the newest promoted version. A working step shows a deterministic pixel
+      field. The card under the reading line plays, and the one before it stops.</p>
+      <p><b>Prompt.</b> The slot templates are deleted. One fixed step instruction remains, and
+      the calm-in-time render rules enter the pipeline.</p>
+      <p class="muted small">Key commits: “Run the chain forward: one child per step, and no
+      judge”; “Rebuild the interface as a chain of cards, and give a working step a pixel
+      field”; “Play the card the view is on, and stop the one before it”; “Start the next
+      artwork while the one above it is still a fifth visible”; “Keep the frame calm in time,
+      and add the operator edit modes for the chain”.</p>
+    </div>
+
+    <div class="card branch-behavior">
+      <div class="head"><h3><span class="pill behavior">behavior</span> the operator</h3></div>
+      <p><b>Thesis.</b> Keep the forward chain, and make quality an operator affair plus a much
+      stricter art brief: repair and fix tools, chain reset and truncation, authored prompts,
+      and the chain committed to git as text.</p>
+      <p><b>Evolution model.</b> Identical to <code>slotmachine</code>: one child per step,
+      chain head, always kept, no judge, no archive. A technical failure gets one bounded
+      repair session. A capture timeout is infrastructure and spends no repair. New operator
+      paths appear: repair a failed version from its own snapshot back to promoted, fix a kept
+      version in place with a checksum refusal for behaviour changes, refactor kept code, and
+      reset or truncate the chain.</p>
+      <p><b>Data model.</b> The schema is unchanged from <code>slotmachine</code>. The chain
+      is mirrored as text in <code>docs/chain.json</code> by the <code>chain-index</code>
+      tool, so the artwork history is committed with the code.</p>
+      <p><b>Interface.</b> The card chain of <code>slotmachine</code>, unchanged. The pixel
+      field, the reading line, the shell, and the modal all persist.</p>
+      <p><b>Prompt.</b> A stricter <code>STEP_INSTRUCTION</code>: a substantial visual change
+      that keeps the physarum identity, a hierarchy with quiet areas, no rainbow, and a pixel
+      budget tied to the trail. The system prompt asks for one strong artistic decision per
+      step, no flicker, integral alpha-over blending only, and a 30 fps target.</p>
+      <p class="muted small">Key commits: “Let an operator fix kept versions in place, and add
+      the chain frame, reset, and truncation tools”; “Add the operator modes for sharp pixels,
+      a warm window, and colored-noise color”; “Ask each step for a substantial visual change,
+      and keep the trail in charge”; “Keep the evolved artworks in version control, with the
+      chain record as text”.</p>
+    </div>
+
+  </div>
+
+  <h3 id="compare">3.4 · Side-by-side comparison</h3>
+
+  <table>
+    <thead>
+      <tr><th>Question</th><th>master</th><th>simple</th><th>slotmachine</th><th>behavior</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Children per step</td><td>3 variants (1–8)</td><td>2 variants</td><td>exactly 1</td><td>exactly 1</td></tr>
+      <tr><td>Selection</td><td>two-phase blind judge</td><td>judge pick plus a novelty floor</td><td>none; the child is always kept</td><td>none; the operator may repair or fix</td></tr>
+      <tr><td>Judge or vision</td><td>full judge model</td><td>judge plus bounded vision similarity</td><td>none</td><td>none; vision survives only in the author prompt</td></tr>
+      <tr><td>Parent choice</td><td>round winner or a clicked node</td><td>archive pick: furthest or best</td><td>chain head only</td><td>chain head only</td></tr>
+      <tr><td>Archive</td><td>none</td><td>up to 8 members</td><td>none</td><td>none</td></tr>
+      <tr><td>Chain shape</td><td>tree</td><td>tree</td><td>linear chain</td><td>linear chain</td></tr>
+      <tr><td>Interface</td><td>React Flow radial rings</td><td>rings plus appearance panel</td><td>vertical card chain</td><td>vertical card chain</td></tr>
+      <tr><td>Recovery</td><td>branch from a node; pause, resume, restart</td><td>tolerates a dead judge</td><td>a restart revives a published snapshot</td><td>operator repair, fix, refactor; reset and truncate</td></tr>
+      <tr><td>Snapshotting</td><td>immutable content-hash snapshots</td><td>same</td><td>same</td><td>same, plus the chain in git</td></tr>
+      <tr><td>Cost guardrail</td><td>dropped; opt-in limit only</td><td>opt-in limit only</td><td>opt-in limit only</td><td>opt-in limit only</td></tr>
+    </tbody>
+  </table>
+
+  <h3 id="contributed">3.5 · What each branch contributed</h3>
+
+  <ul>
+    <li><b>master</b> wrote everything that remains: the package contract, immutable
+    snapshots, the sandboxed capture, budget accounting, the event stream, the agent feed, the
+    preset and recorder tooling.</li>
+    <li><b>simple</b> left no code in the line, but changed the direction of the project. It
+    showed that broods and novelty floors cost more and did not buy better winners.</li>
+    <li><b>slotmachine</b> is the hinge. It set the one-child step, the no-judge rule, the card
+    chain, the pixel loading art, the autoplay reading line, and the calm-in-time rules. The
+    core of the current system is its work.</li>
+    <li><b>behavior</b> is additive. It keeps the chain and adds operator control, chain tools,
+    the stricter art brief, and the chain record in version control.</li>
+  </ul>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="arch">4 · Current architecture (branch behavior)</h2>
+
+  <p>The current system keeps the forward chain and adds operator control. This section
+  follows one step through the controller, then describes the records, the events, the
+  snapshots, and the recovery paths. The references use <code>file:line</code> so you can
+  jump from the document to the source.</p>
+
+  <h3 id="step">4.1 · The life of one step</h3>
+
+  <p>A step is bounded. It authors one child, checks it, publishes it, renders it, and
+  promotes it. A failure ends the step without moving the chain head. The order is fixed.</p>
+
+  <table>
+    <thead><tr><th>#</th><th>Stage</th><th>What happens</th><th>Source</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Admission</td><td><code>POST /api/runs</code> validates the request and asks the budget whether the highest possible cost fits. A refusal happens before any record exists.</td><td><code>app.mjs</code>, <code>budget.mjs</code></td></tr>
+      <tr><td>2</td><td>Chain head</td><td>Read the newest version with status <code>promoted</code>. On the first step that is the imported root.</td><td><code>run.mjs:471</code></td></tr>
+      <tr><td>3</td><td>Author</td><td>Copy the parent snapshot into <code>work…/&lt;runId&gt;/&lt;versionId&gt;</code>. One session edits it with the fixed instruction, the manifest rules, the parent configuration, the run history, and the last three frames, newest first.</td><td><code>run.mjs:1123</code></td></tr>
+      <tr><td>4</td><td>Validate</td><td>Check the edit surface, the package, and the configuration against the schema. A technical fault gets exactly one bounded repair session.</td><td><code>run.mjs:1297</code></td></tr>
+      <tr><td>5</td><td>Publish</td><td>Copy the accepted workspace into <code>snapshots/&lt;artwork&gt;/&lt;hash&gt;</code>, atomically. The snapshot is immutable.</td><td><code>workspace.mjs:192</code></td></tr>
+      <tr><td>6</td><td>Capture</td><td>Render the child from the published snapshot: one 1024×1024 square, seed 1337, step 2500, dpr 1. Frames that match an existing hash are reused.</td><td><code>run.mjs:1389</code>, <code>browser.mjs</code></td></tr>
+      <tr><td>7</td><td>Promote</td><td>Set the status to <code>promoted</code> and mark the version on the lineage. It becomes the chain head for the next step.</td><td><code>run.mjs:1661</code></td></tr>
+    </tbody>
+  </table>
+
+  <figure>
+    <img src="assets/fig-step.svg" alt="The life of one step: admission, chain head, author, validate, publish, capture, promote, with the repair and failure paths.">
+    <figcaption><b>Figure 4.</b> The life of one step. The spine is the happy path. The red paths are the technical faults: each gets one bounded repair, and a second failure records the version as <code>failed</code> without moving the chain head. A capture timeout is infrastructure: it never spends a repair. The dashed loop on the left is the next step, which starts from the version this step just promoted.</figcaption>
+  </figure>
+
+  <div class="note"><b>The failure rule.</b> A failed version does not become a parent. The
+  next step starts from the last good version. A round with <code>promoted: false</code> and
+  one failed candidate means the step failed a technical check. The chain keeps the work that
+  was kept, and the interface hides the failed steps.</div>
+
+  <h3 id="prompts">4.2 · The prompts</h3>
+
+  <p>The author session receives one fixed instruction and one system prompt, plus the
+  manifest rules, the parent configuration, the run history, and the frames. The instruction
+  is the art brief. On this branch it is deliberately strict, because there is no judge to
+  correct a weak step.</p>
+
+  <h4>The step instruction</h4>
+  <p><code>STEP_INSTRUCTION</code> (<code>prompts.mjs:9</code>) asks for a substantial visual
+  evolution, not another small variation. It keeps the core physarum algorithm: agents sense
+  the shared trail, steer, move, and deposit into it. Trail feedback must stay the main cause
+  of the visible forms. The instruction asks for one clear direction, a hierarchy with
+  contrasting scales and quiet areas, and negative space. It names what does not count: a new
+  color, a small parameter adjustment, an extra layer of noise, or full-spectrum rainbow
+  color. A few lines carry the intent:</p>
+  <div class="mono-block">Create a substantial visual evolution of this artwork, not another small variation.
+Make fewer elements do more. Remove, reduce, or replace inherited effects that compete with the chosen direction.
+Give the image a clear visual hierarchy, contrasting scales, and quiet areas with little detail.
+Avoid uniform detail, dense coverage everywhere, competing centers, and full-spectrum rainbow color.
+Dynamic means clear development over time, not more effects, faster noise, or flicker.
+Keep the result reproducible, runnable, and visually clear at 1000 simulation steps.</div>
+
+  <h4>The system prompt</h4>
+  <p><code>EVOLVE_SYSTEM_PROMPT</code> (<code>prompts.mjs:44</code>) is the artist-engineer
+  charter. It fixes the identity: keep the core physarum algorithm and its trail feedback;
+  change the visual expression, not the identity. It sets hard rules for a free picture. Do
+  not force agents along a prescribed centerline and call the form emergent. Make one strong
+  artistic decision per step. Implement it in source code; a numeric tweak alone is not
+  enough. Change only allowed files and never a protected one. Add no dependency and run no
+  shell command. Write no new comments. Keep a 30 fps target. Nothing may flicker on and off
+  from one frame to the next: use normal alpha-over blending only, never additive, multiply,
+  overlay, or screen. Report the intent, the main change, and the competing effects that were
+  removed.</p>
+
+  <h4>The assembled prompt</h4>
+  <p><code>buildEvolvePrompt</code> (<code>prompts.mjs:81</code>) assembles the instruction,
+  the manifest rules, a short map of the artwork source, a direction-planning block, an
+  accumulated-image block, seven numbered requirements, the history of this run, the parent
+  configuration as JSON, a frame hint, and an end-of-review checklist. The frame hint is
+  exact about what an image proves:</p>
+  <div class="mono-block">The attached frames are ordered newest first. The first frame is the parent; later frames show earlier versions.
+Use these images to assess composition and visual repetition. A still frame does not prove motion quality or frame rate.</div>
+
+  <h4>Repair and refactor</h4>
+  <p><code>buildRepairPrompt</code> (<code>prompts.mjs:203</code>) is one bounded attempt. It
+  gives the failure code and text and asks the session to repair the workspace in place and
+  keep the same artistic intent. <code>REFACTOR_SYSTEM_PROMPT</code> and
+  <code>buildRefactorPrompt</code> (<code>prompts.mjs:161</code>) are a different job: change
+  the shape of the code, never its behaviour. The same seed and step count must give the same
+  image. The refactor removes every comment, does not touch <code>config.json</code>, and does
+  not rename a public method or a file.</p>
+
+  <h3 id="origins">4.3 · Origins and the capture</h3>
+
+  <p>The controller and the artwork run on two origins. This is a security boundary, not a
+  preference. Generated and imported code is untrusted, so it never shares an origin with the
+  API or the credentials.</p>
+
+  <figure>
+    <img src="assets/fig-origins.svg" alt="The controller origin on 8787, the separate artwork origin on 8788, and the sandboxed capture.">
+    <figcaption><b>Figure 5.</b> The two origins. The controller holds the records, the keys, and the budget on <code>127.0.0.1:8787</code>. The artwork page runs on <code>127.0.0.1:8788</code> with a strict content policy, no API, no credentials, and no host directory access. The interface embeds it in an <code>iframe</code> with <code>sandbox="allow-scripts"</code>. The capture loads the same page in a fresh browser context.</figcaption>
+  </figure>
+
+  <p>The capture (<code>capture/browser.mjs</code>) opens one fresh browser context per call
+  and one fresh page per sample. The page URL is fixed by query parameters:
+  <code>?steps=2500&amp;seed=1337&amp;speed=8&amp;paused=0&amp;dpr=1</code>. The page signals
+  <code>window.__ready</code>, <code>__done</code>, or <code>__failed</code>. The capture
+  rejects <code>window.__error</code>, screenshots the viewport, and reads the trail checksum,
+  the agent checksum, the fps, and the renderer backend back out of the page. A Node-side
+  deadline races the whole batch and tears the context down on expiry: at least 30 s per
+  sample plus a 30 s margin.</p>
+
+  <p>The container path (<code>capture/docker.mjs</code>) is the stronger boundary: no
+  network, a non-root user, read-only filesystem and image mounts, CPU, memory, pids, and time
+  limits, with <code>job.json</code> in and <code>result.json</code> out. <code>PHYGEN_CAPTURE</code>
+  selects <code>auto</code>, <code>local</code>, or <code>docker</code>. Without a container,
+  set <code>PHYGEN_REQUIRE_ISOLATION=1</code> and the controller refuses source-code children.</p>
+
+  <h3 id="chain">4.4 · Version statuses and the playing rule</h3>
+
+  <p>A version moves through a small set of statuses. Exactly one version plays live: the
+  newest one with status <code>promoted</code>. Every other version shows its still frame, its
+  stage, or its failure reason. A failed step is not drawn in the chain.</p>
+
+  <figure>
+    <img src="assets/fig-chain.svg" alt="Version statuses queued, authoring, validating, capturing, promoted, the failed path, and the operator repair that is the only way back.">
+    <figcaption><b>Figure 6.</b> The statuses and the recovery path. Repair is the only path from <code>failed</code> back to <code>promoted</code>. It starts from the failed candidate's own published snapshot, so it fixes the code that failed instead of throwing the attempt away. It is refused while a run is active on the artwork.</figcaption>
+  </figure>
+
+  <p>The interface rule is pure and tested without a browser
+  (<code>web/src/chain.ts</code>):</p>
+  <ul>
+    <li><code>chainOrder</code> sorts newest first by generation, then by creation time.</li>
+    <li><code>playingVersionId</code> returns the newest promoted version. Every other version
+    shows a still.</li>
+    <li><code>READING_LINE_FRACTION</code> is <code>0.2</code>. The reading line sits at a
+    fifth of the distance between two cards, so the artwork above is down to about a fifth of
+    its height when the next one starts to play.</li>
+    <li><code>visibleCardId</code> returns the lowest card whose top edge is still above the
+    reading line. Scrolling down stops one artwork and starts the next.</li>
+    <li><code>autoplayCardId</code> handles the working case: a card still being made has no
+    snapshot, so the newest artwork that can play takes over while the step in progress shows
+    its pixel field.</li>
+    <li><code>stepLabels</code> names the root <code>Root</code> and every other version
+    <code>Step N</code>. Two attempts can share a generation, because a failed step starts
+    again from the same parent; a second attempt gets a letter, so two cards never carry the
+    same name.</li>
+  </ul>
+
+  <h3 id="data">4.5 · The data model</h3>
+
+  <p>The records live in one SQLite database under <code>data-evolve/</code>
+  (<code>server/src/db.mjs</code>). Eight tables hold the whole history.</p>
+
+  <table>
+    <thead><tr><th>Table</th><th>It holds</th></tr></thead>
+    <tbody>
+      <tr><td><code>artworks</code></td><td>One row per artwork, with its canonical root version.</td></tr>
+      <tr><td><code>versions</code></td><td>Every version: parent, run, generation, step, title, status, configuration, changes, snapshot path, source hash, explanation, lineage flag, and failure reason.</td></tr>
+      <tr><td><code>runs</code></td><td>Every run: protocol, estimate, cost bound, state, stop reason, step count, and spend.</td></tr>
+      <tr><td><code>rounds</code></td><td>One row per step: the parent, the one candidate, whether it was promoted, and the note.</td></tr>
+      <tr><td><code>jobs</code></td><td>One row per unit of work: author, publish, or capture, with state, attempts, and a lease.</td></tr>
+      <tr><td><code>captures</code></td><td>Every rendered frame, with its stage, seed, step, size, hashes, and renderer backend.</td></tr>
+      <tr><td><code>usage</code></td><td>The real cost and token count of each call, and whether the provider or the bound supplied it.</td></tr>
+      <tr><td><code>events</code></td><td>The ordered event stream the interface replays, including the agent feed rows.</td></tr>
+    </tbody>
+  </table>
+
+  <figure>
+    <img src="assets/fig-data.svg" alt="The SQLite tables and their main relations: artworks, versions, runs, rounds, jobs, captures, usage, and events.">
+    <figcaption><b>Figure 7.</b> The tables and their main relations. Blue names are primary keys; gray names are foreign keys. The <code>events</code> table is both the durable log and the source of the replay that a reconnecting client receives.</figcaption>
+  </figure>
+
+  <h3 id="events">4.6 · The event stream</h3>
+
+  <p>The controller writes an event once and every client replays exactly what it missed.
+  <code>EventBus.emit</code> appends the event to the store first, then fans it out to the
+  open subscribers of that run. The stream route subscribes before it replays, pages the
+  complete missed range 500 events at a time, and flushes the buffered live events in order.
+  A client that falls too far behind is closed rather than trimmed, so no gap is hidden: it
+  reconnects with its last sequence number and receives the range it missed.</p>
+
+  <figure>
+    <img src="assets/fig-events.svg" alt="An event is appended to the events table, then fanned out to per-run subscribers and replayed to an SSE client.">
+    <figcaption><b>Figure 8.</b> Append first, then fan out. The client sends <code>Last-Event-ID</code> to resume and must not lose or duplicate a row. The stream sends a <code>keep-alive</code> comment every 15 seconds.</figcaption>
+  </figure>
+
+  <table>
+    <thead><tr><th>Event type</th><th>Payload</th></tr></thead>
+    <tbody>
+      <tr><td><code>run.state</code></td><td>state, stopReason</td></tr>
+      <tr><td><code>run.round</code></td><td>round, phase, parentVersionId, promoted, note</td></tr>
+      <tr><td><code>job.state</code></td><td>jobId, kind, state, detail</td></tr>
+      <tr><td><code>version.created</code></td><td>the full version node</td></tr>
+      <tr><td><code>version.state</code></td><td>versionId, status, detail, errorCode</td></tr>
+      <tr><td><code>capture.ready</code></td><td>versionId, captureId, stage, step, seed, url</td></tr>
+      <tr><td><code>agent</code></td><td>one agent-feed row, with versionId</td></tr>
+      <tr><td><code>file</code></td><td>versionId, kind (inventory or change), path, lines, bytes, added, removed</td></tr>
+      <tr><td><code>usage</code></td><td>model, inputTokens, outputTokens, costUsd, costSource, spentUsd, limitUsd</td></tr>
+      <tr><td><code>budget</code></td><td>spentUsd, reservedUsd, limitUsd, boundUsd</td></tr>
+      <tr><td><code>run.completed</code></td><td>state, stopReason, evolutionsDone</td></tr>
+      <tr><td><code>error</code></td><td>code, message, detail</td></tr>
+      <tr><td><code>log</code></td><td>level, message</td></tr>
+    </tbody>
+  </table>
+
+  <h3 id="snapshots">4.7 · Snapshots</h3>
+
+  <p>A published snapshot is immutable. The server writes it by a small protocol so that two
+  writers can never corrupt one hash.</p>
+  <ol>
+    <li>Hash the package-relative paths and copy into a unique <code>.pending-…</code>
+    directory. Recompute the hash and check it against the validated hash.</li>
+    <li>Write <code>snapshot.json</code> exclusively. Never overwrite an existing marker.</li>
+    <li>Rename the pending directory into place. A rename is atomic. If a concurrent winner
+    exists, re-verify it and remove the losing directory.</li>
+    <li>Reuse an existing directory only when <code>verifySnapshot</code> proves that its
+    contents hash matches.</li>
+  </ol>
+
+  <figure>
+    <img src="assets/fig-snapshot.svg" alt="How a child package is published as an immutable snapshot and then captured from it.">
+    <figcaption><b>Figure 9.</b> Publish and capture. The version record, the directory name, and the marker all agree on one content hash. <code>verifySnapshot</code> re-hashes every listed file, compares the per-file sha256 values and the aggregate contents hash with the marker and the directory name, and reports legacy markers without rewriting them. The capture renders from the published copy, which is the only input it receives.</figcaption>
+  </figure>
+
+  <h3 id="recovery">4.8 · Control and recovery</h3>
+  <ul>
+    <li><b>Pause</b> stops new steps after the current bounded step. The interrupted step is
+    recorded and does not consume a step. <b>Resume</b> continues it and reuses the child the
+    run already published.</li>
+    <li><b>Stop</b> ends the run. Work already published stays. A stop is checked before every
+    reservation, every retry delay, and every provider start, so a stopped run can never start
+    another paid session.</li>
+    <li><b>A configured limit</b> stops the run and names the limit. It does not consume a
+    step and does not look like a candidate fault. By default no cost limit is enforced: the
+    record keeps the real spend.</li>
+    <li><b>A restart</b> pauses unfinished runs for review. Nothing is resumed automatically.
+    A restart revives a published snapshot that was in flight.</li>
+    <li><b>The event stream</b> subscribes before it replays, pages the complete missed range,
+    and closes a client that falls too far behind, so no event is lost and no gap is hidden.</li>
+    <li><b>The operator</b> can repair a failed version from its own snapshot, fix a kept
+    version in place, refactor it, reset the chain to the root, or truncate it at a
+    generation.</li>
+  </ul>
+
+  <h4>Cost</h4>
+  <p>Before each provider call the server reserves the highest cost of that call. After the
+  call it commits the real cost, or the bound when the provider reports none. The reserve, the
+  commit, the cost source, and the token count are all recorded per call. The estimate before
+  a run uses catalog prices and an expected token count; the record keeps the real cost. A
+  cost limit is enforced only when you set one.</p>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="interface">5 · The interface</h2>
+
+  <div class="note warn"><b>Which interface is in the pictures.</b> The screenshots in
+  <code>docs/</code> and the screencasts were recorded on the <code>master</code> branch,
+  before the chain rewrite. They show the tree interface: generation rings, variant broods,
+  and the judge. The current <code>behavior</code> interface is different. Read this section
+  for the current interface, and read the galleries as a record of the tree era.</div>
+
+  <h3>5.1 · The current interface (behavior and slotmachine)</h3>
+  <ul>
+    <li>The <b>header</b> holds the model list, the step count, and one button: Evolve.</li>
+    <li>The <b>chain</b> is one vertical column of large cards, newest at the top. A card holds
+    the step number and title, a 1024×1024 square, the changed files, the tokens, and the cost.</li>
+    <li>Exactly one card plays live: the newest promoted version. Every other card shows its
+    still frame or its stage. A failed step is not shown at all.</li>
+    <li>A card that is still being made has no snapshot yet, so it shows a deterministic pixel
+    field instead. The field is a 200×200 vector grid of 4 px cells: each particle is exactly
+    one cell, moves whole cells, and turns at most a quarter turn on arrival. The rule is in
+    <code>web/src/texture.ts</code>.</li>
+    <li>The <b>shell</b> is a read-only log of the agent, newest at the bottom. It follows the
+    work while a step runs and shows the stored log of a selected card. A tool row names the
+    tool, the short path, and the line counts. The reasoning rows are dim.</li>
+    <li>The chain and the shell are separated by a drag handle. The split starts at half the
+    height and is kept in <code>localStorage</code>.</li>
+    <li>The <b>status line</b> shows the state, <code>step X of Y</code>, the spend, the
+    provider, and whether the stream is live.</li>
+  </ul>
+
+  <h3>5.2 · The tree interface (master and simple) — what the pictures show</h3>
+  <ul>
+    <li>The header holds the direction text, the evolution count, the variant count per
+    evolution, the judge model, the author model, and an optional cost limit.</li>
+    <li>The canvas is a <b>radial tree</b>: each parent's children are drawn as a ring around
+    it. The root sits at the top left, its three variants below, and their winners below them.</li>
+    <li>Each card shows a frame, the slot name (refinement, structure, experiment), the
+    generation, and the status. A winner carries a <b>WINNER!</b> badge; a rejected sibling
+    carries a <b>YEETED!</b> badge.</li>
+    <li>The right panel shows the selected version: generation, status, source hash, the author
+    explanation, the source changes, the configuration, and the visual evidence (the capture
+    stages).</li>
+    <li>The status bar shows the provider, the capture mode, the stream sequence, the run
+    state, the spend, the call counts, and the per-kind job counts.</li>
+    <li>A <code>?doc=1</code> <b>documentation recorder</b> records the canvas for the
+    screencasts. The recorder counter is visible in the status bar of the recording frames.</li>
+    <li>Mobile shows a <b>generation list</b> instead of the canvas.</li>
+  </ul>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="screenshots">6 · Screenshots</h2>
+
+  <p>These are the interface images in <code>docs/</code>, shown at full width. They span
+  the judged-tree era and the card-chain era; the two artwork captures are last. Click any
+  image to open it larger.</p>
+
+  <div class="shots">
+    <figure><img class="shot" src="../2026-09-16%2018_53_24-seagull_selected2-8761-crop.psd%20@%2033,3%25%20(UPSCALE_IMAGE_FIZZY-V1_00006_,%20RGB_8%23)%20.png" alt="An early judged tree"><figcaption>An early judged tree. A brood of variants on the canvas, a grid of their rendered frames, and the version detail panel at the right.</figcaption></figure>
+    <figure><img class="shot" src="../2026-09-17%2016_51_42-.png" alt="The radial rings"><figcaption>The radial rings. In the judged era the tree is drawn as concentric rings. The two large frames are the current renders of the selected version.</figcaption></figure>
+    <figure><img class="shot" src="../2026-09-17%2016_52_03-.png" alt="The radial rings, a wider brood"><figcaption>The radial rings, a wider brood.</figcaption></figure>
+    <figure><img class="shot" src="../2026-09-17%2016_52_55-.png" alt="The radial rings, another run"><figcaption>The radial rings, another run.</figcaption></figure>
+    <figure><img class="shot" src="../2026-09-18%2015_50_53-.png" alt="The forward chain"><figcaption>The forward chain. The interface became a vertical chain of cards, one card per step.</figcaption></figure>
+    <figure><img class="shot" src="../2026-09-18%2017_48_38-.png" alt="The chain, early"><figcaption>The chain, early. A small cluster of cards before the layout settled.</figcaption></figure>
+    <figure><img class="shot" src="../2026-09-18%2017_48_57-.png" alt="The frames grid"><figcaption>The frames grid. Every captured frame of a run, shown at once.</figcaption></figure>
+    <figure><img class="shot" src="../2026-09-18%2017_49_16-.png" alt="A kept version and its frames"><figcaption>A kept version and its frames.</figcaption></figure>
+    <figure><img class="shot" src="../2026-09-18%2017_49_43-.png" alt="The chain with its frames"><figcaption>The chain with its frames.</figcaption></figure>
+    <figure><img class="shot" src="../variants-tree.png" alt="A judged brood with WINNER and YEETED badges"><figcaption>A judged brood. The selected version spawns the variants. One variant carries <b>WINNER!</b> and a rejected sibling carries <b>YEETED!</b>.</figcaption></figure>
+    <figure><img class="shot" src="../page-live.png" alt="The live artwork in its sandboxed modal"><figcaption>The live artwork. One version plays in the sandboxed modal on the separate artwork origin.</figcaption></figure>
+    <figure><img class="shot" src="../page-record.png" alt="The recorded agent feed"><figcaption>The recorded feed. The stored agent rows of a finished version.</figcaption></figure>
+    <figure><img class="shot" src="../diag-doc-centred.png" alt="Documentation mode centred on the working version"><figcaption>Centred on the work. The documentation view held on the working version.</figcaption></figure>
+    <figure><img class="shot" src="../diag-first.png" alt="The documentation run, first state"><figcaption>Run, first state. The start of the recorded documentation run.</figcaption></figure>
+    <figure><img class="shot" src="../diag-zoom-fixed.png" alt="The zoom no longer oscillates"><figcaption>Fixed zoom. The view no longer oscillates between two zooms.</figcaption></figure>
+    <figure><img class="shot" src="../2026-09-20%2009_40_23-.png" alt="A capture close up"><figcaption>A capture close up. The physarum network at full resolution.</figcaption></figure>
+    <figure><img class="shot" src="../2026-09-22%2016_43_18-phygen%20%E2%80%94%20artwork%20evolution%20(127.0.0.1_8787)%20-%20phygen%20-%20Visual%20Studio%20Code.png" alt="A later artwork"><figcaption>A later artwork. The simulation grown into a closed form.</figcaption></figure>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="captures">7 · Captures of the running artworks</h2>
+  <p>These are the rendered artworks themselves — the system's real output, not the interface. Each branch kept its own chain in its own records directory, so the twelve images below come from that branch's own data. They are ordered oldest to newest in creation order, so each row reads as the arc the branch produced. The pixels are the same physarum system in every branch; the branches differ in how a child is chosen.</p>
+  <p class="small muted">The judge-era branches (<code>master</code>, <code>simple</code>) render 768×768 frames at step 3600. The chain-era branches (<code>slotmachine</code>, <code>behavior</code>) render 1024×1024 frames. Every capture uses seed 1337. The version id under each image is its record in the chain.</p>
+
+  <h3>master</h3>
+  <p class="small muted">The judged tree. Twelve of 73 versions, chosen for contrast and shown oldest to newest. Source frames are 768×768, seed 1337. Click one to open it larger.</p>
+  <div class="captures">
+      <figure><img class="shot" src="captures/master/01.jpg" title="ver_mu3poxzdb9ee0283" alt="master capture 1"><figcaption>01 · mu3poxzdb9ee…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/02.jpg" title="ver_mu3pr62t36a7cd9e" alt="master capture 2"><figcaption>02 · mu3pr62t36a7…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/03.jpg" title="ver_mu42e9abc9481b75" alt="master capture 3"><figcaption>03 · mu42e9abc948…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/04.jpg" title="ver_mu4fa8v6734f5d31" alt="master capture 4"><figcaption>04 · mu4fa8v6734f…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/05.jpg" title="ver_mu4fhz4xb58e325c" alt="master capture 5"><figcaption>05 · mu4fhz4xb58e…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/06.jpg" title="ver_mu4fvti39faa1352" alt="master capture 6"><figcaption>06 · mu4fvti39faa…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/07.jpg" title="ver_mu53gllc85a3a33a" alt="master capture 7"><figcaption>07 · mu53gllc85a3…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/08.jpg" title="ver_mu5j4kdteee64c5f" alt="master capture 8"><figcaption>08 · mu5j4kdteee6…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/09.jpg" title="ver_mu5j64jp4ac04371" alt="master capture 9"><figcaption>09 · mu5j64jp4ac0…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/10.jpg" title="ver_mu5ka62ve5098abe" alt="master capture 10"><figcaption>10 · mu5ka62ve509…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/11.jpg" title="ver_mu5kd7mj1d03a411" alt="master capture 11"><figcaption>11 · mu5kd7mj1d03…</figcaption></figure>
+      <figure><img class="shot" src="captures/master/12.jpg" title="ver_mu6mbisn613ef5cb" alt="master capture 12"><figcaption>12 · mu6mbisn613e…</figcaption></figure>
+  </div>
+
+  <h3>simple</h3>
+  <p class="small muted">The judged tree with novelty floors. Twelve of 55 versions, chosen for contrast. Source frames are 768×768, seed 1337. Click one to open it larger.</p>
+  <div class="captures">
+      <figure><img class="shot" src="captures/simple/01.jpg" title="ver_mu6mz7r121322de7" alt="simple capture 1"><figcaption>01 · mu6mz7r12132…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/02.jpg" title="ver_mu6nucly2a048013" alt="simple capture 2"><figcaption>02 · mu6nucly2a04…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/03.jpg" title="ver_mu6ogxese6af583d" alt="simple capture 3"><figcaption>03 · mu6ogxese6af…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/04.jpg" title="ver_mu6p0ljp1964cbbe" alt="simple capture 4"><figcaption>04 · mu6p0ljp1964…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/05.jpg" title="ver_mu6p0ljs58339e15" alt="simple capture 5"><figcaption>05 · mu6p0ljs5833…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/06.jpg" title="ver_mu6zmnq3c4e24bc8" alt="simple capture 6"><figcaption>06 · mu6zmnq3c4e2…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/07.jpg" title="ver_mu714bu726340727" alt="simple capture 7"><figcaption>07 · mu714bu72634…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/08.jpg" title="ver_mu714bua99eda36d" alt="simple capture 8"><figcaption>08 · mu714bua99ed…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/09.jpg" title="ver_mu72ro0540722c92" alt="simple capture 9"><figcaption>09 · mu72ro054072…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/10.jpg" title="ver_mu73wpx754414d09" alt="simple capture 10"><figcaption>10 · mu73wpx75441…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/11.jpg" title="ver_mu746c6n6a32b1d4" alt="simple capture 11"><figcaption>11 · mu746c6n6a32…</figcaption></figure>
+      <figure><img class="shot" src="captures/simple/12.jpg" title="ver_mu74jxldb8550692" alt="simple capture 12"><figcaption>12 · mu74jxldb855…</figcaption></figure>
+  </div>
+
+  <h3>slotmachine</h3>
+  <p class="small muted">The forward chain. Twelve of 157 versions, chosen for contrast and shown in chain order. Source frames are 1024×1024, seed 1337. Click one to open it larger.</p>
+  <div class="captures">
+      <figure><img class="shot" src="captures/slotmachine/01.jpg" title="ver_mu7yy6qkaa12f051" alt="slotmachine capture 1"><figcaption>01 · mu7yy6qkaa12…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/02.jpg" title="ver_mu7z0bo8adc567d8" alt="slotmachine capture 2"><figcaption>02 · mu7z0bo8adc5…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/03.jpg" title="ver_mu7z5wjed56e8cab" alt="slotmachine capture 3"><figcaption>03 · mu7z5wjed56e…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/04.jpg" title="ver_mu7zg03a86571a1c" alt="slotmachine capture 4"><figcaption>04 · mu7zg03a8657…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/05.jpg" title="ver_mu80zwd2068dea3c" alt="slotmachine capture 5"><figcaption>05 · mu80zwd2068d…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/06.jpg" title="ver_mu815r5qd21b74ff" alt="slotmachine capture 6"><figcaption>06 · mu815r5qd21b…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/07.jpg" title="ver_mu819vxh871d33ee" alt="slotmachine capture 7"><figcaption>07 · mu819vxh871d…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/08.jpg" title="ver_mu81f3uh3531af7c" alt="slotmachine capture 8"><figcaption>08 · mu81f3uh3531…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/09.jpg" title="ver_mu81jm71c7110859" alt="slotmachine capture 9"><figcaption>09 · mu81jm71c711…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/10.jpg" title="ver_mu81pyf331dde2a3" alt="slotmachine capture 10"><figcaption>10 · mu81pyf331dd…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/11.jpg" title="ver_mu81ubkz9eb92da2" alt="slotmachine capture 11"><figcaption>11 · mu81ubkz9eb9…</figcaption></figure>
+      <figure><img class="shot" src="captures/slotmachine/12.jpg" title="ver_muckb4h2768b09c0" alt="slotmachine capture 12"><figcaption>12 · muckb4h2768b…</figcaption></figure>
+  </div>
+
+  <h3>behavior</h3>
+  <p class="small muted">The operator era. Twelve of 52 versions, chosen for contrast and shown in chain order. Source frames are 1024×1024, seed 1337. Click one to open it larger.</p>
+  <div class="captures">
+      <figure><img class="shot" src="captures/behavior/01.jpg" title="ver_mu7yy6qkaa12f051" alt="behavior capture 1"><figcaption>01 · mu7yy6qkaa12…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/02.jpg" title="ver_mucp2lwd6dbee104" alt="behavior capture 2"><figcaption>02 · mucp2lwd6dbe…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/03.jpg" title="ver_mucr342k6c000c2a" alt="behavior capture 3"><figcaption>03 · mucr342k6c00…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/04.jpg" title="ver_mucs2kb93b1f217d" alt="behavior capture 4"><figcaption>04 · mucs2kb93b1f…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/05.jpg" title="ver_mucvchwe46bf4240" alt="behavior capture 5"><figcaption>05 · mucvchwe46bf…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/06.jpg" title="ver_mucvn4lqb2dd7d6a" alt="behavior capture 6"><figcaption>06 · mucvn4lqb2dd…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/07.jpg" title="ver_mucvsovjbb74961b" alt="behavior capture 7"><figcaption>07 · mucvsovjbb74…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/08.jpg" title="ver_mudnxtlt68d93bca" alt="behavior capture 8"><figcaption>08 · mudnxtlt68d9…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/09.jpg" title="ver_mudoa4t5b834d0e8" alt="behavior capture 9"><figcaption>09 · mudoa4t5b834…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/10.jpg" title="ver_mudpm5ecdba932c1" alt="behavior capture 10"><figcaption>10 · mudpm5ecdba9…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/11.jpg" title="ver_mudroclfbac74eeb" alt="behavior capture 11"><figcaption>11 · mudroclfbac7…</figcaption></figure>
+      <figure><img class="shot" src="captures/behavior/12.jpg" title="ver_mudtkezme7c41392" alt="behavior capture 12"><figcaption>12 · mudtkezme7c4…</figcaption></figure>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="measurements">8 · Capture measurements</h2>
+
+  <p class="small muted">Historical record, 2026-09-15, at the older 768×768 viewport. The
+  current frame is one 1024×1024 square with seed 1337. The numbers below are kept as evidence
+  of the machine's speed and as the source of the step choice.</p>
+
+  <table>
+    <thead><tr><th>Item</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td>GPU</td><td>NVIDIA GeForce RTX 3090, 24 GB</td></tr>
+      <tr><td>Renderer backend</td><td>ANGLE (NVIDIA, GeForce RTX 3090, Direct3D11)</td></tr>
+      <tr><td>Browser</td><td>Chrome 153, headless, <code>playwright-core</code></td></tr>
+      <tr><td>Viewport</td><td>768 × 768, device pixel ratio 1</td></tr>
+      <tr><td>Artwork</td><td>physarum, 4000 molds, baseline configuration, seed 1337</td></tr>
+      <tr><td>Timestep</td><td>8 simulation steps per rendered frame</td></tr>
+    </tbody>
+  </table>
+
+  <table>
+    <thead><tr><th>Simulation step</th><th>Duration</th><th>PNG size</th><th>Trail checksum</th></tr></thead>
+    <tbody>
+      <tr><td>300</td><td>979 ms</td><td>188 196 B</td><td>207821703</td></tr>
+      <tr><td>1200</td><td>2 718 ms</td><td>317 276 B</td><td>4232262394</td></tr>
+      <tr><td>3000</td><td>6 441 ms</td><td>320 653 B</td><td>501569211</td></tr>
+      <tr><td>6000</td><td>12 700 ms</td><td>324 902 B</td><td>767379521</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note ok"><b>Finding 2 still guides the design.</b> The network has no visible
+  structure at step 300. The first filaments appear near step 1200. The image is saturated
+  near step 3600. The current frame uses step 2500: a late frame with real structure and a
+  shorter render. Set <code>PHYGEN_STEP_SCHEDULE</code> to change it. The cost is linear in the
+  step count, about 2 ms per step at that size.</div>
+
+  <h3>Not yet measured</h3>
+  <ul>
+    <li>Software WebGL on a CPU-only server, with <code>--use-gl=swiftshader</code>.</li>
+    <li>Image differences between two graphics drivers for the same seed and step.</li>
+    <li>The capture container: peak memory, wall-clock time, and process limits.</li>
+    <li>A real vision comparison. The demonstration's judgments come from a deterministic
+    test double that measures pixels. That is not aesthetic judgment and not evidence.</li>
+  </ul>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="api">9 · API reference</h2>
+
+  <p>Base path <code>/api</code>. The server listens on <code>PHYGEN_PORT</code> (default
+  8787). In development, Vite serves the interface on 5173 and proxies <code>/api</code>. The
+  artwork origin listens on <code>PHYGEN_LIVE_PORT</code> (default 8788). The API has no
+  authentication and no CSRF control; keep it on the loopback address.</p>
+
+  <table>
+    <thead><tr><th>Method and path</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>GET /api/health</code></td><td>Status: version, provider, capture, isolation, artwork count, model count.</td></tr>
+      <tr><td><code>GET /api/models</code></td><td>The Kilo catalog with prices per million tokens. A model used by a step must accept images.</td></tr>
+      <tr><td><code>GET /api/artworks</code></td><td>List the artworks.</td></tr>
+      <tr><td><code>POST /api/artworks/import</code></td><td>Import a package as the root version. The server validates it first; the import is idempotent per package path.</td></tr>
+      <tr><td><code>GET /api/artworks/:artworkId/tree</code></td><td>The chain: nodes, edges, the active run, and the active job kinds.</td></tr>
+      <tr><td><code>GET /api/versions/:versionId</code></td><td>The full version: configuration, changes, explanation, snapshot path, captures, usage.</td></tr>
+      <tr><td><code>GET /api/versions/:versionId/agent</code></td><td>The stored agent feed of a version, so a finished version still shows how it was made.</td></tr>
+      <tr><td><code>GET /api/versions/:versionId/artifacts/:name</code></td><td>A capture image by stage name; the newest capture is used on a miss.</td></tr>
+      <tr><td><code>POST /api/versions/:versionId/repair</code></td><td>Operators only. Repair a failed version and continue its step.</td></tr>
+      <tr><td><code>POST /api/versions/:versionId/capture</code></td><td>Operators only. Capture a frame for a version that has none.</td></tr>
+      <tr><td><code>GET /api/captures/:captureId.png</code></td><td>One captured frame, with a strong ETag, so a second request returns 304.</td></tr>
+      <tr><td><code>GET /live/:versionId</code></td><td>The HTML iframe wrapper that embeds the live artwork origin with a strict CSP.</td></tr>
+      <tr><td><code>POST /api/runs</code></td><td>Create a run: artworkId, evolutions (steps 1–100), an optional model, and an optional spend limit.</td></tr>
+      <tr><td><code>GET /api/runs</code></td><td>List runs (<code>?limit=20</code>).</td></tr>
+      <tr><td><code>GET /api/runs/:runId</code></td><td>One run with its jobs and usage.</td></tr>
+      <tr><td><code>GET /api/runs/:runId/summary</code></td><td>A small payload the interface polls while a run moves.</td></tr>
+      <tr><td><code>POST /api/runs/:runId/pause</code></td><td>New steps stop; the current bounded step finishes.</td></tr>
+      <tr><td><code>POST /api/runs/:runId/resume</code></td><td>Continue a paused run.</td></tr>
+      <tr><td><code>POST /api/runs/:runId/stop</code></td><td>End the run. Active tasks are cancelled where the driver supports it.</td></tr>
+      <tr><td><code>GET /api/runs/:runId/events</code></td><td>Server-sent events. Send <code>Last-Event-ID</code> to replay from a sequence number.</td></tr>
+    </tbody>
+  </table>
+
+  <p>Every other path returns the built interface (<code>web/dist/index.html</code>). When the
+  interface is not built, the server returns a page that says so.</p>
+
+  <h3>Error body</h3>
+  <div class="mono-block">{ "error": { "code": "budget_exceeded", "message": "…", "detail": {} } }</div>
+  <p class="small">Codes: <code>package_invalid</code>, <code>artwork_not_found</code>,
+  <code>version_not_found</code>, <code>run_not_found</code>, <code>capture_not_found</code>,
+  <code>not_found</code>, <code>payload_invalid</code>, <code>run_state_invalid</code>,
+  <code>budget_exceeded</code>, <code>request_limit_reached</code>,
+  <code>token_limit_reached</code>, <code>round_limit_reached</code>,
+  <code>time_limit_reached</code>, <code>capture_unavailable</code>,
+  <code>isolation_required</code>, <code>provider_unavailable</code>,
+  <code>internal_error</code>.</p>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="settings">10 · Settings</h2>
+
+  <table>
+    <thead><tr><th>Variable</th><th>Default</th><th>Effect</th></tr></thead>
+    <tbody>
+      <tr><td><code>PHYGEN_ALLOW_SPEND</code></td><td>unset</td><td>Model calls are refused until you set this to <code>1</code>.</td></tr>
+      <tr><td><code>PHYGEN_DRIVER</code></td><td><code>auto</code></td><td><code>pi</code> uses the Pi sessions. <code>fake</code> uses the deterministic test double.</td></tr>
+      <tr><td><code>PHYGEN_PI_ENTRY</code></td><td>unset</td><td>The Pi CLI entry. Set this on Windows, where <code>pi</code> is a <code>.cmd</code> shim.</td></tr>
+      <tr><td><code>PHYGEN_MODEL</code></td><td><code>deepseek/deepseek-v4.1-flash</code></td><td>The model of the run. The step session must accept images.</td></tr>
+      <tr><td><code>PHYGEN_AUTHOR_MODEL</code></td><td>same as <code>PHYGEN_MODEL</code></td><td>The author model.</td></tr>
+      <tr><td><code>PHYGEN_AUTHOR_THINKING</code></td><td><code>high</code></td><td>Author effort.</td></tr>
+      <tr><td><code>PHYGEN_MAX_RUN_USD</code></td><td><code>0</code></td><td>A cost limit. <code>0</code> enforces none.</td></tr>
+      <tr><td><code>PHYGEN_COST_SAFETY_FACTOR</code></td><td><code>1.8</code></td><td>The reserve is this multiple of the estimate.</td></tr>
+      <tr><td><code>PHYGEN_REQUIRE_ISOLATION</code></td><td><code>0</code></td><td>Set to <code>1</code> to refuse source-code children without a container.</td></tr>
+      <tr><td><code>PHYGEN_CAPTURE</code></td><td><code>auto</code></td><td><code>local</code>, <code>docker</code>, or <code>auto</code>.</td></tr>
+      <tr><td><code>PHYGEN_PORT</code></td><td><code>8787</code></td><td>The controller and interface listener.</td></tr>
+      <tr><td><code>PHYGEN_LIVE_PORT</code></td><td><code>8788</code></td><td>The artwork origin listener.</td></tr>
+      <tr><td><code>PHYGEN_DATA</code></td><td><code>data-evolve</code></td><td>The records directory.</td></tr>
+      <tr><td><code>PHYGEN_STEP_SCHEDULE</code></td><td><code>2500</code></td><td>The capture step (or steps, comma separated).</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Install and run</h3>
+  <div class="mono-block">cd server &amp;&amp; npm install
+cd ../web &amp;&amp; npm install
+cd ../server &amp;&amp; npm start          # interface and API on 8787, artwork on 8788</div>
+  <p class="small muted">Open <code>http://127.0.0.1:8787/</code>. The first page load imports
+  the <code>threejs</code> package as the root version.</p>
+
+  <h3>Checks</h3>
+  <div class="mono-block">cd server  &amp;&amp; npm test        # the step loop, budgets, storage, events
+cd threejs &amp;&amp; npm test        # the artwork: seeds, reset, bounds, adapter
+cd threejs &amp;&amp; npm run validate
+cd web     &amp;&amp; npm test        # the chain order and the playing rule
+cd web     &amp;&amp; npm run build</div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="tools">11 · Operator tools</h2>
+
+  <p>The interface has no button for these. They exist for an operator. Every tool is under
+  <code>server/tools/</code> and runs from <code>server/</code>.</p>
+
+  <table>
+    <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>repair-version.mjs</code></td><td>Operate on one version: repair, capture-only, refactor, revive, and the in-place display fixes (fix-blend, fix-aa, kill-strobe, remove-settle, soften-clear, calm-forces).</td></tr>
+      <tr><td><code>capture-frame.mjs</code></td><td>Capture frames for a version outside any run. <code>--force</code> drops old frames. The server must be stopped.</td></tr>
+      <tr><td><code>reset-to-root.mjs</code></td><td>Delete all evolved versions, runs, workspaces, and unreferenced snapshots; keep the root mother.</td></tr>
+      <tr><td><code>truncate-chain.mjs</code></td><td>Keep versions through a generation and remove the rest. Refuses on active runs.</td></tr>
+      <tr><td><code>chain-index.mjs</code></td><td>Export the chain (parent lineage, status, config, hashes) as JSON for version control.</td></tr>
+      <tr><td><code>snapshot-report.mjs</code></td><td>Read-only integrity verification of every snapshot directory.</td></tr>
+      <tr><td><code>backup.mjs</code></td><td>One consistent copy of the records and their files, by SQLite <code>VACUUM INTO</code>.</td></tr>
+      <tr><td><code>live-check.mjs</code></td><td>Verify that an artwork plays both directly and through the sandboxed embed.</td></tr>
+      <tr><td><code>failed-steps.mjs</code></td><td>Read-only post-mortem of failed versions, with reasons, jobs, and events.</td></tr>
+      <tr><td><code>clear-stale-jobs.mjs</code></td><td>Close jobs and versions left in flight by a killed tool. Never touches active runs.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>The test double</h3>
+  <p><code>PHYGEN_DRIVER=fake</code> runs a deterministic stub instead of a model. Its code
+  changes are canned, and every card it produced carries a <b>test double</b> chip. Work made
+  by the stub is not work.</p>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <h2 id="appendix">12 · Appendix: commit logs</h2>
+
+  <h3>master — 26 commits (oldest last)</h3>
+  <div class="log">
+    <div><span class="sha">e97bb01</span> Write down how the system works, and what it measured</div>
+    <div><span class="sha">2f102dc</span> Draw each parent's children as a ring, and make the interface answer a click</div>
+    <div><span class="sha">99bc7a9</span> Correct the recovery and snapshot faults, and measure relationships</div>
+    <div><span class="sha">776516c</span> Do not repeat a change the run already made, and show the palette</div>
+    <div><span class="sha">ce63d8a</span> Stop the view oscillating between two zooms</div>
+    <div><span class="sha">02add29</span> Survive an intermittent provider gateway</div>
+    <div><span class="sha">feb3930</span> Following the work frames its family, not one node</div>
+    <div><span class="sha">6026d0e</span> Survive a provider outage at session start</div>
+    <div><span class="sha">9822631</span> Following the work no longer zooms, so the tree stays visible</div>
+    <div><span class="sha">6e17fa9</span> Capture the documentation at 2160p, and hold the view still</div>
+    <div><span class="sha">af5b38e</span> Record one sequence per job, centred on the working version</div>
+    <div><span class="sha">b5085c4</span> Keep the tree at a readable zoom</div>
+    <div><span class="sha">c2589cd</span> Read the real files, and record a documented run</div>
+    <div><span class="sha">2e55c88</span> Show the whole file as an abstraction, and keep the runner moving</div>
+    <div><span class="sha">9c15c8d</span> Animate the work: a code column, a travelling border, and drawn paths</div>
+    <div><span class="sha">a388835</span> Follow the working version in the feed, and stamp the build</div>
+    <div><span class="sha">a7f1d14</span> Restore the frames of finished nodes</div>
+    <div><span class="sha">b172a86</span> Show the agent at work, the live frame, and the decision</div>
+    <div><span class="sha">94c7b5e</span> Name the failure on a tile without a frame</div>
+    <div><span class="sha">bd5f097</span> Add a tickbox to hide failed nodes</div>
+    <div><span class="sha">26d7221</span> Record the variant vocabulary and the removed cost guardrails</div>
+    <div><span class="sha">ea57460</span> Call children variants and levels evolutions, and drop the cost guardrails</div>
+    <div><span class="sha">915dbd4</span> Lay the tree out under each parent, and branch from the selected version</div>
+    <div><span class="sha">36836b8</span> Enable paid calls and reskin the interface</div>
+    <div><span class="sha">0c87925</span> Record the current task state and settings</div>
+    <div><span class="sha">e67d678</span> Add the phygen evolution system</div>
+  </div>
+
+  <h3>simple — 7 new commits</h3>
+  <div class="log">
+    <div><span class="sha">e8056f6</span> Pack a brood as a block beside its one branching child, and draw the border around the card</div>
+    <div><span class="sha">8ff2c14</span> Follow the work without moving the zoom, and record the tree</div>
+    <div><span class="sha">4e45e88</span> Make the judge pick a variant, and tolerate a frame identifier with extra words</div>
+    <div><span class="sha">7163025</span> Measure how different two versions LOOK, with a bounded vision call</div>
+    <div><span class="sha">e296a58</span> Keep the tree in frame while the documentation records it</div>
+    <div><span class="sha">9ec912c</span> Let a run choose its own parent from an archive, and write its own direction</div>
+    <div><span class="sha">5154404</span> Promote on novelty as well as quality, and survive a comparison that never answered</div>
+  </div>
+
+  <h3>slotmachine — 5 new commits</h3>
+  <div class="log">
+    <div><span class="sha">3c021cd</span> Keep the frame calm in time, and add the operator edit modes for the chain</div>
+    <div><span class="sha">7c01557</span> Start the next artwork while the one above it is still a fifth visible</div>
+    <div><span class="sha">7b5b909</span> Play the card the view is on, and stop the one before it</div>
+    <div><span class="sha">55e8d41</span> Rebuild the interface as a chain of cards, and give a working step a pixel field</div>
+    <div><span class="sha">d19ada8</span> Run the chain forward: one child per step, and no judge</div>
+  </div>
+
+  <h3>behavior — 4 new commits (current)</h3>
+  <div class="log">
+    <div><span class="sha">ad3de1e</span> Keep the evolved artworks in version control, with the chain record as text</div>
+    <div><span class="sha">4104559</span> Ask each step for a substantial visual change, and keep the trail in charge</div>
+    <div><span class="sha">41f970c</span> Add the operator modes for sharp pixels, a warm window, and colored-noise color</div>
+    <div><span class="sha">88a4703</span> Let an operator fix kept versions in place, and add the chain frame, reset, and truncation tools</div>
+  </div>
+
+  <footer>
+    <p>phygen documentation. The palette, the font, and the hard edges are copied from
+    <code>web/src/styles.css</code>. The flow charts are SVG. The screenshots and the
+    screencasts are the project's own, recorded on the tree era. This page is static: open it
+    from the filesystem or serve <code>docs/site/</code>.</p>
+  </footer>
+
+  </main>
+</div>
+
+<script>
+  // Click a screenshot to open it larger.
+  (function () {
+    var dlg = document.createElement('dialog');
+    dlg.className = 'lightbox';
+    var img = document.createElement('img');
+    var btn = document.createElement('button');
+    btn.textContent = 'Close';
+    btn.className = 'close';
+    dlg.appendChild(img); dlg.appendChild(btn);
+    document.body.appendChild(dlg);
+    btn.addEventListener('click', function () { dlg.close(); });
+    dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });
+    document.addEventListener('click', function (e) {
+      var t = e.target;
+      if (t && t.tagName === 'IMG' && t.classList.contains('shot')) {
+        img.src = t.getAttribute('src');
+        img.alt = t.getAttribute('alt') || '';
+        dlg.showModal();
+      }
+    });
+  })();
+</script>
+</body>
+</html>

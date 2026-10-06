@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 800" role="img" aria-label="The life of one step: admission, chain head, author, validate, publish, capture, promote, with the repair and failure paths">
+  <style>
+    text { font-family: "JetBrains Mono", ui-monospace, Consolas, monospace; fill: #000; }
+    .n   { fill: #fff; stroke: #000; stroke-width: 1; }
+    .n.a { fill: #f2f2f2; }
+    .n.e { fill: #fdf2f2; stroke: #a33; }
+    .nt  { font-size: 13px; font-weight: 700; }
+    .ns  { font-size: 10.5px; fill: #767676; }
+    .nu  { font-size: 10.5px; fill: #0000ff; }
+    .num { font-size: 11px; fill: #767676; }
+    .w   { fill: none; stroke: #000; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+    .w.a { stroke: #0000ff; }
+    .w.e { stroke: #a33; stroke-dasharray: 4 3; }
+    .w.d { stroke: #767676; stroke-dasharray: 2 3; }
+    .lbl { font-size: 10.5px; fill: #767676; }
+    .tag { font-size: 10.5px; fill: #0000ff; }
+    .bad { font-size: 10.5px; fill: #a33; }
+  </style>
+  <defs>
+    <marker id="ah" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7.5,3 L0,6 z" fill="#000"/></marker>
+    <marker id="aha" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7.5,3 L0,6 z" fill="#0000ff"/></marker>
+    <marker id="ahe" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7.5,3 L0,6 z" fill="#a33"/></marker>
+    <marker id="ahd" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7.5,3 L0,6 z" fill="#767676"/></marker>
+  </defs>
+
+  <!-- main column -->
+  <rect class="n" x="60" y="40" width="320" height="64"/>
+  <text class="num" x="72" y="62">1 · admission</text>
+  <text class="nt" x="72" y="80">POST /api/runs</text>
+  <text class="ns" x="220" y="62">budget fits the run?</text>
+  <text class="ns" x="220" y="76">refuse before a record</text>
+
+  <rect class="n" x="60" y="128" width="320" height="64"/>
+  <text class="num" x="72" y="150">2 · chain head</text>
+  <text class="nt" x="72" y="168">newest promoted version</text>
+  <text class="ns" x="240" y="150">on step 1: the root,</text>
+  <text class="ns" x="240" y="164">the imported mother</text>
+
+  <rect class="n" x="60" y="216" width="320" height="64"/>
+  <text class="num" x="72" y="238">3 · author</text>
+  <text class="nt" x="72" y="256">one session, one child</text>
+  <text class="ns" x="72" y="272">copy the parent, add the last three frames</text>
+
+  <rect class="n" x="60" y="304" width="320" height="64"/>
+  <text class="num" x="72" y="326">4 · validate</text>
+  <text class="nt" x="72" y="344">edit surface · package · config</text>
+  <text class="ns" x="72" y="360">a technical fault gets one bounded repair</text>
+
+  <rect class="n" x="60" y="392" width="320" height="64"/>
+  <text class="num" x="72" y="414">5 · publish</text>
+  <text class="nt" x="72" y="432">immutable snapshot by hash</text>
+  <text class="ns" x="72" y="448">atomic: write pending, then rename</text>
+
+  <rect class="n" x="60" y="480" width="320" height="64"/>
+  <text class="num" x="72" y="502">6 · capture</text>
+  <text class="nt" x="72" y="520">one 1024×1024 frame</text>
+  <text class="ns" x="72" y="536">seed 1337 · step 2500 · dpr 1</text>
+
+  <rect class="n a" x="60" y="568" width="320" height="64"/>
+  <text class="num" x="72" y="590">7 · promote</text>
+  <text class="nt" x="72" y="608">the child becomes the head</text>
+  <text class="ns" x="72" y="624">status promoted · on the lineage</text>
+
+  <!-- straight spine -->
+  <line class="w" x1="220" y1="104" x2="220" y2="128" marker-end="url(#ah)"/>
+  <line class="w" x1="220" y1="192" x2="220" y2="216" marker-end="url(#ah)"/>
+  <line class="w" x1="220" y1="280" x2="220" y2="304" marker-end="url(#ah)"/>
+  <line class="w" x1="220" y1="368" x2="220" y2="392" marker-end="url(#ah)"/>
+  <line class="w" x1="220" y1="456" x2="220" y2="480" marker-end="url(#ah)"/>
+
+  <!-- repair for validate -->
+  <rect class="n e" x="600" y="296" width="344" height="72"/>
+  <text class="nt" x="612" y="320">one bounded repair session</text>
+  <text class="ns" x="612" y="338">the failure code and text, the same package,</text>
+  <text class="ns" x="612" y="354">allowed paths only · repair in place, keep the intent</text>
+  <line class="w e" x1="380" y1="344" x2="600" y2="344" marker-end="url(#ahe)"/>
+  <text class="bad" x="404" y="338">fault</text>
+  <line class="w a" x1="600" y1="316" x2="380" y2="316" marker-end="url(#aha)"/>
+  <text class="tag" x="404" y="312">one retry</text>
+
+  <!-- repair and recapture for capture -->
+  <rect class="n e" x="600" y="500" width="344" height="72"/>
+  <text class="nt" x="612" y="524">repair and recapture</text>
+  <text class="ns" x="612" y="542">a capture fault is infrastructure. Repair, revalidate,</text>
+  <text class="ns" x="612" y="558">republish, capture once more. Timeouts never repair.</text>
+  <line class="w e" x1="380" y1="532" x2="600" y2="532" marker-end="url(#ahe)"/>
+  <text class="bad" x="404" y="526">capture fault</text>
+  <line class="w a" x1="600" y1="504" x2="380" y2="504" marker-end="url(#aha)"/>
+  <text class="tag" x="404" y="500">recover</text>
+
+  <!-- failed terminal -->
+  <rect class="n e" x="600" y="700" width="344" height="80"/>
+  <text class="nt" x="612" y="724">version · failed</text>
+  <text class="ns" x="612" y="742">a second failure ends the step. The head stays put.</text>
+  <text class="ns" x="612" y="758">The next step starts from the last good version.</text>
+  <polyline class="w e" points="944,332 962,332 962,676 800,676 800,700" marker-end="url(#ahe)"/>
+  <text class="bad" x="806" y="670">second failure</text>
+  <line class="w e" x1="772" y1="572" x2="772" y2="700" marker-end="url(#ahe)"/>
+  <text class="bad" x="780" y="640">still fails</text>
+
+  <!-- the loop back to the head -->
+  <polyline class="w d" points="60,600 20,600 20,160 60,160" marker-end="url(#ahd)"/>
+  <text class="lbl" x="8" y="392" transform="rotate(-90 8 392)">next step starts here</text>
+</svg>

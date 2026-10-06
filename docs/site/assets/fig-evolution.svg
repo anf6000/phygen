@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1350 520" role="img" aria-label="The four branches as a chain of approaches: master, simple, slotmachine, behavior">
+  <style>
+    text { font-family: "JetBrains Mono", ui-monospace, Consolas, monospace; fill: #000; }
+    .n   { fill: #fff; stroke: #000; stroke-width: 1; }
+    .hdr { fill: #000; }
+    .htx { font-size: 14px; font-weight: 700; fill: #fff; }
+    .sub { font-size: 10px; fill: #f2f2f2; }
+    .th  { font-size: 11px; font-weight: 700; }
+    .li  { font-size: 10.5px; fill: #000; }
+    .dt  { font-size: 10.5px; fill: #767676; }
+    .w   { fill: none; stroke: #000; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+    .w.d { stroke: #767676; stroke-dasharray: 3 3; }
+    .lbl { font-size: 10.5px; fill: #767676; }
+    .badge { fill: #fff; stroke: #0000ff; stroke-width: 1; }
+    .btag  { font-size: 10.5px; fill: #0000ff; text-anchor: middle; }
+  </style>
+  <defs>
+    <marker id="ah" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7.5,3 L0,6 z" fill="#000"/></marker>
+    <marker id="ahd" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7.5,3 L0,6 z" fill="#767676"/></marker>
+  </defs>
+
+  <!-- dates -->
+  <text class="dt" x="20" y="30">1 · the judged tree</text>
+  <text class="dt" x="370" y="30">2 · novelty and archive</text>
+  <text class="dt" x="720" y="30">3 · the forward chain</text>
+  <text class="dt" x="1070" y="30">4 · the operator</text>
+  <text class="dt" x="20" y="46">Sep 15–17 · 26 commits</text>
+  <text class="dt" x="370" y="46">Sep 18 · 5 commits</text>
+  <text class="dt" x="720" y="46">Sep 20–22 · 5 commits</text>
+  <text class="dt" x="1070" y="46">Sep 22–29 · 4 commits</text>
+
+  <!-- master -->
+  <rect class="n" x="20" y="60" width="260" height="330"/>
+  <rect class="hdr" x="20" y="60" width="260" height="34"/>
+  <text class="htx" x="32" y="82">master</text>
+  <text class="sub" x="150" y="82">origin</text>
+  <text class="th" x="32" y="116">A clickable artwork tree.</text>
+  <text class="li" x="32" y="140">Select a version, give a</text>
+  <text class="li" x="32" y="154">direction, and spawn a brood</text>
+  <text class="li" x="32" y="168">of variants. A blind vision</text>
+  <text class="li" x="32" y="182">judge compares the rendered</text>
+  <text class="li" x="32" y="196">images and picks the winner.</text>
+  <text class="li" x="32" y="210">The tree keeps every sibling.</text>
+  <text class="li" x="32" y="244">• 3 variants per evolution</text>
+  <text class="li" x="32" y="262">• two-phase blind judge</text>
+  <text class="li" x="32" y="280">• React Flow radial rings</text>
+  <text class="li" x="32" y="298">• branch from any node</text>
+  <text class="li" x="32" y="316">• similarity measurements</text>
+  <text class="li" x="32" y="334">• agent feed + live frames</text>
+  <text class="li" x="32" y="352">• no cost guardrail by default</text>
+
+  <!-- simple -->
+  <rect class="n" x="370" y="60" width="260" height="330"/>
+  <rect class="hdr" x="370" y="60" width="260" height="34"/>
+  <text class="htx" x="382" y="82">simple</text>
+  <text class="sub" x="500" y="82">self-directed tree</text>
+  <text class="th" x="382" y="116">Promote on novelty too.</text>
+  <text class="li" x="382" y="140">The judged tree gains its own</text>
+  <text class="li" x="382" y="154">drive. A promotion must pass</text>
+  <text class="li" x="382" y="168">a novelty floor as well as a</text>
+  <text class="li" x="382" y="182">quality floor. The run picks</text>
+  <text class="li" x="382" y="196">its own parent from a small</text>
+  <text class="li" x="382" y="210">archive and writes its own</text>
+  <text class="li" x="382" y="224">direction.</text>
+  <text class="li" x="382" y="258">• novelty + quality floors</text>
+  <text class="li" x="382" y="276">• archive of up to 8 members</text>
+  <text class="li" x="382" y="294">• pick “furthest” or best</text>
+  <text class="li" x="382" y="312">• bounded vision similarity</text>
+  <text class="li" x="382" y="330">• a dead judge no longer</text>
+  <text class="li" x="382" y="344">  stalls the run</text>
+
+  <!-- slotmachine -->
+  <rect class="n" x="720" y="60" width="260" height="330"/>
+  <rect class="hdr" x="720" y="60" width="260" height="34"/>
+  <text class="htx" x="732" y="82">slotmachine</text>
+  <text class="sub" x="840" y="82">the forward chain</text>
+  <text class="th" x="732" y="116">Kill the slot machine.</text>
+  <text class="li" x="732" y="140">One button starts X steps.</text>
+  <text class="li" x="732" y="154">Each step makes exactly one</text>
+  <text class="li" x="732" y="168">child of the newest good</text>
+  <text class="li" x="732" y="182">version, and the child is</text>
+  <text class="li" x="732" y="196">always kept. No judge, no</text>
+  <text class="li" x="732" y="210">variants, no archive: the</text>
+  <text class="li" x="732" y="224">artwork grows as a chain.</text>
+  <text class="li" x="732" y="258">• exactly one child per step</text>
+  <text class="li" x="732" y="276">• no judge and no variants</text>
+  <text class="li" x="732" y="294">• vertical card chain UI</text>
+  <text class="li" x="732" y="312">• pixel-field loading art</text>
+  <text class="li" x="732" y="330">• one live player at a time</text>
+  <text class="li" x="732" y="348">• calm-in-time render rules</text>
+
+  <!-- behavior -->
+  <rect class="n" x="1070" y="60" width="260" height="330"/>
+  <rect class="hdr" x="1070" y="60" width="260" height="34"/>
+  <text class="htx" x="1082" y="82">behavior</text>
+  <text class="sub" x="1210" y="82">current</text>
+  <text class="th" x="1082" y="116">Quality is the operator's.</text>
+  <text class="li" x="1082" y="140">The chain stays. An operator</text>
+  <text class="li" x="1082" y="154">repairs a failed version from</text>
+  <text class="li" x="1082" y="168">its own snapshot, fixes a</text>
+  <text class="li" x="1082" y="182">kept version in place, and</text>
+  <text class="li" x="1082" y="196">refactors it. The step brief</text>
+  <text class="li" x="1082" y="210">is stricter. The chain is</text>
+  <text class="li" x="1082" y="224">committed to git as text.</text>
+  <text class="li" x="1082" y="258">• operator repair / fix / refactor</text>
+  <text class="li" x="1082" y="276">• reset, truncate, chain-index</text>
+  <text class="li" x="1082" y="294">• a stricter art brief</text>
+  <text class="li" x="1082" y="312">• docs/chain.json in git</text>
+  <text class="li" x="1082" y="330">• failed steps are hidden</text>
+  <text class="li" x="1082" y="348">• capture-frame tool</text>
+
+  <!-- connectors -->
+  <line class="w" x1="280" y1="225" x2="370" y2="225" marker-end="url(#ah)"/>
+  <line class="w" x1="630" y1="225" x2="720" y2="225" marker-end="url(#ah)"/>
+  <line class="w" x1="980" y1="225" x2="1070" y2="225" marker-end="url(#ah)"/>
+
+  <!-- transition badges -->
+  <rect class="badge" x="292" y="214" width="66" height="22"/>
+  <text class="btag" x="325" y="229">+novelty</text>
+  <rect class="badge" x="649" y="214" width="52" height="22"/>
+  <text class="btag" x="675" y="229">−judge</text>
+  <rect class="badge" x="992" y="214" width="66" height="22"/>
+  <text class="btag" x="1025" y="229">+control</text>
+
+  <!-- the durable core -->
+  <line class="w d" x1="20" y1="430" x2="1310" y2="430" marker-end="url(#ahd)"/>
+  <text class="lbl" x="20" y="452">The durable core, written on master and kept by every branch after it:</text>
+  <text class="lbl" x="20" y="468">the package contract · immutable hash snapshots · the sandboxed capture · the event stream · the agent feed · budget accounting.</text>
+  <text class="lbl" x="20" y="490">simple survived only as a lesson; slotmachine and behavior are the line the project kept.</text>
+</svg>

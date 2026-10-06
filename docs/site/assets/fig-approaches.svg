@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 580" role="img" aria-label="Two approaches side by side: the judged tree and the forward chain">
+  <style>
+    text { font-family: "JetBrains Mono", ui-monospace, Consolas, monospace; fill: #000; }
+    .n   { fill: #fff; stroke: #000; stroke-width: 1; }
+    .n.q { fill: #f2f2f2; }
+    .n.w { stroke: #0000ff; stroke-width: 2; }
+    .n.win { stroke: #0000ff; stroke-width: 2; }
+    .nt  { font-size: 12px; font-weight: 700; }
+    .ns  { font-size: 10px; fill: #767676; }
+    .th  { font-size: 15px; font-weight: 700; }
+    .sd  { font-size: 11px; fill: #767676; }
+    .port{ fill: #000; }
+    .w   { fill: none; stroke: #000; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+    .w.a { stroke: #0000ff; }
+    .w.d { stroke: #767676; stroke-dasharray: 3 3; }
+    .lbl { font-size: 10.5px; fill: #767676; }
+    .tag { font-size: 10.5px; fill: #0000ff; }
+    .frame { fill: #000; }
+    .div { stroke: #000; stroke-width: 1; stroke-dasharray: 2 4; }
+  </style>
+  <defs>
+    <marker id="ah" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7.5,3 L0,6 z" fill="#000"/></marker>
+    <marker id="aha" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7.5,3 L0,6 z" fill="#0000ff"/></marker>
+  </defs>
+
+  <line class="div" x1="560" y1="20" x2="560" y2="560"/>
+
+  <!-- ── left: judged tree ── -->
+  <text class="th" x="30" y="42">The judged tree</text>
+  <text class="sd" x="30" y="60">master and simple · a brood of variants, a vision judge, a tree</text>
+
+  <rect class="n" x="60" y="78" width="150" height="56"/>
+  <text class="nt" x="74" y="102">Root</text>
+  <text class="ns" x="74" y="120">generation 0</text>
+
+  <rect class="n" x="30" y="212" width="120" height="54"/>
+  <text class="nt" x="42" y="234">variant a</text>
+  <text class="ns" x="42" y="250">refinement</text>
+
+  <rect class="n win" x="200" y="212" width="120" height="54"/>
+  <text class="nt" x="212" y="234">variant b</text>
+  <text class="ns" x="212" y="250">structure</text>
+
+  <rect class="n" x="370" y="212" width="120" height="54"/>
+  <text class="nt" x="382" y="234">variant c</text>
+  <text class="ns" x="382" y="250">experiment</text>
+
+  <polyline class="w" points="135,134 135,184 90,184 90,212" marker-end="url(#ah)"/>
+  <polyline class="w" points="135,134 135,184 260,184 260,212" marker-end="url(#ah)"/>
+  <polyline class="w" points="135,134 135,184 430,184 430,212" marker-end="url(#ah)"/>
+
+  <rect class="n" x="140" y="330" width="300" height="66"/>
+  <text class="nt" x="154" y="356">blind vision judge</text>
+  <text class="ns" x="154" y="374">images only: no source, no author</text>
+  <text class="ns" x="154" y="388">claim, no tools. Randomised order.</text>
+
+  <polyline class="w" points="90,266 90,306 290,306 290,330" marker-end="url(#ah)"/>
+  <polyline class="w" points="260,266 260,306 290,306" />
+  <polyline class="w" points="430,266 430,306 290,306" />
+  <rect class="port" x="286" y="326" width="8" height="8"/>
+
+  <rect class="n a" x="140" y="452" width="300" height="60"/>
+  <text class="nt" x="154" y="476">the winner becomes the parent</text>
+  <text class="ns" x="154" y="494">of the next evolution; every sibling is kept</text>
+  <line class="w a" x1="290" y1="396" x2="290" y2="452" marker-end="url(#aha)"/>
+
+  <text class="tag" x="206" y="206">winner</text>
+  <text class="lbl" x="30" y="200">spawn a brood</text>
+
+  <!-- ── right: forward chain ── -->
+  <text class="th" x="600" y="42">The forward chain</text>
+  <text class="sd" x="600" y="60">slotmachine and behavior · one child per step, always kept, no judge</text>
+
+  <rect class="n" x="620" y="80" width="240" height="60"/>
+  <text class="nt" x="634" y="104">Root</text>
+  <text class="ns" x="634" y="122">the imported mother</text>
+  <rect class="frame" x="800" y="90" width="48" height="40"/>
+
+  <rect class="n" x="620" y="180" width="240" height="60"/>
+  <text class="nt" x="634" y="204">Step 1</text>
+  <text class="ns" x="634" y="222">promoted</text>
+  <rect class="frame" x="800" y="190" width="48" height="40"/>
+
+  <rect class="n" x="620" y="280" width="240" height="60"/>
+  <text class="nt" x="634" y="304">Step 2</text>
+  <text class="ns" x="634" y="322">promoted</text>
+  <rect class="frame" x="800" y="290" width="48" height="40"/>
+
+  <rect class="n a" x="620" y="380" width="240" height="60"/>
+  <text class="nt" x="634" y="404">Step 3</text>
+  <text class="ns" x="634" y="422">promoted · plays live</text>
+  <rect class="frame" x="800" y="390" width="48" height="40"/>
+
+  <line class="w" x1="740" y1="140" x2="740" y2="180" marker-end="url(#ah)"/>
+  <line class="w" x1="740" y1="240" x2="740" y2="280" marker-end="url(#ah)"/>
+  <line class="w" x1="740" y1="340" x2="740" y2="380" marker-end="url(#ah)"/>
+  <text class="lbl" x="752" y="164">the newest good version is the parent</text>
+
+  <text class="lbl" x="620" y="472">No judge. No variants. No archive.</text>
+  <text class="lbl" x="620" y="488">Every child that passes the package checks is kept,</text>
+  <text class="lbl" x="620" y="504">whatever it looks like. A person judges the frames.</text>
+  <text class="lbl" x="620" y="528">A technical failure is recorded and does not become a parent.</text>
+</svg>

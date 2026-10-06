@@ -2,3 +2,11 @@
 # every file in the package. Keep those bytes exactly as they were committed, so
 # a checkout still matches the recorded hashes and the integrity check passes.
 snapshots/** -text
+
+# Rendered artworks and documentation images are large binaries. Store them in
+# Git LFS so the repository history stays small.
+*.png filter=lfs diff=lfs merge=lfs -text
+*.jpg filter=lfs diff=lfs merge=lfs -text
+*.jpeg filter=lfs diff=lfs merge=lfs -text
+*.gif filter=lfs diff=lfs merge=lfs -text
+*.webp filter=lfs diff=lfs merge=lfs -text

@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 470" role="img" aria-label="The controller origin, the separate artwork origin, and the sandboxed capture">
+  <style>
+    text { font-family: "JetBrains Mono", ui-monospace, Consolas, monospace; fill: #000; }
+    .big { fill: #fff; stroke: #000; stroke-width: 1; }
+    .n   { fill: #fff; stroke: #000; stroke-width: 1; }
+    .n.q { fill: #f2f2f2; }
+    .n.e { fill: #fdf2f2; stroke: #a33; }
+    .th  { font-size: 15px; font-weight: 700; }
+    .nt  { font-size: 11.5px; font-weight: 700; }
+    .ns  { font-size: 10px; fill: #767676; }
+    .mono{ font-size: 10px; }
+    .w   { fill: none; stroke: #000; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+    .w.a { stroke: #0000ff; }
+    .w.e { stroke: #a33; stroke-dasharray: 4 3; }
+    .w.d { stroke: #767676; stroke-dasharray: 3 3; }
+    .lbl { font-size: 10.5px; fill: #767676; }
+    .tag { font-size: 10.5px; fill: #0000ff; }
+    .bad { font-size: 10.5px; fill: #a33; }
+  </style>
+  <defs>
+    <marker id="ah" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7.5,3 L0,6 z" fill="#000"/></marker>
+    <marker id="aha" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7.5,3 L0,6 z" fill="#0000ff"/></marker>
+    <marker id="ahe" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7.5,3 L0,6 z" fill="#a33"/></marker>
+  </defs>
+
+  <!-- controller origin -->
+  <rect class="big" x="30" y="50" width="400" height="180"/>
+  <text class="th" x="44" y="76">controller origin</text>
+  <text class="lbl" x="270" y="76">127.0.0.1:8787</text>
+  <rect class="n q" x="48" y="92" width="170" height="40"/>
+  <text class="nt" x="58" y="110">API · /api</text>
+  <text class="ns" x="58" y="125">runs, versions, captures</text>
+  <rect class="n q" x="234" y="92" width="182" height="40"/>
+  <text class="nt" x="244" y="110">SSE · /events</text>
+  <text class="ns" x="244" y="125">ordered, replayable</text>
+  <rect class="n q" x="48" y="142" width="170" height="40"/>
+  <text class="nt" x="58" y="160">web/dist</text>
+  <text class="ns" x="58" y="175">the built interface</text>
+  <rect class="n q" x="234" y="142" width="182" height="40"/>
+  <text class="nt" x="244" y="160">/live/:versionId</text>
+  <text class="ns" x="244" y="175">the iframe wrapper</text>
+  <text class="lbl" x="44" y="210">holds the records, the keys, and the budget</text>
+
+  <!-- artwork origin -->
+  <rect class="big" x="570" y="50" width="400" height="180"/>
+  <text class="th" x="584" y="76">artwork origin</text>
+  <text class="lbl" x="810" y="76">127.0.0.1:8788</text>
+  <rect class="n q" x="588" y="92" width="364" height="40"/>
+  <text class="nt" x="598" y="110">serves one published snapshot</text>
+  <text class="ns" x="598" y="125">the package files, unchanged</text>
+  <rect class="n q" x="588" y="142" width="176" height="40"/>
+  <text class="nt" x="598" y="160">strict CSP</text>
+  <text class="ns" x="598" y="175">per-page script hashes</text>
+  <rect class="n e" x="776" y="142" width="176" height="40"/>
+  <text class="nt" x="786" y="160">nothing else</text>
+  <text class="ns" x="786" y="175">no API, no keys, no host files</text>
+  <text class="lbl" x="584" y="210">generated and imported code is untrusted: it runs only here</text>
+
+  <!-- iframe -->
+  <polyline class="w a" points="430,120 500,120 500,90 570,90" marker-end="url(#aha)"/>
+  <text class="tag" x="452" y="112">iframe</text>
+  <text class="tag" x="452" y="128">sandbox=</text>
+  <text class="tag" x="452" y="144">allow-scripts</text>
+
+  <!-- capture -->
+  <rect class="big" x="290" y="320" width="450" height="110"/>
+  <text class="th" x="304" y="346">the capture</text>
+  <text class="lbl" x="420" y="346">fresh context per sample</text>
+  <text class="mono" x="304" y="372">?steps=2500&amp;seed=1337&amp;speed=8&amp;paused=0&amp;dpr=1</text>
+  <text class="ns" x="304" y="392">waits for __ready / __done / __failed, then screenshots the viewport</text>
+  <text class="ns" x="304" y="408">reads the trail checksum and the renderer backend from the page</text>
+
+  <polyline class="w" points="500,320 500,258 850,258 850,232" marker-end="url(#ah)"/>
+  <text class="lbl" x="508" y="300">loads the live page</text>
+
+  <!-- container -->
+  <rect class="n e" x="760" y="320" width="210" height="110"/>
+  <text class="nt" x="772" y="344">docker boundary</text>
+  <text class="ns" x="772" y="362">--network none · non-root</text>
+  <text class="ns" x="772" y="376">read-only mounts · cpu,</text>
+  <text class="ns" x="772" y="390">memory, pids, time limits</text>
+  <text class="ns" x="772" y="408">job.json in, result.json out</text>
+  <line class="w d" x1="740" y1="375" x2="760" y2="375" marker-end="url(#ah)"/>
+  <text class="lbl" x="742" y="369">or</text>
+</svg>

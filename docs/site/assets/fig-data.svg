@@ -1,0 +1,167 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-label="The SQLite tables and their main relations">
+  <style>
+    text { font-family: "JetBrains Mono", ui-monospace, Consolas, monospace; fill: #000; }
+    .t   { fill: #fff; stroke: #000; stroke-width: 1; }
+    .th  { fill: #000; }
+    .tt  { font-size: 11.5px; font-weight: 700; fill: #fff; }
+    .c   { font-size: 9.5px; }
+    .pk  { font-size: 9.5px; fill: #0000ff; }
+    .fk  { font-size: 9.5px; fill: #767676; }
+    .w   { fill: none; stroke: #000; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+    .w.a { stroke: #0000ff; }
+    .lbl { font-size: 10px; fill: #767676; }
+    .tag { font-size: 10px; fill: #0000ff; }
+  </style>
+  <defs>
+    <marker id="ah" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7.5,3 L0,6 z" fill="#000"/></marker>
+    <marker id="aha" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto"><path d="M0,0 L7.5,3 L0,6 z" fill="#0000ff"/></marker>
+  </defs>
+
+  <!-- artworks -->
+  <rect class="t" x="20" y="60" width="220" height="122"/>
+  <rect class="th" x="20" y="60" width="220" height="22"/>
+  <text class="tt" x="30" y="76">artworks</text>
+  <text class="pk" x="30" y="98">id</text>
+  <text class="c" x="70" y="98">package_id</text>
+  <text class="c" x="30" y="111">title</text>
+  <text class="c" x="120" y="111">contract_version</text>
+  <text class="c" x="30" y="124">package_path</text>
+  <text class="fk" x="30" y="137">root_version_id</text>
+  <text class="c" x="30" y="150">meta_json</text>
+  <text class="c" x="30" y="163">created_at</text>
+
+  <!-- versions -->
+  <rect class="t" x="20" y="240" width="220" height="272"/>
+  <rect class="th" x="20" y="240" width="220" height="22"/>
+  <text class="tt" x="30" y="256">versions</text>
+  <text class="pk" x="30" y="278">id</text>
+  <text class="fk" x="30" y="291">artwork_id</text>
+  <text class="fk" x="30" y="304">parent_id</text>
+  <text class="fk" x="30" y="317">run_id</text>
+  <text class="c" x="30" y="330">generation</text>
+  <text class="c" x="30" y="343">round</text>
+  <text class="c" x="30" y="356">title</text>
+  <text class="c" x="30" y="369">status</text>
+  <text class="c" x="30" y="382">source_hash</text>
+  <text class="c" x="30" y="395">snapshot_path</text>
+  <text class="c" x="30" y="408">workspace_path</text>
+  <text class="c" x="30" y="421">configuration_json</text>
+  <text class="c" x="30" y="434">changes_json</text>
+  <text class="c" x="30" y="447">explanation</text>
+  <text class="c" x="30" y="460">on_lineage</text>
+  <text class="c" x="30" y="473">error_code</text>
+  <text class="c" x="30" y="486">error_message</text>
+  <text class="c" x="30" y="499">created_at · updated_at</text>
+
+  <!-- runs -->
+  <rect class="t" x="320" y="60" width="240" height="247"/>
+  <rect class="th" x="320" y="60" width="240" height="22"/>
+  <text class="tt" x="330" y="76">runs</text>
+  <text class="pk" x="330" y="98">id</text>
+  <text class="fk" x="330" y="111">artwork_id</text>
+  <text class="fk" x="330" y="124">root_version_id</text>
+  <text class="c" x="330" y="137">evolutions_requested</text>
+  <text class="c" x="330" y="150">evolutions_done</text>
+  <text class="c" x="330" y="163">state</text>
+  <text class="c" x="330" y="176">stop_reason</text>
+  <text class="c" x="330" y="189">limit_usd</text>
+  <text class="c" x="330" y="202">spent_usd</text>
+  <text class="c" x="330" y="215">reserved_usd</text>
+  <text class="c" x="330" y="228">calls · tokens</text>
+  <text class="c" x="330" y="241">protocol_json</text>
+  <text class="c" x="330" y="254">cost_bound_usd</text>
+  <text class="c" x="330" y="267">created_at · updated_at</text>
+  <text class="c" x="330" y="280">started_at · finished_at</text>
+
+  <!-- rounds -->
+  <rect class="t" x="320" y="380" width="240" height="122"/>
+  <rect class="th" x="320" y="380" width="240" height="22"/>
+  <text class="tt" x="330" y="396">rounds · one row per step</text>
+  <text class="fk" x="330" y="418">run_id</text>
+  <text class="c" x="330" y="431">round</text>
+  <text class="fk" x="330" y="444">parent_version_id</text>
+  <text class="c" x="330" y="457">candidate_ids_json</text>
+  <text class="fk" x="330" y="470">winner_version_id</text>
+  <text class="c" x="330" y="483">promoted · note · created_at</text>
+
+  <!-- jobs -->
+  <rect class="t" x="640" y="60" width="240" height="197"/>
+  <rect class="th" x="640" y="60" width="240" height="22"/>
+  <text class="tt" x="650" y="76">jobs</text>
+  <text class="pk" x="650" y="98">id</text>
+  <text class="fk" x="650" y="111">run_id · version_id</text>
+  <text class="c" x="650" y="124">round · kind</text>
+  <text class="c" x="650" y="137">state · attempts</text>
+  <text class="c" x="650" y="150">lease_owner</text>
+  <text class="c" x="650" y="163">lease_expires_at</text>
+  <text class="c" x="650" y="176">payload_json · result_json</text>
+  <text class="c" x="650" y="189">error_code · error_message</text>
+  <text class="c" x="650" y="202">created_at · updated_at</text>
+  <text class="c" x="650" y="222">kind: author | capture | publish</text>
+  <text class="c" x="650" y="235">state: queued | running | done</text>
+  <text class="c" x="650" y="248">       failed | cancelled</text>
+
+  <!-- captures -->
+  <rect class="t" x="640" y="330" width="240" height="234"/>
+  <rect class="th" x="640" y="330" width="240" height="22"/>
+  <text class="tt" x="650" y="346">captures</text>
+  <text class="pk" x="650" y="368">id</text>
+  <text class="fk" x="650" y="381">version_id · run_id</text>
+  <text class="c" x="650" y="394">stage · seed · step</text>
+  <text class="c" x="650" y="407">width · height · dpr</text>
+  <text class="c" x="650" y="420">renderer_backend</text>
+  <text class="c" x="650" y="433">source_hash</text>
+  <text class="c" x="650" y="446">configuration_hash</text>
+  <text class="c" x="650" y="459">path · bytes</text>
+  <text class="c" x="650" y="472">meta_json · created_at</text>
+
+  <!-- usage -->
+  <rect class="t" x="960" y="60" width="220" height="172"/>
+  <rect class="th" x="960" y="60" width="220" height="22"/>
+  <text class="tt" x="970" y="76">usage</text>
+  <text class="pk" x="970" y="98">id</text>
+  <text class="fk" x="970" y="111">run_id · job_id</text>
+  <text class="fk" x="970" y="124">version_id</text>
+  <text class="c" x="970" y="137">kind · model · session_id</text>
+  <text class="c" x="970" y="150">input_tokens</text>
+  <text class="c" x="970" y="163">output_tokens</text>
+  <text class="c" x="970" y="176">cost_usd</text>
+  <text class="c" x="970" y="189">raw_json · created_at</text>
+
+  <!-- events -->
+  <rect class="t" x="960" y="300" width="220" height="84"/>
+  <rect class="th" x="960" y="300" width="220" height="22"/>
+  <text class="tt" x="970" y="316">events</text>
+  <text class="fk" x="970" y="338">run_id · seq</text>
+  <text class="c" x="970" y="351">type · at</text>
+  <text class="c" x="970" y="364">payload_json</text>
+
+  <!-- wires -->
+  <line class="w" x1="130" y1="182" x2="130" y2="240" marker-end="url(#ah)"/>
+  <text class="tag" x="136" y="214">root_version_id</text>
+
+  <polyline class="w" points="240,300 280,300 280,200 320,200" marker-end="url(#ah)"/>
+  <text class="lbl" x="244" y="294">run_id</text>
+
+  <line class="w" x1="440" y1="307" x2="440" y2="380" marker-end="url(#ah)"/>
+  <text class="lbl" x="446" y="348">run_id</text>
+
+  <line class="w" x1="320" y1="440" x2="240" y2="440" marker-end="url(#ah)"/>
+  <text class="lbl" x="246" y="424">parent /</text>
+  <text class="lbl" x="246" y="436">winner</text>
+
+  <line class="w" x1="560" y1="120" x2="640" y2="120" marker-end="url(#ah)"/>
+  <text class="lbl" x="566" y="114">run_id</text>
+
+  <polyline class="w" points="130,512 130,628 760,628 760,564" marker-end="url(#ah)"/>
+  <text class="lbl" x="200" y="624">version_id</text>
+
+  <line class="w" x1="880" y1="140" x2="960" y2="140" marker-end="url(#ah)"/>
+  <text class="lbl" x="886" y="134">job_id</text>
+
+  <polyline class="w" points="440,60 440,38 1070,38 1070,60" marker-end="url(#ah)"/>
+  <text class="lbl" x="700" y="32">run_id</text>
+
+  <polyline class="w" points="560,300 920,300 920,342 960,342" marker-end="url(#ah)"/>
+  <text class="lbl" x="620" y="294">run_id</text>
+</svg>
