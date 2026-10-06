@@ -30,3 +30,4 @@ backups/
 !docs/*.png
 !docs/image-renders/**/*.png
 !docs/site/captures/**/*.jpg
+!docs/site/selected/**/*.jpg
