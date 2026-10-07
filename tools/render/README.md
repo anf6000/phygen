@@ -25,6 +25,7 @@ Environment:
 - `RENDER_SIZE`: output size in pixels. Default `2048`.
 - `RENDER_CONCURRENCY`: parallel renders. Default `6`.
 - `RENDER_LIMIT`: render only the first N pending versions. Default `0` (all).
+- `RENDER_TIMEOUT_SECONDS`: time limit for one render. Default `2400`.
 
 The run is resumable. Start it again to continue.
 

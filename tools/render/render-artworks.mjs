@@ -35,7 +35,7 @@ const CONCURRENCY = Number(process.env.RENDER_CONCURRENCY || 6);
 const LIMIT = Number(process.env.RENDER_LIMIT || 0);
 const STEPS = 1000;
 const SPEED = 8;
-const RENDER_TIMEOUT_MS = 600000;
+const RENDER_TIMEOUT_MS = Number(process.env.RENDER_TIMEOUT_SECONDS || 2400) * 1000;
 const GO_TIMEOUT_MS = 90000;
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.wasm': 'application/wasm' };
@@ -74,8 +74,23 @@ function seedFor(hash) {
 }
 function saveProgress() {
   progress.updatedAt = new Date().toISOString();
-  fs.writeFileSync(PROGRESS + '.tmp', JSON.stringify(progress, null, 1));
-  fs.renameSync(PROGRESS + '.tmp', PROGRESS);
+  const text = JSON.stringify(progress, null, 1);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      fs.writeFileSync(PROGRESS + '.tmp', text);
+      fs.renameSync(PROGRESS + '.tmp', PROGRESS);
+      return;
+    } catch {
+      // A transient Windows lock on the target can make rename fail. Fall back
+      // to a direct write so the run never stops for a state-file problem.
+      try {
+        fs.writeFileSync(PROGRESS, text);
+        try { fs.unlinkSync(PROGRESS + '.tmp'); } catch { /* ignore */ }
+        return;
+      } catch { /* try again */ }
+    }
+  }
+  log('WARN could not save progress.json');
 }
 function log(line) {
   const text = `[${new Date().toISOString()}] ${line}`;

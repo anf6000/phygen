@@ -19,9 +19,10 @@ Store to branch:
 ## Method
 - A small static server serves each package, the shared `runtime/`, and `threejs/node_modules/`.
 - Headless Chrome (channel `chrome`) opens each package and waits for the page `__done` signal.
-- Render parameters: `steps=1000`, `speed=8`, `paused=0`, `dpr=1`; viewport 1024 by 1024; device scale factor 1.
-- The seed comes from each version's own `config.json`. Only the step count, speed, pause state, and device scale factor are set by the renderer.
+- Render parameters: `steps=1000`, `speed=8`, `paused=0`, `dpr=1`; viewport 2048 by 2048; device scale factor 1.
+- Every version uses its own fresh random seed. The seed is stored in `progress.json` and `index.json`, so each image can be reproduced.
 - Rendering is GPU-backed (ANGLE, NVIDIA RTX 3090, Direct3D 11). The runner is concurrent and resumable.
+- The tool that produced these images is `tools/render/render-artworks.mjs`; its plan is `tools/render/artwork-plan.json`.
 
 ## Output
 - `master/`, `simple/`, `slotmachine/`, `behavior/`: one PNG per version, named in creation order.
@@ -33,8 +34,9 @@ Store to branch:
 
 ## Result
 
-- Rendered: **534 of 544** versions.
+- Rendered: **534 of 544** versions at 2048 by 2048.
 - Branch folders: master 142, slotmachine 359, behavior 148, simple 0.
+- Output on disk: 671 PNG files, about 1.65 GB, including the `selected/` copies.
 - Creation range: 2026-09-16T06:20:32.902Z to 2026-09-25T02:47:01.523Z (UTC).
 - Failed: **10**.
 
