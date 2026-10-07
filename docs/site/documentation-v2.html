@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>phygen | Agents That Edit the Artwork</title>
+  <meta name="description" content="An independent project by Andreas Nicolas Fischer: model agents edit executable art, while a local studio makes their changes visible and inspectable.">
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #ffffff;
+      --ink: #000000;
+      --accent: #0000ff;
+      --quiet: #f2f2f2;
+      --muted: #666666;
+      --line: #000000;
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-padding-top: 88px; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font-size: 14px; line-height: 1.7; }
+    a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+    a:hover { color: var(--accent); }
+    a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; }
+    button { font: inherit; }
+    p, h1, h2, h3, figure, dl { margin: 0; }
+    p + p { margin-top: 18px; }
+    h1, h2, h3 { font-weight: 700; }
+    .wrap { width: min(100% - 64px, 1280px); margin-inline: auto; }
+    .skip-link { position: fixed; top: -100px; left: 16px; z-index: 50; padding: 10px; background: var(--paper); }
+    .skip-link:focus { top: 12px; }
+    .masthead { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--line); background: var(--paper); }
+    .masthead .wrap { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 64px; }
+    .wordmark { text-decoration: none; font-size: 18px; font-weight: 700; letter-spacing: -0.06em; }
+    .wordmark span { font-weight: 400; letter-spacing: 0; font-size: 11px; color: var(--muted); margin-left: 18px; }
+    .masthead nav { display: flex; align-items: center; gap: 24px; font-size: 12px; }
+    .masthead nav a { text-decoration: none; }
+    .masthead nav .source { color: var(--accent); border-bottom: 1px solid currentColor; }
+    .eyebrow { font-size: 11px; color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase; }
+    .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 56px; padding: 64px 0 48px; }
+    h1 { margin: 22px 0; font-size: clamp(32px, 4vw, 52px); line-height: 1.12; letter-spacing: -0.06em; }
+    .intro { max-width: 56ch; font-size: 15px; line-height: 1.8; }
+    .author { margin-top: 28px; font-size: 11px; color: var(--muted); }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 22px; margin-top: 22px; font-size: 12px; }
+    .hero-actions a:first-child { color: var(--accent); }
+    .image-link { display: block; text-decoration: none; cursor: zoom-in; }
+    .image-link img, .screenshot img { display: block; width: auto; max-width: 100%; height: auto; margin-inline: auto; }
+    figcaption { margin-top: 12px; font-size: 11px; line-height: 1.6; color: var(--muted); }
+    .hero-art figcaption { display: flex; justify-content: space-between; gap: 16px; }
+    .hero-art figcaption span:first-child { color: var(--accent); }
+    .project-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-block: 1px solid var(--line); }
+    .project-facts > div { padding: 18px 20px 18px 0; }
+    .project-facts > div + div { border-left: 1px solid var(--line); padding-left: 20px; }
+    .project-facts dt { font-size: 10px; color: var(--muted); margin-bottom: 6px; }
+    .project-facts dd { font-size: 12px; margin: 0; }
+    .chapter { padding: 64px 0; border-bottom: 1px solid var(--line); }
+    .chapter-head { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 80px; margin-bottom: 32px; }
+    h2 { font-size: clamp(24px, 3vw, 36px); line-height: 1.2; letter-spacing: -0.05em; margin-top: 14px; max-width: 23ch; }
+    .chapter-copy { max-width: 65ch; }
+    .chapter-copy > p { line-height: 1.8; }
+    .roles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 32px; }
+    .roles > div { border-top: 1px solid var(--line); padding-top: 14px; }
+    .roles dt { font-weight: 700; margin-bottom: 8px; font-size: 12px; }
+    .roles dd { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.7; }
+    .comparison { margin-top: 36px; }
+    .comparison-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--line); }
+    .comparison-panel { padding: 24px; min-width: 0; }
+    .comparison-panel + .comparison-panel { border-left: 1px solid var(--line); }
+    .comparison-panel h3 { font-size: 14px; margin-bottom: 8px; }
+    .comparison-panel > p { font-size: 12px; color: var(--muted); max-width: 55ch; }
+    .comparison-panel svg { display: block; width: 100%; height: auto; margin: 18px 0; }
+    .diagram-node { fill: var(--paper); stroke: var(--ink); stroke-width: 1; }
+    .diagram-chosen { fill: var(--accent); stroke: var(--accent); stroke-width: 1; }
+    .diagram-text { font-family: inherit; font-size: 17px; fill: var(--ink); }
+    .diagram-white { fill: var(--paper); }
+    .diagram-wire { fill: none; stroke: var(--ink); stroke-width: 1.3; }
+    .policy-result { margin-top: 24px; border-left: 3px solid var(--accent); padding: 12px 20px; font-size: 16px; max-width: 70ch; line-height: 1.7; }
+    .workflow { list-style: none; padding: 0; margin: 32px 0 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 22px; }
+    .workflow li { border: 1px solid var(--line); padding: 18px 14px; position: relative; min-width: 0; }
+    .workflow li:not(:last-child)::after { content: ">"; position: absolute; right: -18px; top: 42px; color: var(--accent); }
+    .workflow .number { display: block; color: var(--accent); font-size: 11px; margin-bottom: 12px; }
+    .workflow strong { display: block; font-size: 12px; margin-bottom: 8px; }
+    .workflow p { font-size: 11px; color: var(--muted); line-height: 1.7; }
+    .loop-back { margin-top: 12px; font-size: 11px; color: var(--accent); }
+    .system-details { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; margin-top: 40px; }
+    .system-details h3 { font-size: 15px; margin-bottom: 12px; }
+    .system-details p { font-size: 13px; line-height: 1.8; }
+    .screenshot { margin-top: 32px; border: 1px solid var(--line); padding: 12px; }
+    .screenshot figcaption { padding: 0 4px 4px; }
+    .ui-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin-top: 20px; }
+    .ui-grid figure { border: 1px solid var(--line); padding: 10px; min-width: 0; }
+    .ui-grid img { display: block; width: 100%; height: auto; }
+    .ui-grid figcaption { padding: 10px 2px 0; }
+    .art-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 24px; margin-top: 32px; }
+    .art-grid figure { min-width: 0; }
+    .art-grid .image-link { display: flex; justify-content: center; align-items: center; }
+    .art-grid figcaption { display: flex; justify-content: space-between; gap: 16px; }
+    .art-grid figcaption span:first-child { color: var(--ink); }
+    .evidence-note { font-size: 11px; color: var(--muted); max-width: 80ch; margin-top: 24px; }
+    .findings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; margin-top: 32px; }
+    .findings > div { padding-top: 16px; border-top: 1px solid var(--line); }
+    .findings h3 { font-size: 14px; margin-bottom: 12px; }
+    .findings p { font-size: 12px; line-height: 1.8; }
+    .next-test { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 80px; padding: 28px; margin-top: 32px; background: var(--quiet); }
+    .next-test h3 { font-size: 14px; }
+    .next-test p { font-size: 12px; line-height: 1.8; }
+    details { margin-top: 28px; }
+    summary { cursor: pointer; font-size: 12px; color: var(--accent); width: fit-content; padding: 8px 0; }
+    .implementation-links { margin: 16px 0 0; padding-left: 20px; font-size: 12px; }
+    .implementation-links li + li { margin-top: 10px; }
+    .closing { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 80px; padding: 48px 0 56px; }
+    .closing h2 { font-size: 24px; margin-top: 12px; }
+    .closing p { font-size: 13px; max-width: 60ch; }
+    .closing .links { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 20px; font-size: 12px; }
+    .image-viewer { width: min(96vw, 1600px); max-height: 96vh; border: 1px solid var(--line); padding: 16px; background: var(--paper); color: var(--ink); overflow: auto; }
+    .image-viewer::backdrop { background: rgb(0 0 0 / 85%); }
+    .image-viewer button { display: block; margin-left: auto; padding: 8px 12px; border: 1px solid var(--line); background: var(--paper); cursor: pointer; }
+    .image-viewer img { display: block; width: auto; max-width: 100%; height: auto; margin: 16px auto; }
+    .image-viewer p { font-size: 12px; color: var(--muted); }
+    @media (max-width: 1000px) {
+      .hero { gap: 32px; }
+      h1 { font-size: 36px; }
+      .chapter-head, .closing { gap: 40px; }
+      .workflow { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+      .workflow li::after { display: none; }
+      .system-details { gap: 32px; }
+      .next-test { gap: 32px; }
+    }
+    @media (max-width: 700px) {
+      .wrap { width: calc(100% - 32px); }
+      .masthead .wrap { min-height: 60px; gap: 12px; }
+      .wordmark span { display: none; }
+      .masthead nav { gap: 16px; font-size: 11px; }
+      .masthead .work-link { display: none; }
+      .hero { grid-template-columns: 1fr; padding: 36px 0; gap: 28px; }
+      h1 { font-size: clamp(32px, 8vw, 44px); max-width: 22ch; }
+      .intro { font-size: 14px; }
+      .hero-art { max-width: 600px; }
+      .project-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .project-facts > div { padding: 14px 12px; }
+      .project-facts > div + div { padding-left: 12px; }
+      .project-facts > div:nth-child(3) { border-left: 0; }
+      .project-facts > div:nth-child(n + 3) { border-top: 1px solid var(--line); }
+      .chapter { padding: 40px 0; }
+      .chapter-head, .system-details, .closing, .next-test { grid-template-columns: 1fr; gap: 22px; }
+      .chapter-head { margin-bottom: 24px; }
+      .roles { gap: 16px; }
+      .roles dt, .roles dd { font-size: 11px; }
+      .comparison-grid { grid-template-columns: 1fr; }
+      .comparison-panel { padding: 20px 16px; }
+      .comparison-panel + .comparison-panel { border-left: 0; border-top: 1px solid var(--line); }
+      .workflow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .workflow li:last-child { grid-column: 1 / -1; }
+      .art-grid { gap: 24px 12px; }
+      .art-grid figcaption { flex-direction: column; gap: 3px; font-size: 10px; }
+      .findings { grid-template-columns: 1fr; gap: 24px; }
+      .next-test { padding: 20px; }
+      .screenshot { padding: 6px; }
+      .ui-grid { grid-template-columns: 1fr; gap: 16px; }
+      .hero-art figcaption { font-size: 10px; }
+    }
+    @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+    @media print {
+      .masthead, .image-viewer, .skip-link { display: none; }
+      .wrap { width: 100%; }
+      .hero, .chapter, .closing { padding-block: 24px; }
+      figure, .comparison-panel, .workflow li { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to the case study</a>
+  <header class="masthead">
+    <div class="wrap">
+      <a class="wordmark" href="#main">phygen<span>Independent project / 2026</span></a>
+      <nav aria-label="Case study">
+        <a href="#system">System</a>
+        <a href="#decision">Decision</a>
+        <a class="work-link" href="#work">Work</a>
+        <a class="source" href="https://github.com/anf6000/phygen">Source code</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap" id="main">
+    <article aria-labelledby="title">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Agent workflows / Visual evaluation / Creative tools</p>
+          <h1 id="title">An agent that edits the rules of an artwork.</h1>
+          <p class="intro">I built a local studio where model agents change executable art, not just generate an image.</p>
+          <p class="intro">The challenge: make those changes inspectable without confusing a working program with a successful artwork.</p>
+          <p class="author">Andreas Nicolas Fischer<br>Artist and creative technologist</p>
+          <div class="hero-actions"><a href="#decision">Read the key decision</a><a href="#work">See selected outputs</a></div>
+        </div>
+        <figure class="hero-art">
+          <a class="image-link" data-image-view href="../image-renders/slotmachine/selected/237_2026-09-19_193523_7a4ea19d6c69.png">
+            <img src="selected/slotmachine/237_2026-09-19_193523_7a4ea19d6c69.jpg" alt="A selected artwork with fine intersecting trails and open circles against a dark blue field." width="600" height="600" fetchpriority="high" decoding="async">
+          </a>
+          <figcaption><span>Selected output / Frame 1000</span><span>Open the native render</span></figcaption>
+        </figure>
+      </header>
+
+      <dl class="project-facts" aria-label="Project scope">
+        <div><dt>My role</dt><dd>Art direction + system design</dd></div>
+        <div><dt>The agent changes</dt><dd>Code and configuration</dd></div>
+        <div><dt>The studio keeps</dt><dd>Images, source, and history</dd></div>
+        <div><dt>Project type</dt><dd>Working research prototype</dd></div>
+      </dl>
+
+      <section class="chapter" aria-labelledby="question-title">
+        <div class="chapter-head">
+          <div><p class="eyebrow">01 / The research question</p><h2 id="question-title">Generation can continue.<br>Should judgment follow?</h2></div>
+          <div class="chapter-copy">
+            <p>An agent can produce a different image at every step. That alone does not show progress.</p>
+            <p>I used a moving artwork as a test environment for this problem. Model agents edit the program, then the studio runs and records the result.</p>
+            <p>The artwork has a specific identity: simulated particles sense and deposit into a shared trail. Their local interactions produce the larger forms.</p>
+            <p>The model can change the visual expression, but the shared-trail process must remain central. This gives exploration a purpose without specifying every future image.</p>
+          </div>
+        </div>
+        <dl class="roles" aria-label="Three distinct responsibilities">
+          <div><dt>The simulation</dt><dd>Produces the pattern through local interactions.</dd></div>
+          <div><dt>The model agent</dt><dd>Changes the program that produces the pattern.</dd></div>
+          <div><dt>The artist</dt><dd>Defines the brief and assesses the visible result.</dd></div>
+        </dl>
+      </section>
+
+      <section class="chapter" id="decision" aria-labelledby="decision-title">
+        <div class="chapter-head">
+          <div><p class="eyebrow">02 / The key decision</p><h2 id="decision-title">I removed the judge.<br>Not the judgment.</h2></div>
+          <div class="chapter-copy">
+            <p>The early design proposed several variants and an image-only model judge. A later version added a novelty requirement and a small archive of possible parents.</p>
+            <p>The project notes describe higher costs and a mismatch with human preference. They do not establish a measured quality advantage.</p>
+            <p>I changed the policy: one child per step, kept when it passes the program checks. Human review remains separate from that technical decision.</p>
+            <p>This was a design response to the project, not a controlled result showing that one policy makes better art.</p>
+          </div>
+        </div>
+        <figure class="comparison">
+          <div class="comparison-grid">
+            <div class="comparison-panel">
+              <h3>Earlier: rank alternatives</h3>
+              <p>Make several candidates. Ask a model to choose the next parent from their pictures.</p>
+              <svg viewBox="0 0 520 350" role="img" aria-labelledby="tree-title tree-desc">
+                <title id="tree-title">A tree with an automatic image judge</title>
+                <desc id="tree-desc">A parent produces three variants. Their pictures enter an image judge, which chooses the next parent.</desc>
+                <defs><marker id="tree-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#000000"/></marker></defs>
+                <rect class="diagram-node" x="190" y="14" width="140" height="48"/>
+                <text class="diagram-text" x="260" y="44" text-anchor="middle">Parent</text>
+                <path class="diagram-wire" d="M260 62 V86 H90 V108 M260 86 V108 M260 86 H430 V108"/>
+                <rect class="diagram-node" x="20" y="108" width="140" height="48"/>
+                <rect class="diagram-node" x="190" y="108" width="140" height="48"/>
+                <rect class="diagram-node" x="360" y="108" width="140" height="48"/>
+                <text class="diagram-text" x="90" y="138" text-anchor="middle">Variant A</text>
+                <text class="diagram-text" x="260" y="138" text-anchor="middle">Variant B</text>
+                <text class="diagram-text" x="430" y="138" text-anchor="middle">Variant C</text>
+                <path class="diagram-wire" d="M90 156 V190 H260 M260 156 V190 M430 156 V190 H260 M260 190 V214" marker-end="url(#tree-arrow)"/>
+                <rect class="diagram-node" x="154" y="214" width="212" height="48"/>
+                <text class="diagram-text" x="260" y="244" text-anchor="middle">Image judge</text>
+                <path class="diagram-wire" d="M260 262 V294" marker-end="url(#tree-arrow)"/>
+                <rect class="diagram-node" x="154" y="294" width="212" height="48"/>
+                <text class="diagram-text" x="260" y="324" text-anchor="middle">Selected parent</text>
+              </svg>
+            </div>
+            <div class="comparison-panel">
+              <h3>Revised: record continuation</h3>
+              <p>Make one child. Keep working results in a readable chain without an automatic aesthetic score.</p>
+              <svg viewBox="0 0 520 350" role="img" aria-labelledby="chain-title chain-desc">
+                <title id="chain-title">A chain that keeps one working child</title>
+                <desc id="chain-desc">A parent produces one child. Program checks determine whether it can become the next parent. Artistic review stays with the person.</desc>
+                <defs><marker id="chain-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#000000"/></marker></defs>
+                <rect class="diagram-node" x="154" y="14" width="212" height="48"/>
+                <text class="diagram-text" x="260" y="44" text-anchor="middle">Parent</text>
+                <path class="diagram-wire" d="M260 62 V108" marker-end="url(#chain-arrow)"/>
+                <rect class="diagram-node" x="154" y="108" width="212" height="48"/>
+                <text class="diagram-text" x="260" y="138" text-anchor="middle">One child</text>
+                <path class="diagram-wire" d="M260 156 V214" marker-end="url(#chain-arrow)"/>
+                <rect class="diagram-node" x="154" y="214" width="212" height="48"/>
+                <text class="diagram-text" x="260" y="244" text-anchor="middle">Program checks</text>
+                <path class="diagram-wire" d="M260 262 V294" marker-end="url(#chain-arrow)"/>
+                <rect class="diagram-chosen" x="154" y="294" width="212" height="48"/>
+                <text class="diagram-text diagram-white" x="260" y="324" text-anchor="middle">Next parent</text>
+              </svg>
+            </div>
+          </div>
+          <figcaption>A change in selection policy, not a claim that the later images are better. Failed attempts do not become parents.</figcaption>
+        </figure>
+        <p class="policy-result">A working program and a successful artwork are two different results. The studio makes that distinction visible.</p>
+      </section>
+
+      <section class="chapter" id="system" aria-labelledby="system-title">
+        <div class="chapter-head">
+          <div><p class="eyebrow">03 / What I built</p><h2 id="system-title">A complete loop.<br>A visible record.</h2></div>
+          <div class="chapter-copy">
+            <p>The model receives an inherited program, recent pictures, a history of changes, and the artistic brief. It edits a working copy.</p>
+            <p>The controller checks the package, publishes a fixed copy, and captures the result. That source and image remain tied to the recorded version.</p>
+            <p>The interface exposes the history instead of presenting a final image without its context.</p>
+          </div>
+        </div>
+        <figure aria-labelledby="workflow-caption">
+          <ol class="workflow" aria-label="The agent workflow">
+            <li><span class="number">01 / Context</span><strong>Inherit the work</strong><p>Read the parent, recent images, and the brief.</p></li>
+            <li><span class="number">02 / Action</span><strong>Edit a copy</strong><p>Make a change to the code or configuration.</p></li>
+            <li><span class="number">03 / Check</span><strong>Validate the package</strong><p>Check the result against the package rules.</p></li>
+            <li><span class="number">04 / Evidence</span><strong>Save and render</strong><p>Capture an image from the published copy.</p></li>
+            <li><span class="number">05 / Continuation</span><strong>Record the version</strong><p>Keep the working child and its history.</p></li>
+          </ol>
+          <figcaption class="loop-back" id="workflow-caption">The next step returns to the newest working version. A failed step keeps the previous parent in place.</figcaption>
+        </figure>
+        <div class="system-details">
+          <div><h3>The edit and the render have boundaries</h3><p>A manifest defines editable files. The studio checks the edit against those rules before publishing the work.</p><p>The artwork loads on a separate origin, and capture modes have different isolation boundaries. A browser context is not a container or a security guarantee.</p></div>
+          <div><h3>The record is part of the tool</h3><p>Version history, captured images, agent activity, and recorded costs make a run inspectable. An intention can be compared with the visible result.</p><p>The record shows actions and outcomes, not a complete account of the model's reasoning.</p></div>
+        </div>
+        <figure class="screenshot">
+          <a class="image-link" data-image-view href="../page-record.png"><img src="../page-record.png" alt="The earlier phygen interface with a version tree, artwork images, and recorded agent activity in the side panel." loading="lazy" decoding="async"></a>
+          <figcaption>Earlier interface: images, version relations, and agent activity remain available together. This screenshot shows the judged-tree design.</figcaption>
+        </figure>
+        <h3>Evidence stayed beside the work</h3>
+        <p>In the judged-tree design, the interface showed the variants, their images, the author explanation, and the changed files together. These images record master-era runs.</p>
+        <div class="ui-grid">
+          <figure>
+            <a class="image-link" data-image-view href="../2026-09-16%2018_53_24-seagull_selected2-8761-crop.psd%20@%2033,3%25%20(UPSCALE_IMAGE_FIZZY-V1_00006_,%20RGB_8%23)%20.png"><img src="ui/tree-01.jpg" alt="The judged-tree interface with a version tree and a detail panel that lists the author explanation and the changed files." loading="lazy" width="1400" height="740" decoding="async"></a>
+            <figcaption>A completed run on 16 September. The detail panel shows the author explanation and the changed files.</figcaption>
+          </figure>
+          <figure>
+            <a class="image-link" data-image-view href="../2026-09-17%2016_51_42-.png"><img src="ui/tree-02.jpg" alt="A version tree with large variant cards linked to their parent during a failed run." loading="lazy" width="1400" height="740" decoding="async"></a>
+            <figcaption>A failed run on 17 September. The tree keeps the failed version and its parent.</figcaption>
+          </figure>
+          <figure>
+            <a class="image-link" data-image-view href="../2026-09-17%2016_52_03-.png"><img src="ui/tree-03.jpg" alt="A closer view of the version tree during the same failed run, with promoted and rejected variants." loading="lazy" width="1400" height="740" decoding="async"></a>
+            <figcaption>The same failed run at a closer zoom. The status bar keeps the error: run_failed: Cannot read properties of undefined (reading 'preference').</figcaption>
+          </figure>
+          <figure>
+            <a class="image-link" data-image-view href="../2026-09-17%2016_52_55-.png"><img src="ui/tree-04.jpg" alt="A wide view of the same version tree with many variant cards." loading="lazy" width="1400" height="740" decoding="async"></a>
+            <figcaption>A wider view of the same failed run.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="chapter" id="work" aria-labelledby="work-title">
+        <div class="chapter-head">
+          <div><p class="eyebrow">04 / Selected work</p><h2 id="work-title">The image changes.<br>The material remains.</h2></div>
+          <div class="chapter-copy">
+            <p>The brief keeps the shared trail central while allowing changes to form, color, density, and composition.</p>
+            <p>These are my selections from the saved work. They show visual range, not an automatic quality ranking or a continuous sequence of improvement.</p>
+          </div>
+        </div>
+        <div class="art-grid">
+          <figure>
+            <a class="image-link" data-image-view href="../image-renders/master/selected/126_2026-09-17_072723_041c01f9de57.png"><img src="selected/master/126_2026-09-17_072723_041c01f9de57.jpg" alt="An earlier artwork with a pale network of irregular cells on a black field." loading="lazy" width="600" height="600" decoding="async"></a>
+            <figcaption><span>Connected regions</span><span>September 17 / Frame 1000</span></figcaption>
+          </figure>
+          <figure>
+            <a class="image-link" data-image-view href="../image-renders/slotmachine/selected/239_2026-09-19_195454_e9c704e980cb.png"><img src="selected/slotmachine/239_2026-09-19_195454_e9c704e980cb.jpg" alt="A blue artwork with gold trails and open circular regions." loading="lazy" width="600" height="600" decoding="async"></a>
+            <figcaption><span>Trails and empty space</span><span>September 19 / Frame 1000</span></figcaption>
+          </figure>
+          <figure>
+            <a class="image-link" data-image-view href="../image-renders/slotmachine/selected/256_2026-09-20_000243_5ce975894e2b.png"><img src="selected/slotmachine/256_2026-09-20_000243_5ce975894e2b.jpg" alt="A later artwork with bright red, yellow, and blue regions linked by fine trails." loading="lazy" width="600" height="600" decoding="async"></a>
+            <figcaption><span>Color and structure</span><span>September 20 / Frame 1000</span></figcaption>
+          </figure>
+          <figure>
+            <a class="image-link" data-image-view href="../image-renders/slotmachine/selected/284_2026-09-20_070537_6168f79dbf0c.png"><img src="selected/slotmachine/284_2026-09-20_070537_6168f79dbf0c.jpg" alt="A later artwork with intersecting pale paths, dark blue areas, and yellow regions." loading="lazy" width="600" height="600" decoding="async"></a>
+            <figcaption><span>Competing visual layers</span><span>September 20 / Frame 1000</span></figcaption>
+          </figure>
+        </div>
+        <p class="evidence-note">All five artwork examples use captures at simulation step 1000. Their configurations can differ. The selections are not a controlled quality comparison.</p>
+      </section>
+
+      <section class="chapter" aria-labelledby="lessons-title">
+        <div class="chapter-head">
+          <div><p class="eyebrow">05 / What I learned</p><h2 id="lessons-title">Better tools expose<br>the difficult question.</h2></div>
+          <div class="chapter-copy"><p>The useful result was not an autonomous taste engine. It was a working environment where I could inspect the relationship between edits, pictures, and selection.</p><p>The recorded judge demonstration used a deterministic pixel-based test double. It does not provide evidence of aesthetic judgment.</p><p>The record became as important as the next output.</p></div>
+        </div>
+        <div class="findings">
+          <div><h3>Evaluation needs a target.</h3><p>Program validity, novelty, and aesthetic preference are different questions. A single success label should not hide those differences.</p></div>
+          <div><h3>Autonomy needs evidence.</h3><p>A run can continue without step-by-step approval. Its changes still need a visible history and an independent human assessment.</p></div>
+          <div><h3>Less machinery can reveal more.</h3><p>Removing the automatic judge made the unresolved artistic question explicit. More agents would not, by themselves, answer it.</p></div>
+        </div>
+        <div class="next-test">
+          <div><p class="eyebrow">The next experiment</p><h3>Measure the disagreement.</h3></div>
+          <div><p>I would compare judged selection with one-child continuation under matched starting conditions and spending limits.</p><p>Blind human comparisons, failure rates, and cost would test different outcomes separately. That controlled comparison has not been done.</p></div>
+        </div>
+        <details>
+          <summary>Inspect the implementation</summary>
+          <ul class="implementation-links">
+            <li><a href="https://github.com/anf6000/phygen/tree/slotmachine/server/src/controller">Agent workflow and run controller</a></li>
+            <li><a href="https://github.com/anf6000/phygen/tree/slotmachine/server/src/capture">Render and capture paths</a></li>
+            <li><a href="https://github.com/anf6000/phygen/tree/slotmachine/runtime">Artwork package rules</a></li>
+            <li><a href="https://github.com/anf6000/phygen/tree/slotmachine/server/test">Tests for the supporting system</a></li>
+            <li><a href="https://github.com/anf6000/phygen/blob/slotmachine/docs/MEASUREMENTS.md">Measurement notes and limits of the demonstration</a></li>
+          </ul>
+        </details>
+      </section>
+    </article>
+
+    <footer class="closing">
+      <div><p class="eyebrow">Andreas Nicolas Fischer</p><h2>Art direction.<br>Agent workflows.<br>Research tools.</h2></div>
+      <div><p>I am interested in creative tools and interfaces that make model decisions inspectable. This project connects those questions in one working system.</p><div class="links"><a href="https://github.com/anf6000/phygen">Explore the repository</a><a href="https://github.com/anf6000">GitHub profile</a><a href="documentation.html">Earlier documentation</a></div></div>
+    </footer>
+  </main>
+
+  <dialog class="image-viewer" aria-label="Native-resolution image">
+    <button type="button" autofocus>Close image</button>
+    <img alt="">
+    <p></p>
+  </dialog>
+  <script>
+    const viewer = document.querySelector('.image-viewer');
+    if (typeof viewer.showModal === 'function') {
+      const image = viewer.querySelector('img');
+      const caption = viewer.querySelector('p');
+      for (const link of document.querySelectorAll('[data-image-view]')) {
+        link.addEventListener('click', event => {
+          if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+          event.preventDefault();
+          image.src = link.getAttribute('href');
+          image.alt = link.querySelector('img').alt;
+          caption.textContent = link.closest('figure').querySelector('figcaption').textContent;
+          viewer.showModal();
+        });
+      }
+      viewer.querySelector('button').addEventListener('click', () => viewer.close());
+      viewer.addEventListener('click', event => {
+        if (event.target !== viewer) return;
+        const bounds = viewer.getBoundingClientRect();
+        if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) viewer.close();
+      });
+      viewer.addEventListener('close', () => image.removeAttribute('src'));
+    }
+  </script>
+</body>
+</html>

@@ -157,6 +157,7 @@ figcaption b { color: var(--ink); }
 
 /* ── Artwork captures: twelve square frames per branch ──────────────────── */
 .captures { display: grid; gap: 10px; grid-template-columns: repeat(4, 1fr); }
+.captures.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .captures figure { margin: 0; }
 .captures img { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border: 1px solid var(--line); cursor: zoom-in; }
 .captures figcaption { border: 0; padding: 4px 1px 0; font-size: 10.5px; color: var(--muted); }
