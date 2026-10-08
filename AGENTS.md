@@ -385,60 +385,6 @@ In QUALITY mode:
 
 Increase the mode only when evidence shows more risk, uncertainty, or complexity.
 
-## 13. Model selection
-
-Use the available model list as the source of truth.
-
-If the GPT-5.6 model family is available, use this guide:
-
-### GPT-5.6 Sol
-
-Use Sol for:
-
-- Primary coordination
-- Architecture
-- Difficult planning
-- Unclear high-risk decisions
-- Difficult defect analysis
-- Major refactors
-- Conflict resolution
-- Complex mathematics or geometry
-- Important system foundations
-- High-confidence review
-
-Sol can implement directly.
-
-Let Sol finish when a transfer would add more cost or risk.
-
-### GPT-5.6 Terra
-
-Use Terra as the normal implementation model.
-
-Use Terra for:
-
-- Most feature work
-- Normal defect correction
-- Scoped refactors
-- Tests
-- Integration work
-- Code work that needs technical judgment
-
-### GPT-5.6 Luna
-
-Use Luna for clear and limited work.
-
-Use Luna for:
-
-- Repository search
-- File location
-- Test execution
-- Log inspection
-- Mechanical edits
-- Documentation
-- Simple corrections
-- First review
-- Short summaries
-
 Do not give complex implementation work to Luna only to reduce token cost.
 
 Select a model from total time, token use, correction cost, and risk.
