@@ -16,6 +16,7 @@ import { publishSnapshot } from '../artwork/workspace.mjs';
 import { streamEvents } from './stream.mjs';
 import { round6 } from '../util.mjs';
 import { isInside } from '../artifacts.mjs';
+import { gateArchive } from '../gate/gate.mjs';
 
 function fail(reply, code, message, detail = {}) {
   const status = {
@@ -24,6 +25,7 @@ function fail(reply, code, message, detail = {}) {
     version_not_found: 404,
     run_not_found: 404,
     capture_not_found: 404,
+    judgment_not_found: 404,
     not_found: 404,
     payload_invalid: 400,
     run_state_invalid: 409,
@@ -179,6 +181,7 @@ export function buildApp({ store, events, budget, controller, capture, provider,
     const latestCapture = store.latestCaptureByArtwork(artwork.id);
     const usageByVersion = store.usageCostByArtwork(artwork.id);
     const tokensByVersion = store.usageTokensByArtwork(artwork.id);
+    const judgmentsByVersion = new Map(store.listJudgmentsByArtwork(artwork.id).map((judgment) => [judgment.versionId, judgment]));
     // A version produced by a run whose provider was the test double is NOT real
     // work, and it must never look like it. The card carries the mark.
     const stubRuns = new Set(
@@ -197,6 +200,11 @@ export function buildApp({ store, events, budget, controller, capture, provider,
       usageUsd: round6(usageByVersion.get(version.id) ?? 0),
       tokens: tokensByVersion.get(version.id) ?? 0,
       error: version.errorCode ? { code: version.errorCode, message: version.errorMessage } : null,
+      // The verdict of the perceptual gate, so the strip and the thin card can
+      // read it without a second request.
+      verdict: verdictOf(judgmentsByVersion.get(version.id)),
+      verdictEnforced: Boolean(judgmentsByVersion.get(version.id)?.enforced),
+      repaired: Boolean(judgmentsByVersion.get(version.id)?.repaired),
     }));
     const edges = versions
       .filter((version) => version.parentId)
@@ -328,6 +336,36 @@ export function buildApp({ store, events, budget, controller, capture, provider,
   // Refactoring is a ONE-TIME cleanup, not part of evolution. It has no route:
   // the step loop never calls it, and `tools/repair-version.mjs --refactor` runs
   // it once, by hand, on one kept version.
+
+  // ── the perceptual gate ───────────────────────────────────────────────────
+  // The judgment of one version: the metrics, the hard tests, the judge answer,
+  // the novelty, and the verdict. The reason panel reads this.
+  app.get('/api/versions/:versionId/judgment', async (request, reply) => {
+    const version = store.getVersion(request.params.versionId);
+    if (!version) return fail(reply, 'version_not_found', `No version ${request.params.versionId}`);
+    const judgment = store.getJudgment(version.id);
+    if (!judgment) return fail(reply, 'judgment_not_found', 'This version has no judgment');
+    return { judgment: publicJudgment(judgment) };
+  });
+
+  // The archive: the most diverse kept versions a stalled run explores from. It
+  // is computed from the stored judgments, never stored itself.
+  app.get('/api/artworks/:artworkId/archive', async (request, reply) => {
+    const artwork = store.getArtwork(request.params.artworkId);
+    if (!artwork) return fail(reply, 'artwork_not_found', `No artwork ${request.params.artworkId}`);
+    // The same archive the run explores from, so the panel and the run agree.
+    const { archive } = gateArchive({ store, config, artworkId: artwork.id });
+    return {
+      members: archive.members.map((member) => ({
+        versionId: member.version.id,
+        generation: member.version.generation,
+        quality: round6(member.quality.score),
+        novelty: round6(member.novelty),
+        addedBy: member.addedBy,
+      })),
+      refused: archive.refused.map((entry) => ({ versionId: entry.id, reason: entry.reason, quality: round6(entry.quality), novelty: round6(entry.novelty) })),
+    };
+  });
 
   app.get('/api/captures/:captureId.png', async (request, reply) => {
     const capture = store.getCapture(String(request.params.captureId).replace(/\.png$/, ''));
@@ -584,6 +622,35 @@ function publicVersion(version, newestCapture = null) {
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+}
+
+/** The verdict of a version, for the strip and the thin card. */
+function verdictOf(judgment) {
+  if (!judgment) return null;
+  if (judgment.status === 'kept') return 'kept';
+  if (judgment.status === 'parked') return 'parked';
+  return 'pending';
+}
+
+function publicJudgment(judgment) {
+  return {
+    versionId: judgment.versionId,
+    runId: judgment.runId,
+    status: judgment.status,
+    enforced: judgment.enforced,
+    repaired: judgment.repaired,
+    branch: judgment.branch,
+    reason: judgment.reason,
+    direction: judgment.direction,
+    features: judgment.features,
+    tests: judgment.tests,
+    scores: judgment.scores,
+    novelty: judgment.novelty,
+    judge: judgment.judge,
+    judgeCostUsd: judgment.judgeCostUsd,
+    frames: judgment.frames,
+    createdAt: judgment.createdAt,
+  };
 }
 
 async function sendImage(reply, path, id) {

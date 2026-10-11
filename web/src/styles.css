@@ -1,6 +1,7 @@
 /* Reskin rules: one font size (14px, JetBrains Mono), 1px black borders,
    blue #0000ff for active, hover, and selected, mid gray captions, and no
-   rounded corners, shadows, or gradients anywhere. */
+   rounded corners. Shadows and background images come from tokens, so a rule
+   that needs a hard offset shadow or a grain can ask for one. */
 :root {
   --bg: #ffffff;
   --panel: #ffffff;
@@ -9,6 +10,13 @@
   --accent: #0000ff;
   --muted: #767676;
   --quiet: #f2f2f2;
+  /* Tactile tokens. The defaults keep the flat look; a rule that wants a hard
+     offset shadow or a grain sets the variable, and the reset passes it through. */
+  --shadow-hard: 4px 4px 0 var(--ink);
+  --shadow-soft: 2px 2px 0 var(--line);
+  --shadow-none: none;
+  --grain-image: none;
+  --failed: #a33333;
   color-scheme: light;
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 14px;
@@ -17,8 +25,8 @@
 * {
   box-sizing: border-box;
   border-radius: 0 !important;
-  box-shadow: none !important;
-  background-image: none !important;
+  box-shadow: var(--shadow-none);
+  background-image: var(--grain-image);
 }
 
 html,
@@ -422,6 +430,7 @@ button.primary:focus-visible {
   min-height: 140px;
   overflow: hidden;
   display: flex;
+  flex-direction: column;
 }
 
 .shell {
@@ -571,4 +580,167 @@ button.primary:focus-visible {
   /* A person who prefers less motion still needs to see that a step works. The
      pixel field drifts at a quarter of its speed; the component reads this
      preference itself. */
+}
+
+/* ── The perceptual gate: strip, thin card, reason panel ─────────────────── */
+.card-status.status-parked {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.judgment-strip {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.judgment-chip {
+  border: 1px solid var(--line);
+  padding: 0 6px;
+  color: var(--ink);
+}
+
+.judgment-strip.verdict-kept .judgment-chip,
+.judgment-chip.verdict-kept {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.judgment-strip.verdict-parked .judgment-chip,
+.judgment-chip.verdict-parked {
+  color: var(--failed);
+  border-color: var(--failed);
+}
+
+.judgment-strip.is-enforced .judgment-chip,
+.judgment-chip.verdict-repaired {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.judgment-note {
+  color: var(--muted);
+}
+
+/* A parked step is a thin rejected card: the frame is smaller and quiet. */
+.card.is-parked .card-media {
+  aspect-ratio: 2 / 1;
+  background: var(--quiet);
+}
+
+.card.is-parked .card-media img {
+  opacity: 0.55;
+  filter: grayscale(1);
+}
+
+.card.is-repaired {
+  box-shadow: var(--shadow-soft);
+}
+
+/* The reason panel sits above the agent log and shares its height. */
+.judgment-panel {
+  flex: 0 1 auto;
+  max-height: 45%;
+  overflow: auto;
+  border-bottom: 2px solid var(--ink);
+  padding: 8px 10px;
+  background: var(--panel);
+}
+
+.judgment-head {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.judgment-reason {
+  margin: 6px 0;
+}
+
+.judgment-numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 6px 0;
+}
+
+.judgment-numbers div {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.judgment-numbers dt {
+  color: var(--muted);
+}
+
+.judgment-numbers dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.judgment-frames {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 6px 0;
+}
+
+.judgment-frames figure {
+  margin: 0;
+  border: 1px solid var(--line);
+}
+
+.judgment-frames img {
+  display: block;
+  width: 128px;
+  height: 128px;
+}
+
+.judgment-frames figcaption {
+  color: var(--muted);
+  padding: 0 4px;
+}
+
+.judgment-lists {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.judgment-lists h4,
+.judgment-panel h4 {
+  margin: 8px 0 4px;
+}
+
+.judgment-tests,
+.judgment-scores {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.judgment-tests li,
+.judgment-scores li {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-width: 220px;
+}
+
+.judgment-tests .trip {
+  color: var(--failed);
+}
+
+.judgment-tests .skip {
+  color: var(--muted);
+}
+
+.judgment-tests .pass {
+  color: var(--accent);
 }

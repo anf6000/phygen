@@ -13,6 +13,7 @@ import { RunController } from '../src/controller/run.mjs';
 import { FakeProvider } from '../src/providers/fake.mjs';
 import { publishSnapshot } from '../src/artwork/workspace.mjs';
 import { checkPackage } from '../../runtime/node/package-checks.js';
+import { encodePng } from '../src/vision/png.mjs';
 
 const PACKAGE_DIR = join(REPO_ROOT, 'threejs');
 const PROTOCOL = {
@@ -210,11 +211,13 @@ test('three steps make three children in one chain', async (t) => {
   assert.ok(rounds.every((round) => round.promoted && round.candidateIds.length === 1));
 
   const captures = store.listCaptures(children[0].id);
-  assert.equal(captures.length, 1, 'one capture per version');
-  assert.equal(captures[0].stage, 'late');
-  assert.equal(captures[0].width, 64);
-  assert.equal(captures[0].height, 64);
-  assert.equal(captures[0].seed, 1337);
+  assert.equal(captures.length, 2, 'an early frame and a late frame per version');
+  const late = captures.find((capture) => capture.stage === 'late');
+  assert.equal(late.stage, 'late');
+  assert.equal(late.width, 64);
+  assert.equal(late.height, 64);
+  assert.equal(late.seed, 1337);
+  assert.equal(captures.find((capture) => capture.stage === 'early').stage, 'early');
 
   const jobs = store.listJobs(run.id);
   assert.equal(jobs.filter((job) => job.kind === 'author').length, 3);
@@ -321,7 +324,7 @@ test('a frame that fails at load gets one repair, then the step is kept', async 
   assert.equal(authorJobs.length, 2, 'one author session and one repair session');
   assert.equal(calls, 2);
   const captures = store.listCaptures(children[0].id);
-  assert.equal(captures.length, 1, 'the repaired package is captured once');
+  assert.equal(captures.length, 2, 'the repaired package is captured once, with its early frame');
 });
 
 test('a frame that stays broken after the repair marks the version failed', async (t) => {
@@ -435,7 +438,7 @@ test('a restart keeps a published snapshot, and a resume continues that step for
   const finished = store.getRun(run.id);
   assert.equal(finished.state, 'completed');
   assert.equal(finished.evolutionsDone, 1);
-  assert.equal(store.listCaptures(published.id).length, 1, 'the frame of the resumed step is captured');
+  assert.equal(store.listCaptures(published.id).length, 2, 'the frame of the resumed step is captured');
 });
 
 test('a published step that a restart failed is revived, not paid for twice', async (t) => {
@@ -483,7 +486,7 @@ test('a published step that a restart failed is revived, not paid for twice', as
   const finished = store.getRun(run.id);
   assert.equal(finished.state, 'completed');
   assert.equal(finished.evolutionsDone, 1);
-  assert.equal(store.listCaptures(child.id).length, 1);
+  assert.equal(store.listCaptures(child.id).length, 2);
 });
 
 test('a genuine fault is not reused, so the step runs again', async (t) => {
@@ -764,7 +767,7 @@ test('an operator edit becomes a new kept step that holds the edit', async (t) =
   assert.match(published, /an operator fix/);
   // The numbers did not move, and the new step has its own frame.
   assert.deepEqual(result.version.configuration, parent.configuration);
-  assert.equal(store.listCaptures(result.version.id).length, 1);
+  assert.equal(store.listCaptures(result.version.id).length, 2);
   assert.match(result.version.explanation ?? '', /No model ran/);
 });
 
@@ -871,10 +874,11 @@ test('one capture per version holds the configured square and role', async (t) =
   const children = store.listVersions(artwork.id).filter((version) => version.parentId);
   assert.equal(children.length, 1);
   const captures = store.listCaptures(children[0].id);
-  assert.equal(captures.length, 1);
-  assert.equal(captures[0].role ?? 'late', 'late');
-  assert.equal(captures[0].width, 64);
-  assert.equal(captures[0].height, 64);
+  assert.equal(captures.length, 2, 'an early frame and a late frame');
+  const late = captures.find((capture) => capture.stage === 'late');
+  assert.equal(late.role ?? 'late', 'late');
+  assert.equal(late.width, 64);
+  assert.equal(late.height, 64);
 });
 
 test('a stop request ends the run without new steps', async (t) => {
@@ -897,8 +901,6 @@ test('a stop request ends the run without new steps', async (t) => {
 function dirOf(version) {
   return version.workspacePath ?? join(REPO_ROOT, 'threejs');
 }
-
-/** Poll a condition, so a test waits for a record rather than for a delay. */
 async function until(condition, { timeoutMs = 30000, stepMs = 50 } = {}) {  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (condition()) return true;
@@ -996,4 +998,231 @@ test('a stop during a retry delay starts no further provider session', async (t)
   const finished = store.getRun(run.id);
   assert.equal(finished.state, 'stopped');
   assert.equal(finished.evolutionsDone, 0, 'a stopped run does not consume a step');
+});
+
+// ── the perceptual gate ───────────────────────────────────────────────────────
+
+/**
+ * A capture backend that writes REAL PNG frames, so the gate can measure them.
+ * The frame is flat and white when the snapshot source carries `REPAIR_ME`, and
+ * a gray checkerboard whose light gray depends on the step otherwise.
+ */
+function pngCapture() {
+  return {
+    backend: 'stub',
+    isolated: false,
+    async available() {
+      return {
+        backend: 'stub',
+        available: true,
+        isolated: false,
+        detail: 'stub',
+        docker: { available: false, image: null, detail: 'stub' },
+        browser: { available: true, detail: 'stub' },
+      };
+    },
+    async capture({ samples, outDir, viewport, timestep, sourceHash, configurationHash, snapshotDir }) {
+      await mkdir(outDir, { recursive: true });
+      let flat = false;
+      try {
+        flat = (await readFile(join(snapshotDir, 'src', 'physarum.js'), 'utf8')).includes('REPAIR_ME');
+      } catch {
+        flat = false;
+      }
+      const results = [];
+      for (const sample of samples) {
+        const rgba = new Uint8Array(viewport.width * viewport.height * 4);
+        for (let y = 0; y < viewport.height; y++) {
+          for (let x = 0; x < viewport.width; x++) {
+            const at = (y * viewport.width + x) * 4;
+            let value;
+            if (flat) {
+              value = 255;
+            } else {
+              // A deterministic scatter of gray marks with a wide spread of
+              // levels. It holds edges in every direction, many tones, and open
+              // space, so it clears the free gate. The step shifts it, so the
+              // two ordered frames differ without a violent change.
+              let hash = ((x * 2654435761) >>> 0 ^ (y * 40503) >>> 0 ^ (sample.step * 97) >>> 0) >>> 0;
+              hash = (hash ^ (hash >>> 13)) >>> 0;
+              value = hash % 100 < 55 ? 40 + ((hash >>> 7) % 200) : 30;
+            }
+            rgba[at] = value;
+            rgba[at + 1] = value;
+            rgba[at + 2] = value;
+            rgba[at + 3] = 255;
+          }
+        }
+        const path = join(outDir, `${sample.stage}-s${sample.seed}-n${sample.step}.png`);
+        await writeFile(path, encodePng(rgba, viewport.width, viewport.height, 6));
+        results.push({
+          ...sample,
+          path,
+          width: viewport.width,
+          height: viewport.height,
+          dpr: viewport.dpr,
+          timestep,
+          sourceHash,
+          configurationHash,
+          rendererBackend: 'stub',
+          iteration: sample.step,
+          fps: 60,
+          trailChecksum: 1,
+          agentChecksum: 2,
+          consoleErrors: [],
+          url: 'http://stub/',
+        });
+      }
+      return results;
+    },
+  };
+}
+
+/** An author session that writes a frame the gate refuses. */
+function flatAuthor(controller) {
+  const base = controller.provider;
+  controller.provider = Object.create(base, {
+    author: {
+      value: async ({ workspaceDir }) => {
+        const { readFile: read, writeFile: write } = await import('node:fs/promises');
+        const file = join(workspaceDir, 'src', 'physarum.js');
+        const before = await read(file, 'utf8');
+        await write(file, `${before}\n// REPAIR_ME\n`, 'utf8');
+        return {
+          text: 'Outcome: a flat frame.',
+          usage: { inputTokens: 10, outputTokens: 5, costUsd: 0, costKnown: true, raw: {} },
+          model: 'fake-deterministic',
+          sessionId: 'fake-flat',
+          stub: true,
+        };
+      },
+    },
+  });
+}
+
+test('the gate in warn mode records a parked verdict but keeps the step', async (t) => {
+  const { store, events, controller, run, artwork } = await setup(t, { evolutions: 1, gate: { mode: 'warn' } }, { capture: pngCapture() });
+  flatAuthor(controller);
+
+  await controller.start(run.id);
+
+  const finished = store.getRun(run.id);
+  assert.equal(finished.state, 'completed', diagnostic(events, run.id));
+  assert.equal(finished.evolutionsDone, 1);
+  const child = store.listVersions(artwork.id).find((version) => version.parentId);
+  assert.equal(child.status, 'promoted', 'warn mode parks nothing');
+
+  const judgment = store.getJudgment(child.id);
+  assert.ok(judgment, 'a judgment is recorded');
+  assert.equal(judgment.status, 'parked', 'the verdict is recorded');
+  assert.equal(judgment.enforced, false, 'the verdict is not enforced in warn mode');
+  assert.ok(judgment.tests.some((test) => test.tripped), 'a hard test tripped');
+  assert.deepEqual(judgment.frames.map((frame) => frame.stage).sort(), ['early', 'late']);
+
+  const types = events.since(run.id, 0).map((event) => event.type);
+  assert.ok(types.includes('judgment.metrics'));
+  assert.ok(types.includes('judgment.verdict'));
+  assert.ok(types.includes('judgment.judge'));
+  assert.ok(types.includes('direction.written'));
+});
+
+test('the gate in park mode refuses a step and the chain head stays', async (t) => {
+  const { store, events, controller, run, artwork, rootVersion } = await setup(
+    t,
+    { evolutions: 1, gate: { mode: 'park', maxRepairs: 0 } },
+    { capture: pngCapture() },
+  );
+  flatAuthor(controller);
+
+  await controller.start(run.id);
+
+  const finished = store.getRun(run.id);
+  assert.equal(finished.state, 'completed', diagnostic(events, run.id));
+  assert.equal(finished.evolutionsDone, 1, 'a parked step is recorded and consumes its step');
+  const child = store.listVersions(artwork.id).find((version) => version.parentId);
+  assert.equal(child.status, 'parked', 'the step is parked');
+  const judgment = store.getJudgment(child.id);
+  assert.equal(judgment.status, 'parked');
+  assert.equal(judgment.enforced, true, 'the verdict is enforced in park mode');
+
+  const promoted = store.listVersions(artwork.id).filter((version) => version.status === 'promoted');
+  assert.equal(promoted.length, 1, 'only the root stays promoted');
+  assert.equal(promoted[0].id, rootVersion.id, 'the chain head stays at the root');
+});
+
+test('a parked step that passes the gate after one repair is kept once', async (t) => {
+  const { store, controller, run, artwork } = await setup(
+    t,
+    { evolutions: 1, gate: { mode: 'park', maxRepairs: 1 } },
+    { capture: pngCapture() },
+  );
+
+  let calls = 0;
+  const base = controller.provider;
+  controller.provider = Object.create(base, {
+    author: {
+      value: async ({ workspaceDir }) => {
+        const { readFile: read, writeFile: write } = await import('node:fs/promises');
+        calls += 1;
+        const file = join(workspaceDir, 'src', 'physarum.js');
+        const before = await read(file, 'utf8');
+        const marker = '\n// REPAIR_ME\n';
+        const after = calls === 1 ? `${before}${marker}` : before.replace(marker, '');
+        await write(file, after, 'utf8');
+        return {
+          text: calls === 1 ? 'Outcome: a flat frame.' : 'Outcome: repaired the frame.',
+          usage: { inputTokens: 10, outputTokens: 5, costUsd: 0, costKnown: true, raw: {} },
+          model: 'fake-deterministic',
+          sessionId: 'fake-repair',
+          stub: true,
+        };
+      },
+    },
+  });
+
+  await controller.start(run.id);
+
+  const finished = store.getRun(run.id);
+  assert.equal(finished.state, 'completed');
+  assert.equal(finished.evolutionsDone, 1, 'the repaired step counts once');
+  assert.equal(calls, 2, 'one author session and one self-critique session');
+  const child = store.listVersions(artwork.id).find((version) => version.parentId);
+  assert.equal(child.status, 'promoted', 'the repaired step is kept');
+  const judgment = store.getJudgment(child.id);
+  assert.equal(judgment.status, 'kept');
+  assert.equal(judgment.repaired, true, 'the record names the repair');
+  assert.equal(judgment.enforced, false);
+});
+
+test('a parked step is not reused when a run resumes', async (t) => {
+  const { store, events, controller, run, artwork, rootVersion, dir } = await setup(t, { evolutions: 1 });
+
+  // The gate parked step 1, and the server was lost before the run committed it.
+  const parked = store.createVersion({
+    artworkId: artwork.id,
+    parentId: rootVersion.id,
+    runId: run.id,
+    generation: 1,
+    round: 1,
+    title: 'Step 1',
+    status: 'parked',
+    sourceHash: rootVersion.sourceHash,
+    snapshotPath: rootVersion.snapshotPath,
+    workspacePath: join(dir, 'workspaces', run.id, 'parked'),
+    configuration: rootVersion.configuration,
+  });
+  const publishJob = store.createJob({ runId: run.id, versionId: parked.id, round: 1, kind: 'publish', state: 'running' });
+  store.updateJob(publishJob.id, { state: 'done' });
+  store.updateRun(run.id, { state: 'running' });
+
+  await controller.recover();
+  await controller.start(run.id);
+
+  const finished = store.getRun(run.id);
+  assert.equal(finished.state, 'completed', diagnostic(events, run.id));
+  assert.equal(finished.evolutionsDone, 1);
+  assert.equal(store.getVersion(parked.id).status, 'parked', 'the parked version is terminal and stays parked');
+  const promoted = store.listVersions(artwork.id).filter((version) => version.status === 'promoted');
+  assert.equal(promoted.length, 2, 'a fresh child is authored and kept');
+  assert.ok(promoted.some((version) => version.id !== rootVersion.id && version.id !== parked.id));
 });

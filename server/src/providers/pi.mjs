@@ -355,4 +355,12 @@ export class PiProvider {
   async author({ workspaceDir, prompt, images = [], systemPrompt, sessionId, signal, model, onEvent }) {
     return this.run({ kind: 'author', prompt, images, cwd: workspaceDir, sessionId, systemPrompt, signal, model, onEvent });
   }
+
+  /**
+   * One blind judge session. It has no tools and no workspace, and it sees the
+   * frames as attachments only.
+   */
+  async judge({ prompt, images = [], systemPrompt, sessionId, signal, model, onEvent }) {
+    return this.run({ kind: 'judge', prompt, images, cwd: this.config.repoRoot, sessionId, systemPrompt, signal, model, onEvent });
+  }
 }

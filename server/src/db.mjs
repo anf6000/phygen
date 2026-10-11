@@ -131,11 +131,31 @@ CREATE TABLE IF NOT EXISTS events (
   payload_json TEXT NOT NULL,
   PRIMARY KEY (run_id, seq)
 );
+CREATE TABLE IF NOT EXISTS judgments (
+  version_id TEXT PRIMARY KEY,
+  run_id TEXT,
+  artwork_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  enforced INTEGER NOT NULL DEFAULT 0,
+  repaired INTEGER NOT NULL DEFAULT 0,
+  branch TEXT,
+  reason TEXT,
+  direction TEXT,
+  features_json TEXT NOT NULL DEFAULT '{}',
+  tests_json TEXT NOT NULL DEFAULT '[]',
+  scores_json TEXT NOT NULL DEFAULT '[]',
+  novelty_json TEXT NOT NULL DEFAULT '{}',
+  judge_json TEXT,
+  judge_cost_usd REAL NOT NULL DEFAULT 0,
+  frames_json TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_versions_artwork ON versions (artwork_id);
 CREATE INDEX IF NOT EXISTS idx_versions_parent ON versions (parent_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_run ON jobs (run_id);
 CREATE INDEX IF NOT EXISTS idx_captures_version ON captures (version_id);
 CREATE INDEX IF NOT EXISTS idx_usage_run ON usage (run_id);
+CREATE INDEX IF NOT EXISTS idx_judgments_artwork ON judgments (artwork_id);
 `;
 
 function json(value) {
@@ -577,7 +597,13 @@ export class Store {
     return row ? captureFromRow(row) : null;
   }
 
-  /** The newest capture of every version of an artwork. One query. */
+  /**
+   * The newest capture of every version of an artwork. One query.
+   *
+   * The gate adds an EARLY frame beside the late one, and the card identity is
+   * the late frame, so a `late` capture wins over any other stage whatever the
+   * clock says. Within the same stage class the newest row wins.
+   */
   latestCaptureByArtwork(artworkId) {
     const rows = this.db
       .prepare(
@@ -589,8 +615,86 @@ export class Store {
       )
       .all(artworkId);
     const newest = new Map();
-    for (const row of rows) newest.set(row.version_id, row);
+    for (const row of rows) {
+      const current = newest.get(row.version_id);
+      if (!current || (row.stage === 'late') === (current.stage === 'late')) newest.set(row.version_id, row);
+      else if (row.stage === 'late') newest.set(row.version_id, row);
+    }
     return newest;
+  }
+
+  // ── judgments ─────────────────────────────────────────────────────────────
+  /** Store the judgment of one version. One judgment per version. */
+  createJudgment(judgment) {
+    const record = {
+      versionId: judgment.versionId,
+      runId: judgment.runId ?? null,
+      artworkId: judgment.artworkId,
+      status: judgment.status,
+      enforced: bool(judgment.enforced),
+      repaired: bool(judgment.repaired),
+      branch: judgment.branch ?? null,
+      reason: judgment.reason ?? null,
+      direction: judgment.direction ?? null,
+      features: judgment.features ?? {},
+      tests: judgment.tests ?? [],
+      scores: judgment.scores ?? [],
+      novelty: judgment.novelty ?? {},
+      judge: judgment.judge ?? null,
+      judgeCostUsd: judgment.judgeCostUsd ?? 0,
+      frames: judgment.frames ?? [],
+      createdAt: nowIso(),
+    };
+    this.db
+      .prepare(
+        `INSERT INTO judgments (version_id, run_id, artwork_id, status, enforced, repaired, branch, reason, direction,
+           features_json, tests_json, scores_json, novelty_json, judge_json, judge_cost_usd, frames_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (version_id) DO UPDATE SET
+           run_id = excluded.run_id,
+           status = excluded.status,
+           enforced = excluded.enforced,
+           repaired = excluded.repaired,
+           branch = excluded.branch,
+           reason = excluded.reason,
+           direction = excluded.direction,
+           features_json = excluded.features_json,
+           tests_json = excluded.tests_json,
+           scores_json = excluded.scores_json,
+           novelty_json = excluded.novelty_json,
+           judge_json = excluded.judge_json,
+           judge_cost_usd = excluded.judge_cost_usd,
+           frames_json = excluded.frames_json`,
+      )
+      .run(
+        record.versionId,
+        record.runId,
+        record.artworkId,
+        record.status,
+        record.enforced,
+        record.repaired,
+        record.branch,
+        record.reason,
+        record.direction,
+        json(record.features),
+        json(record.tests),
+        json(record.scores),
+        json(record.novelty),
+        record.judge === null ? null : json(record.judge),
+        record.judgeCostUsd,
+        json(record.frames),
+        record.createdAt,
+      );
+    return this.getJudgment(record.versionId);
+  }
+
+  getJudgment(versionId) {
+    const row = this.db.prepare('SELECT * FROM judgments WHERE version_id = ?').get(versionId);
+    return row ? judgmentFromRow(row) : null;
+  }
+
+  listJudgmentsByArtwork(artworkId) {
+    return this.db.prepare('SELECT * FROM judgments WHERE artwork_id = ? ORDER BY created_at').all(artworkId).map(judgmentFromRow);
   }
 
   // ── usage ─────────────────────────────────────────────────────────────────
@@ -822,6 +926,28 @@ function captureFromRow(row) {
     path: row.path,
     bytes: row.bytes,
     meta: parseJson(row.meta_json, {}),
+    createdAt: row.created_at,
+  };
+}
+
+function judgmentFromRow(row) {
+  return {
+    versionId: row.version_id,
+    runId: row.run_id,
+    artworkId: row.artwork_id,
+    status: row.status,
+    enforced: row.enforced === 1,
+    repaired: row.repaired === 1,
+    branch: row.branch,
+    reason: row.reason,
+    direction: row.direction,
+    features: parseJson(row.features_json, {}),
+    tests: parseJson(row.tests_json, []),
+    scores: parseJson(row.scores_json, []),
+    novelty: parseJson(row.novelty_json, {}),
+    judge: parseJson(row.judge_json, null),
+    judgeCostUsd: row.judge_cost_usd,
+    frames: parseJson(row.frames_json, []),
     createdAt: row.created_at,
   };
 }

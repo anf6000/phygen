@@ -27,9 +27,13 @@ import { BudgetError } from '../budget.mjs';
 import { copyPackage, publishSnapshot, reviewEdits } from '../artwork/workspace.mjs';
 import { assertSourceMode, decideSourceMode, isLocalHost } from '../capture/index.mjs';
 import { isTransientProviderError } from '../providers/index.mjs';
-import { EVOLVE_SYSTEM_PROMPT, REFACTOR_SYSTEM_PROMPT, STEP_INSTRUCTION, buildEvolvePrompt, buildRefactorPrompt, buildRepairPrompt } from './prompts.mjs';
+import { EVOLVE_SYSTEM_PROMPT, REFACTOR_SYSTEM_PROMPT, STEP_INSTRUCTION, buildEvolvePrompt, buildRefactorPrompt, buildRepairPrompt, buildSelfCritiquePrompt } from './prompts.mjs';
 import { feedRows } from './agent-events.mjs';
 import { WorkspaceReader } from './workspace-reader.mjs';
+import { recordedWeaknesses, unexploredAxes, writeDirection } from '../gate/direction.mjs';
+import { decideFromEvaluation, evaluateCandidate, gateArchive, isBorderline, measurePngBlockMap, measurePngFile } from '../gate/gate.mjs';
+import { JUDGE_SYSTEM_PROMPT, judgeCandidate } from '../vision/judge.mjs';
+import { DEFAULT_RUBRIC, meanScore } from '../vision/rubric.mjs';
 
 const CAPTURE_TIMESTEP = 8;
 const LEASE_MS = 120000;
@@ -1006,6 +1010,9 @@ export class RunController {
           version.runId === run.id &&
           version.round === round &&
           publishedBefore.has(version.id) &&
+          // A parked version is terminal: the gate refused it, so a resume must
+          // author a fresh child instead of continuing on it.
+          version.status !== 'parked' &&
           // A version that failed a real check is never reused. Only an
           // interruption of already published work may continue.
           !(version.status === 'failed' && version.errorCode !== 'interrupted_by_restart'),
@@ -1068,6 +1075,32 @@ export class RunController {
     if (failure) {
       this.#failVersion(child.id, failure);
       return { promoted: false, winnerVersionId: null, candidateIds, note: `The frame could not be captured: ${truncate(failure?.message ?? String(failure), 200)}` };
+    }
+
+    // The perceptual gate: measure the frame, judge a survivor, and decide
+    // whether the step advances the chain. In warn mode the verdict is recorded
+    // but nothing is parked.
+    if (this.config.gate.mode !== 'off') {
+      let gated;
+      try {
+        gated = await this.#applyGate({ run, version: this.store.getVersion(child.id) ?? child, parent });
+      } catch (error) {
+        if (isBudgetStop(error)) throw error;
+        if (this.#stopping(run.id)) throw error;
+        if (isTransientProviderError(error)) {
+          throw new ArtworkError('provider_unavailable', `The judge session did not answer: ${truncate(error?.message ?? String(error), 300)}`, {
+            round,
+            cause: error?.code ?? 'unknown',
+          });
+        }
+        // A gate fault is not a fault of the artwork. Record it and keep the step.
+        this.logger('warn', `Step ${round}: the gate could not run for ${child.id}: ${error.message}`);
+        this.#emit(run.id, 'log', { level: 'warn', message: `The perceptual gate could not run: ${truncate(error.message, 200)}. The step is kept.` });
+      }
+      if (gated?.verdict === 'parked') {
+        this.#parkVersion(child.id, gated.reason);
+        return { promoted: false, winnerVersionId: null, candidateIds, note: `Parked: ${truncate(gated.reason, 240)}` };
+      }
     }
 
     // A promotion fault is a fault of this step, never of the run: the card is
@@ -1293,6 +1326,348 @@ export class RunController {
     return frames;
   }
 
+  // ── the perceptual gate ───────────────────────────────────────────────────
+
+  /** The rubric floors for this server: the defaults, with the configured overrides. */
+  #rubric() {
+    const gate = this.config.gate;
+    return {
+      ...DEFAULT_RUBRIC,
+      coherenceFloor: gate.coherenceFloor,
+      noveltyFloor: gate.noveltyFloor,
+      qualityTolerance: gate.qualityTolerance,
+      strongNovelty: gate.strongNovelty,
+    };
+  }
+
+  /** The gate frames of one version: the early frame and the late identity frame. */
+  #gateFrames(version) {
+    const configurationHash = sha256Hex(stableStringify(version.configuration));
+    const captures = this.store
+      .listCaptures(version.id)
+      .filter((capture) => capture.sourceHash === version.sourceHash && capture.configurationHash === configurationHash);
+    const late = captures.find((capture) => capture.stage === 'late') ?? captures[captures.length - 1] ?? null;
+    const early = captures.find((capture) => capture.stage === 'early') ?? null;
+    return { early, late };
+  }
+
+  /**
+   * The shared gate inputs for one step: the archive, the references a candidate
+   * is measured against, and the promoted versions. Loaded once per step and
+   * reused across the first pass and the repair pass.
+   */
+  #gateContext(run, parent, excludeVersionId) {
+    const versions = this.store.listVersions(run.artworkId);
+    const { archive, judgments, usable } = gateArchive({ store: this.store, config: this.config, artworkId: run.artworkId, excludeVersionId, versions });
+    const references = [];
+    const seen = new Set();
+    const push = (id, role) => {
+      if (!id || seen.has(id) || !usable(id)) return;
+      seen.add(id);
+      references.push({ id, role, features: usable(id) });
+    };
+    push(parent?.id, 'parent');
+    for (const member of archive.members) push(member.version.id, 'archive');
+    const parentJudgment = parent ? judgments.find((judgment) => judgment.versionId === parent.id) ?? null : null;
+    return { references, archive, judgments, versions, parentJudgment };
+  }
+
+  /** The self-written direction for the step that evolves `parent`. */
+  #directionFor(parent, context) {
+    const weaknesses = recordedWeaknesses(context.judgments, this.store.lineage(parent.id).map((version) => version.id));
+    const axes = unexploredAxes(context.versions.filter((version) => version.status === 'promoted'));
+    return writeDirection({ role: 'exploit', kind: 'structure', parent, weaknesses, axes }).text;
+  }
+
+  /** True when the judge mode asks for a paid judgment of this step. */
+  #shouldJudge(evaluation) {
+    const mode = this.config.gate.judgeMode;
+    if (mode === 'off') return false;
+    if (mode === 'always') return true;
+    return isBorderline(evaluation, { rubric: this.#rubric(), margin: this.config.gate.borderlineMargin });
+  }
+
+  /** One entry for the judge: the late frame of a version. The same rule as the gate. */
+  #judgeEntry(version) {
+    const { late } = this.#gateFrames(version);
+    return { versionId: version.id, frames: late ? [{ stage: late.stage, step: late.step, path: late.path }] : [] };
+  }
+
+  /** Run one blind judge session and return the validated answer. */
+  async #runJudge({ run, version, parent, direction }) {
+    const onEvent = this.#agentReporter(run.id, version.id);
+    const sessionId = `phygen-judge-${version.id}`;
+    const result = await judgeCandidate({
+      ask: (request) =>
+        this.#providerCall({
+          run,
+          kind: 'judge',
+          label: `judge:${version.id}`,
+          versionId: version.id,
+          call: (signal) =>
+            this.provider.judge({
+              prompt: request.prompt,
+              images: request.images.map((image) => image.path),
+              frames: request.frames,
+              labels: request.labels,
+              systemPrompt: JUDGE_SYSTEM_PROMPT,
+              model: run.protocol?.authorModel,
+              onEvent,
+              sessionId,
+              signal,
+            }),
+        }),
+      candidate: this.#judgeEntry(version),
+      parent: this.#judgeEntry(parent),
+      direction,
+      model: run.protocol?.authorModel,
+    });
+    return { answer: result, costUsd: Number(result.usage?.costUsd ?? 0) || 0 };
+  }
+
+  /**
+   * Measure and judge one candidate. Every failure is recorded: a missing frame,
+   * a PNG that cannot be decoded, and a malformed judge answer all leave a value
+   * that was not measured, never a silent zero.
+   */
+  async #judgePass({ run, version, parent, direction, context }) {
+    const { early, late } = this.#gateFrames(version);
+    if (!late) return { measured: false, reason: 'no capture was found for this step' };
+    const measured = await measurePngFile(late.path);
+    if (!measured.ok) return { measured: false, reason: `the frame could not be measured (${measured.code}): ${measured.message}` };
+    // The ordered-frame test reads only the block map of the early frame.
+    const measuredEarly = early ? await measurePngBlockMap(early.path) : null;
+
+    const evaluation = evaluateCandidate({
+      candidate: measured.features,
+      early: measuredEarly?.ok ? measuredEarly.features : null,
+      references: context.references,
+      floors: this.config.gate.floors,
+      rubric: this.#rubric(),
+    });
+    this.#emit(run.id, 'archive.updated', {
+      artworkId: run.artworkId,
+      versionId: version.id,
+      members: context.archive.members.map((member) => member.version.id),
+      refused: context.archive.refused.length,
+    });
+
+    const parentQuality = meanScore(context.parentJudgment?.scores ?? []);
+
+    let judge = null;
+    let judgeCostUsd = 0;
+    let judgeError = null;
+    if (this.#shouldJudge(evaluation)) {
+      try {
+        const judged = await this.#runJudge({ run, version, parent, direction });
+        judge = judged.answer;
+        judgeCostUsd = judged.costUsd;
+      } catch (error) {
+        if (isBudgetStop(error) || this.#stopping(run.id)) throw error;
+        // In warn mode the verdict changes nothing, so a judge outage is
+        // recorded and the step is kept. In park mode it must pause the run:
+        // a missing verdict must not silently become a keep.
+        if (isTransientProviderError(error) && this.config.gate.mode !== 'warn') throw error;
+        judgeError = { code: error?.code ?? 'judge_failed', message: truncate(error?.message ?? String(error), 400) };
+        this.#emit(run.id, 'log', { level: 'warn', message: `The judge refused this answer: ${truncate(error?.message ?? String(error), 200)}` });
+      }
+    }
+    const quality = judge ? judge.mean : null;
+    const decision = decideFromEvaluation({ evaluation, quality, parentQuality, rubric: this.#rubric() });
+    const frames = [early, late]
+      .filter(Boolean)
+      .map((capture) => ({ stage: capture.stage, step: capture.step, seed: capture.seed, captureId: capture.id, url: `/api/captures/${capture.id}.png` }));
+    return {
+      measured: true,
+      evaluation,
+      decision,
+      judge,
+      judgeError,
+      judgeCostUsd,
+      parentQuality,
+      quality,
+      frames,
+      measuredFeatures: measured.features,
+      reason: decision.reason,
+    };
+  }
+
+  /** Store one judgment and stream its parts on the run. */
+  #recordJudgment({ run, version, pass, status, enforced, repaired, direction }) {
+    const evaluation = pass.evaluation ?? null;
+    const judgment = this.store.createJudgment({
+      versionId: version.id,
+      runId: run.id,
+      artworkId: run.artworkId,
+      status,
+      enforced,
+      repaired,
+      branch: pass.decision?.branch ?? null,
+      reason: pass.reason ?? null,
+      direction: direction ?? null,
+      features: pass.measuredFeatures ?? {},
+      tests: evaluation?.tests ?? [],
+      scores: pass.judge?.scores ?? [],
+      novelty: evaluation
+        ? {
+            novelty: evaluation.novelty,
+            nearest: evaluation.nearest,
+            distances: evaluation.distances,
+            coherence: evaluation.coherence,
+            terms: evaluation.coherenceTerms,
+            parentQuality: pass.parentQuality ?? null,
+            quality: pass.quality ?? null,
+          }
+        : {},
+      judge: pass.judge ? { ...pass.judge, error: pass.judgeError ?? null } : pass.judgeError ? { error: pass.judgeError } : null,
+      judgeCostUsd: pass.judgeCostUsd ?? 0,
+      frames: pass.frames ?? [],
+    });
+    this.#emit(run.id, 'judgment.metrics', { versionId: version.id, features: judgment.features, tests: judgment.tests, novelty: judgment.novelty });
+    this.#emit(run.id, 'judgment.verdict', { versionId: version.id, status, enforced, repaired, branch: judgment.branch, reason: judgment.reason });
+    if (judgment.judge) {
+      this.#emit(run.id, 'judgment.judge', {
+        versionId: version.id,
+        scores: judgment.scores,
+        weaknesses: judgment.judge.weaknesses ?? [],
+        mean: pass.judge?.mean ?? null,
+        error: pass.judgeError ?? null,
+      });
+    }
+    return judgment;
+  }
+
+  /**
+   * The gate for one step.
+   *
+   * In warn mode the verdict is recorded and the step is kept. In park mode a
+   * parked step gets one bounded self-repair; a second park is final, the chain
+   * head stays, and the thin rejected card remains.
+   */
+  async #applyGate({ run, version, parent }) {
+    const mode = this.config.gate.mode;
+    const context = this.#gateContext(run, parent, version.id);
+    const direction = this.#directionFor(parent, context);
+    this.#emit(run.id, 'direction.written', { versionId: version.id, text: direction });
+
+    const first = await this.#judgePass({ run, version, parent, direction, context });
+    if (!first.measured) {
+      const judgment = this.store.createJudgment({
+        versionId: version.id,
+        runId: run.id,
+        artworkId: run.artworkId,
+        status: 'pending',
+        enforced: false,
+        repaired: false,
+        reason: `Not judged: ${first.reason}.`,
+        direction,
+        features: {},
+        tests: [],
+        scores: [],
+        novelty: {},
+        judge: null,
+        judgeCostUsd: 0,
+        frames: [],
+      });
+      this.#emit(run.id, 'judgment.verdict', { versionId: version.id, status: 'pending', enforced: false, repaired: false, reason: judgment.reason });
+      return { verdict: 'kept', judgment, reason: first.reason };
+    }
+
+    if (!(first.decision.verdict === 'parked' && mode === 'park')) {
+      // Warn mode shows the verdict but keeps the step. Park mode keeps a survivor.
+      const status = mode === 'warn' ? first.decision.verdict : 'kept';
+      const judgment = this.#recordJudgment({ run, version, pass: first, status, enforced: false, repaired: false, direction });
+      return { verdict: 'kept', judgment, reason: first.reason };
+    }
+
+    if (this.config.gate.maxRepairs > 0) {
+      const repaired = await this.#selfRepairPass({ run, version, parent, pass: first, direction });
+      if (repaired) {
+        const second = await this.#judgePass({ run, version: repaired, parent, direction, context });
+        const stillParked = !second.measured || second.decision.verdict === 'parked';
+        const judgment = this.#recordJudgment({
+          run,
+          version: repaired,
+          pass: second.measured ? second : first,
+          status: stillParked ? 'parked' : 'kept',
+          enforced: stillParked,
+          repaired: true,
+          direction,
+        });
+        return {
+          verdict: stillParked ? 'parked' : 'kept',
+          judgment,
+          reason: second.measured ? second.reason : `the repaired step could not be measured: ${second.reason}`,
+        };
+      }
+    }
+    const judgment = this.#recordJudgment({ run, version, pass: first, status: 'parked', enforced: true, repaired: false, direction });
+    return { verdict: 'parked', judgment, reason: first.reason };
+  }
+
+  /** One bounded self-repair on park. Returns the repaired version, or null. */
+  async #selfRepairPass({ run, version, parent, pass, direction }) {
+    const workspaceDir = version.workspacePath;
+    if (!workspaceDir) return null;
+    const prompt = buildSelfCritiquePrompt({
+      tests: pass.evaluation?.tests ?? [],
+      scores: pass.judge?.scores ?? [],
+      weaknesses: pass.judge?.weaknesses ?? [],
+      novelty: pass.evaluation ? { novelty: pass.evaluation.novelty, nearest: pass.evaluation.nearest } : null,
+      coherence: pass.evaluation?.coherence ?? null,
+      direction,
+    });
+    const ran = await this.#repair({
+      run,
+      versionId: version.id,
+      workspaceDir,
+      failure: new ArtworkError('gate_parked', 'The perceptual gate parked this step.'),
+      systemPrompt: EVOLVE_SYSTEM_PROMPT,
+      prompt,
+      label: 'self-critique',
+    });
+    if (!ran) return null;
+
+    const context = this.#artworkContext(run.artworkId);
+    const reviewed = await this.#validateCandidate({ run, versionId: version.id, workspaceDir, context, parent, phase: 'after-repair' });
+    if (!reviewed.ok) return null;
+    try {
+      await this.#withJob({ run, round: version.round, kind: 'publish', versionId: version.id }, async () => {
+        const published = await publishSnapshot({
+          workspaceDir,
+          snapshotRoot: this.config.artifactsDir,
+          artworkId: context.manifest.id,
+          packageHash: reviewed.packageHash,
+        });
+        this.store.updateVersion(version.id, {
+          sourceHash: reviewed.packageHash,
+          snapshotPath: published.path,
+          configuration: reviewed.configuration,
+          changes: reviewed.changes,
+          workspacePath: workspaceDir,
+        });
+      });
+      await this.#captureVersion({ run, version: this.store.getVersion(version.id) });
+      this.#emit(run.id, 'log', { level: 'info', message: `Self-repair of ${version.id}: a new frame is captured for a second judgment` });
+      return this.store.getVersion(version.id);
+    } catch (error) {
+      if (isBudgetStop(error) || this.#stopping(run.id)) throw error;
+      return null;
+    }
+  }
+
+  /** Park one version: the chain head stays, and the rejected card remains. */
+  #parkVersion(versionId, reason) {
+    const version = this.store.getVersion(versionId);
+    if (!version) return null;
+    if (isTerminal('version', version.status)) return version;
+    const status = transition('version', version.status, 'parked');
+    const updated = this.store.updateVersion(versionId, { status });
+    this.#emit(version.runId, 'version.state', { versionId, status, detail: `parked by the gate: ${truncate(reason, 300)}` });
+    this.#emit(version.runId, 'log', { level: 'info', message: `Parked ${versionId}: ${truncate(reason, 200)}` });
+    return updated;
+  }
+
   /** Review the edits, repair once, then check the package and its configuration. */
   async #validateCandidate({ run, versionId, workspaceDir, context, parent, phase }) {
     // The parent package is the baseline: the report then names exactly what
@@ -1392,6 +1767,13 @@ export class RunController {
     const outDir = join(this.config.dataDir, 'captures', version.id);
     const configurationHash = sha256Hex(stableStringify(version.configuration));
     const samples = [];
+    // The perceptual gate needs two ordered frames. Capture the EARLY frame
+    // first, so the late frame is the newest and the card keeps it.
+    if (this.config.gate.mode !== 'off') {
+      const lateStep = steps[steps.length - 1];
+      const earlyStep = Math.max(1, Math.round(lateStep * this.config.gate.earlyStepFraction));
+      for (const seed of seeds) samples.push({ stage: 'early', step: earlyStep, seed });
+    }
     for (const seed of seeds) {
       stages.forEach((stage, index) => {
         samples.push({ stage, step: steps[Math.min(index, steps.length - 1)], seed });
@@ -1669,7 +2051,8 @@ export class RunController {
   #failVersion(versionId, error) {
     const version = this.store.getVersion(versionId);
     if (!version) return null;
-    if (['promoted', 'failed'].includes(version.status)) return version;
+    // A promoted, failed, or parked version is terminal and is never failed again.
+    if (['promoted', 'failed', 'parked'].includes(version.status)) return version;
     const status = transition('version', version.status, 'failed');
     const updated = this.store.updateVersion(versionId, {
       status,

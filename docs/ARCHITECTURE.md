@@ -13,6 +13,8 @@ server/             the controller: records, providers, capture, the API
   src/controller/   one run: the step loop, prompts, budgets, the agent feed
   src/providers/    the Pi session driver and the deterministic test double
   src/capture/      the browser capture and the container worker
+  src/vision/       the free image metrics, the hard tests, the rubric, the judge
+  src/gate/         the archive, the self-written direction, the measure step
 web/                the interface: the chain, the cards, the shell, the live view
   src/chain.ts      the pure chain order and the playing rule
 ```
@@ -22,10 +24,11 @@ web/                the interface: the chain, the cards, the shell, the live vie
 A run is a **linear chain**. Each step makes exactly one child of the newest
 version with status `promoted`, which is the **chain head**.
 
-- There is no judge, no comparison, no variant, and no archive. The child is
-  always kept, and a person judges quality by looking at the frames.
-- The chain head is read again before every step, so a failed step never becomes
-  a parent.
+- There is no comparison between two candidates and no variant fan-out. One step
+  makes one child. The perceptual gate below decides whether that child is kept
+  or parked, and a person still judges quality by looking at the frames.
+- The chain head is read again before every step, so a failed or parked step
+  never becomes a parent.
 - A step that fails a technical check, after one bounded repair session, marks
   its version `failed` and leaves the chain head where it was.
 - A failed version is terminal. The one path back is the operator repair:
@@ -52,20 +55,53 @@ one `generation`, and the records are ordered by generation and creation time.
 4. Review the edits against the manifest, check the package, and validate the
    configuration. A technical failure gets one bounded repair session.
 5. Publish the snapshot (immutable, content addressed).
-6. Capture one late square frame: 1024 x 1024, seed 1337, step 2500.
-7. Promote the child.
+6. Capture TWO ordered frames: an early frame at half the late step, then the
+   late square frame: 1024 x 1024, seed 1337, step 1000. The late frame is the
+   card identity; the early frame is the development probe.
+7. Run the perceptual gate: measure the frames, run the hard tests, compute the
+   coherence and the novelty, judge a survivor, then decide keep or park.
+8. Promote the child, or park it (see below).
 
 The prompt tells the session to keep the seeded stream reproducible, to keep the
 adapter contract, to change at least one file under `src/`, and to keep the
 network visible.
 
-### There is no quality gate
+## The perceptual gate
 
-The child is always kept. There is no judge, no comparison, and no measure of the
-frame, because there is no selection to make: a person judges the work by looking
-at the chain. A step is refused only for a real technical fault — a package that
-does not load, or a capture that fails or passes its time limit. A quiet, dark, or
-bold frame is a step, and it stays.
+The gate is a self-judgment. It measures the captured PNG in Node, with no
+model, and reaches a verdict from numbers. It never reads a source line, and the
+author never sees its own frame, so the judgment is blind.
+
+- `src/vision/png.mjs` decodes the PNG with no dependency. A format it cannot
+  decode is a RECORDED skip, never a zero.
+- `src/vision/metrics.mjs` returns the free features: colorfulness, saturation
+  clipping, tonal entropy, edge density and balance, occupancy, the dominant
+  ridge share, and the hue spread.
+- `src/vision/tests.mjs` holds the HARD tests: `saturation_clipping`,
+  `uniform_noise`, `empty_or_cord`, `rainbow`, and `strobing`. A test that could
+  not run is a recorded skip.
+- `src/vision/rubric.mjs` holds the coherence score and the pure keep/park
+  decision table.
+- `src/vision/judge.mjs` is the blind per-criterion judge. The labels are
+  anonymous and the order is randomized. A malformed answer is a recorded
+  failure, never a silent pass.
+- `src/gate/archive.mjs` keeps a small archive of the most diverse kept versions.
+- `src/gate/direction.mjs` writes the direction for the next step from the
+  judge's recorded weaknesses and the least-moved configuration fields.
+
+The mode is `PHYGEN_GATE_MODE`: `off` skips the gate, `warn` records the verdict
+and parks nothing, and `park` refuses a step that fails. Warn is the default. The
+judge mode is `PHYGEN_JUDGE_MODE`: `borderline` (the default — a paid judgment
+only when a free metric is near a floor), `always`, or `off`.
+
+In `park` mode a parked step gets ONE bounded self-repair: a session sees its own
+frame and the parent frame, and a machine report of every tripped test, the
+scores, and the novelty. A second park is final: the version is stored with
+status `parked`, the chain head stays, and the card becomes a thin rejected card.
+
+The floors are fitted from the chain and recorded in `docs/MEASUREMENTS.md`. On
+this artwork the `cordRidgeMax` ceiling is inactive, because a healthy physarum
+frame is one connected network; the test records a skip.
 
 ## Runs and recovery
 
@@ -120,6 +156,9 @@ line counts of the files the session touched.
 - Exactly one card plays live: the newest promoted version. `playingVersionId` in
   `web/src/chain.ts` is the single rule, and it is tested.
 - Every other card shows its still frame, its stage, or its failure reason.
+- Each card carries a thin gate strip: the verdict (kept, repaired, parked, or
+  "would park" in warn mode). Selecting a version shows the reason panel: the
+  metrics, the hard tests, the criterion scores, the novelty, and the direction.
 - The shell is a read-only log, newest at the bottom. It follows the work while a
   step runs, and it shows the stored rows of a selected card.
 - The chain area and the shell are split by a drag handle. The split is kept in

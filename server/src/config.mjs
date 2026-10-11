@@ -86,6 +86,15 @@ export function validateConfig(config) {
   if (config.capture.captureTimeoutMs > config.capture.containerTimeoutMs) {
     fail('capture.captureTimeoutMs', 'must not exceed capture.containerTimeoutMs');
   }
+  if (!['off', 'warn', 'park'].includes(config.gate.mode)) {
+    fail('gate.mode (PHYGEN_GATE_MODE)', 'must be off, warn, or park');
+  }
+  if (!['off', 'always', 'borderline'].includes(config.gate.judgeMode)) {
+    fail('gate.judgeMode (PHYGEN_JUDGE_MODE)', 'must be off, always, or borderline');
+  }
+  if (!Number.isFinite(config.gate.earlyStepFraction) || config.gate.earlyStepFraction <= 0 || config.gate.earlyStepFraction >= 1) {
+    fail('gate.earlyStepFraction (PHYGEN_GATE_EARLY_FRACTION)', 'must be greater than 0 and less than 1');
+  }
   return true;
 }
 
@@ -191,6 +200,51 @@ export function loadConfig(overrides = {}) {
       frameRoles: ['late'],
       // Remove candidate workspaces when a run finishes. Records and captures stay.
       cleanupWorkspaces: readBool('PHYGEN_CLEANUP_WORKSPACES', true),
+    },
+
+    // The perceptual self-judgment gate. warn records a verdict and parks
+    // nothing; park refuses a step that fails the tests, the coherence floor, or
+    // the novelty floor; off skips the gate and the extra frames.
+    //
+    // The values below are FITTED from the chain in docs/MEASUREMENTS.md: each
+    // threshold keeps about 95% of the known-good frames. Fit them again with
+    // `node tools/calibrate-gate.mjs`. Warn mode stays the default until the
+    // operator turns parking on with PHYGEN_GATE_MODE=park.
+    gate: {
+      mode: process.env.PHYGEN_GATE_MODE || 'warn',
+      // borderline asks the judge only when a free metric is near a floor, so
+      // warn mode does not pay for a judgment on every step. Set
+      // PHYGEN_JUDGE_MODE=always to judge every survivor.
+      judgeMode: process.env.PHYGEN_JUDGE_MODE || 'borderline',
+      // The early ordered frame sits at this share of the late step.
+      earlyStepFraction: readNumber('PHYGEN_GATE_EARLY_FRACTION', 0.5),
+      archiveSize: readNumber('PHYGEN_GATE_ARCHIVE_SIZE', 8),
+      qualityFloor: readNumber('PHYGEN_GATE_QUALITY_FLOOR', 0.4),
+      coherenceFloor: readNumber('PHYGEN_GATE_COHERENCE_FLOOR', 0.27),
+      noveltyFloor: readNumber('PHYGEN_GATE_NOVELTY_FLOOR', 0.016),
+      qualityTolerance: readNumber('PHYGEN_GATE_QUALITY_TOLERANCE', 0.12),
+      strongNovelty: readNumber('PHYGEN_GATE_STRONG_NOVELTY', 0.3),
+      // In borderline judge mode, a free metric within this margin of a floor
+      // still asks the judge.
+      borderlineMargin: readNumber('PHYGEN_GATE_BORDERLINE_MARGIN', 0.08),
+      maxRepairs: readNumber('PHYGEN_GATE_MAX_REPAIRS', 1),
+      // The single runtime owner of the hard-test floors. `vision/tests.mjs`
+      // `DEFAULT_FLOORS` is only the library fallback for a caller that passes
+      // none; the server always passes this object.
+      floors: {
+        saturationClipMax: readNumber('PHYGEN_GATE_SATURATION_CLIP_MAX', 0.15),
+        uniformEdgeMin: readNumber('PHYGEN_GATE_UNIFORM_EDGE_MIN', 0.6),
+        uniformEntropyMax: readNumber('PHYGEN_GATE_UNIFORM_ENTROPY_MAX', 0.07),
+        emptyOccupiedMin: readNumber('PHYGEN_GATE_EMPTY_OCCUPIED_MIN', 0.05),
+        // A healthy physarum frame is one connected network, so the ridge
+        // ceiling is inactive on this artwork; it stays a recorded skip.
+        cordRidgeMax: readNumber('PHYGEN_GATE_CORD_RIDGE_MAX', 1),
+        rainbowHueSpreadMax: readNumber('PHYGEN_GATE_RAINBOW_HUE_MAX', 0.89),
+        // No ordered early frames exist in the chain yet, so the development
+        // band stays provisional until a gated run has produced a pair.
+        frameDeltaMin: readNumber('PHYGEN_GATE_FRAME_DELTA_MIN', 0.004),
+        frameDeltaMax: readNumber('PHYGEN_GATE_FRAME_DELTA_MAX', 0.8),
+      },
     },
 
     server: {

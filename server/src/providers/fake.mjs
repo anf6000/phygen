@@ -9,6 +9,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { minimalEdit } from '../controller/agent-events.mjs';
+import { CRITERIA } from '../vision/judge.mjs';
 import { applySourceRecipe } from './fake-edits.mjs';
 
 export const FAKE_MARKER = 'stub-test-double';
@@ -132,6 +133,44 @@ export class FakeProvider {
       usage: { inputTokens: 800, outputTokens: 160, costUsd: 0, raw: { stub: true }, costKnown: true },
       model: 'fake-deterministic',
       sessionId: `fake-${seedKey}-${round}-${slot}`,
+      stub: true,
+    };
+  }
+
+  /**
+   * A deterministic judge answer. It is well-formed on purpose, so the whole
+   * gate can be tested without a model. It reports low confidence, and it says
+   * it is the test double, so it is never mistaken for a real judgment.
+   */
+  async judge({ frames = [], onEvent = null }) {
+    const usable = Array.isArray(frames) ? frames.filter((frame) => frame && frame.label) : [];
+    const observations = usable.map((frame) => ({
+      label: frame.label,
+      frame: `${frame.stage}@${frame.step}`,
+      detail: `The deterministic double sees a frame at step ${frame.step} under label ${frame.label}.`,
+    }));
+    const citation = usable[0] ? `${usable[0].label}|${usable[0].stage}@${usable[0].step}` : 'A|late@1000';
+    const scores = CRITERIA.map((criterion) => ({ criterion, score: 0.6, frames: [citation] }));
+    const answer = {
+      observations,
+      scores,
+      weaknesses: ['The deterministic double reports no weakness.'],
+      distinctiveness: 'medium',
+      uncertainty: 'high',
+      confidence: 0.5,
+      notes: 'This answer comes from the deterministic test double, not from a model.',
+    };
+    const text = JSON.stringify(answer);
+    if (onEvent) {
+      onEvent({ type: 'message_update', message: { role: 'assistant', content: [{ type: 'thinking', thinking: 'The double scores every criterion at the middle and marks its answer as a stub.' }] } });
+      onEvent({ type: 'message_update', delta: text });
+      onEvent({ type: 'turn_end', usage: { totalTokens: 480, cost: { total: 0 } } });
+    }
+    return {
+      text,
+      usage: { inputTokens: 400, outputTokens: 80, costUsd: 0, raw: { stub: true }, costKnown: true },
+      model: 'fake-deterministic',
+      sessionId: 'fake-judge',
       stub: true,
     };
   }

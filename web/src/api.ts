@@ -1,7 +1,7 @@
 // Thin API client and the event stream hook.
 import { useEffect, useRef, useState } from 'react';
 
-import type { AgentRow, ApiError, Health, ModelList, ProgressEvent, Run, RunDetail, Tree } from './types';
+import type { AgentRow, ApiError, ArchiveReport, Health, Judgment, ModelList, ProgressEvent, Run, RunDetail, Tree } from './types';
 
 export class RequestError extends Error {
   readonly code: string;
@@ -44,6 +44,8 @@ export const api = {
     request<{ artwork: { id: string } }>('/api/artworks/import', { method: 'POST', body: JSON.stringify({ packagePath }) }),
   tree: (artworkId: string) => request<Tree>(`/api/artworks/${artworkId}/tree`),
   agentFeed: (versionId: string) => request<{ rows: AgentRow[] }>(`/api/versions/${versionId}/agent`),
+  judgment: (versionId: string) => request<{ judgment: Judgment }>(`/api/versions/${versionId}/judgment`),
+  archive: (artworkId: string) => request<ArchiveReport>(`/api/artworks/${artworkId}/archive`),
   models: () => request<ModelList>('/api/models'),
   startRun: (body: Record<string, unknown>) => request<{ run: Run }>('/api/runs', { method: 'POST', body: JSON.stringify(body) }),
   run: (runId: string) => request<RunDetail>(`/api/runs/${runId}`),

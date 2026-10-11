@@ -211,3 +211,54 @@ export function buildRepairPrompt({ failure }) {
     'If the failure is not repairable in the workspace, say so and stop.',
   ].join('\n');
 }
+
+function fmt(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(3) : String(value);
+}
+
+/**
+ * One bounded self-critique after the perceptual gate parks a candidate.
+ *
+ * The session sees its own frame and the parent frame, and a machine report of
+ * exactly what failed: the hard tests with their values and floors, the
+ * criterion scores, and the novelty with its nearest reference. The gate's
+ * numbers are the evidence, so the repair targets the cause instead of guessing.
+ */
+export function buildSelfCritiquePrompt({ tests = [], scores = [], weaknesses = [], novelty = null, coherence = null, direction = null }) {
+  const lines = [];
+  lines.push('Your change was rendered and measured, and the perceptual gate refused it.');
+  lines.push('This is a visual refusal, not a technical fault: the package loads and renders.');
+  lines.push('');
+  lines.push('The attached frames are the candidate frame and the parent frame.');
+  lines.push('');
+  lines.push('What the gate measured:');
+  if (typeof coherence === 'number') lines.push(`- coherence ${fmt(coherence)}`);
+  if (novelty && typeof novelty.novelty === 'number') {
+    const nearest = novelty.nearest?.id ? `, nearest reference ${novelty.nearest.id} at ${fmt(novelty.nearest.distance)}` : '';
+    lines.push(`- novelty ${fmt(novelty.novelty)}${nearest}`);
+  }
+  const tripped = tests.filter((test) => test.tripped);
+  if (tripped.length > 0) {
+    lines.push('- the hard tests that tripped:');
+    for (const test of tripped) lines.push(`  - ${test.name}: value ${JSON.stringify(test.value)} against floor ${JSON.stringify(test.floor)} — ${test.note}`);
+  }
+  if (scores.length > 0) {
+    lines.push('- the criterion scores:');
+    for (const score of scores) lines.push(`  - ${score.criterion}: ${fmt(score.score)}`);
+  }
+  if (weaknesses.length > 0) {
+    lines.push('- the judge named these weaknesses:');
+    for (const weakness of weaknesses) lines.push(`  - ${weakness}`);
+  }
+  if (direction) {
+    lines.push('');
+    lines.push(`The stated direction was: ${direction}`);
+  }
+  lines.push('');
+  lines.push('Repair the workspace in place. Keep the same artistic intent.');
+  lines.push('Change exactly what caused the refusal, and leave the rest as it is.');
+  lines.push('Do not weaken the simulation to pass a test: keep trail feedback the main cause of the forms.');
+  lines.push('Change only the files the manifest allows, and keep the configuration valid.');
+  lines.push('If the refusal is not repairable in the workspace, say so and stop.');
+  return lines.join('\n');
+}

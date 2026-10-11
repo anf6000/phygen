@@ -1,6 +1,10 @@
 // Types for the controller API. They follow docs/API.md exactly.
 
-export type VersionStatus = 'queued' | 'authoring' | 'validating' | 'capturing' | 'promoted' | 'failed';
+export type VersionStatus = 'queued' | 'authoring' | 'validating' | 'capturing' | 'promoted' | 'parked' | 'failed';
+
+export type Verdict = 'kept' | 'parked' | 'pending';
+
+export type GateBranch = 'quality' | 'novelty' | 'both' | 'none';
 
 export type RunState = 'queued' | 'running' | 'paused' | 'stopping' | 'stopped' | 'completed' | 'failed';
 
@@ -50,6 +54,93 @@ export interface TreeNode {
   usageUsd: number;
   tokens: number;
   error: { code: string; message: string } | null;
+  /** The perceptual gate verdict of this version, or null before the gate ran. */
+  verdict: Verdict | null;
+  /** True when a park verdict actually stopped the step (park mode, not warn). */
+  verdictEnforced: boolean;
+  /** True when the verdict comes from a step that was repaired after a park. */
+  repaired: boolean;
+}
+
+export interface JudgmentTest {
+  name: string;
+  tripped: boolean;
+  value: unknown;
+  floor: unknown;
+  note: string;
+  available: boolean;
+}
+
+export interface JudgeScore {
+  criterion: string;
+  score: number;
+  frames: string[];
+}
+
+export interface JudgeObservation {
+  label: string;
+  frame: string | null;
+  detail: string;
+}
+
+export interface JudgmentNovelty {
+  novelty?: number;
+  nearest?: { id: string; role: string | null; distance: number } | null;
+  distances?: { id: string; role: string | null; distance: number }[];
+  coherence?: number;
+  terms?: Record<string, number>;
+  parentQuality?: number | null;
+  quality?: number | null;
+}
+
+export interface JudgmentJudge {
+  observations?: JudgeObservation[];
+  weaknesses?: string[];
+  mean?: number | null;
+  confidence?: number;
+  uncertainty?: string;
+  error?: { code: string; message: string } | null;
+}
+
+export interface JudgmentFrame {
+  stage: string;
+  step: number;
+  seed?: number;
+  captureId?: string;
+  url?: string;
+}
+
+/** One gate judgment: the metrics, the hard tests, the judge answer, and the verdict. */
+export interface Judgment {
+  versionId: string;
+  runId: string | null;
+  status: Verdict;
+  enforced: boolean;
+  repaired: boolean;
+  branch: GateBranch | null;
+  reason: string | null;
+  direction: string | null;
+  features: Record<string, unknown>;
+  tests: JudgmentTest[];
+  scores: JudgeScore[];
+  novelty: JudgmentNovelty;
+  judge: JudgmentJudge | null;
+  judgeCostUsd: number;
+  frames: JudgmentFrame[];
+  createdAt: string;
+}
+
+export interface ArchiveEntry {
+  versionId: string;
+  generation: number;
+  quality: number;
+  novelty: number;
+  addedBy?: string;
+}
+
+export interface ArchiveReport {
+  members: ArchiveEntry[];
+  refused: { versionId: string; reason: string; quality: number; novelty: number }[];
 }
 
 export interface TreeEdge {

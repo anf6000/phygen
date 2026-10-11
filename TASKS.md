@@ -164,9 +164,23 @@ Vocabulary, which the interface, the API, and the records use:
 - The **chain head** is the newest version with status `promoted`. A step always
   starts from the chain head.
 - A **run** asks for X steps. The run reads the chain head again before every
-  step, so a failed step never becomes a parent.
-- There is **no judge, no comparison, no variant, and no archive**. The child is
-  always kept. A person judges quality by looking at the frames.
+  step, so a failed or parked step never becomes a parent.
+- The **perceptual gate** decides whether a child is kept or parked. Warn mode
+  records the verdict and parks nothing. Park mode refuses a step that fails the
+  hard tests, the coherence floor, or the novelty floor. A parked step is
+  recorded, and the chain head stays.
+
+The **perceptual gate** was added on 2026-10-11. It measures the captured frame
+in Node, with no model, and reaches a verdict from numbers. It adds one early
+frame beside the late frame, so a step captures two ordered frames. The floors
+are fitted from the chain and recorded in `docs/MEASUREMENTS.md`. The branch is
+`perceptual-gate`, and the branch `behavior` is its parent.
+
+The gate starts in WARN mode: it records the verdict and parks nothing. The
+operator turns parking on with `PHYGEN_GATE_MODE=park` after a warning-only run
+confirms the verdicts. On this artwork the `cordRidgeMax` ceiling is inactive,
+because a healthy physarum frame is one connected network; that test records a
+skip.
 
 The chain is linear. Every child has one parent, so the version count is
 `1 + evolutionsDone + failed steps`.
@@ -209,9 +223,9 @@ Open <http://127.0.0.1:8787/>.
 Checks:
 
 ```bash
-cd server && npm test       # 39 controller, step loop, and storage tests
+cd server && npm test       # 90 controller, step loop, storage, and vision tests
 cd threejs && npm test      # 57 artwork tests
-cd web && npm test          # 13 chain-order, label, autoplay, and pixel-motion tests
+cd web && npm test          # 14 chain-order, label, autoplay, and pixel-motion tests
 cd threejs && npm run validate
 cd web && npm run build
 cd server && node tools/snapshot-report.mjs            # snapshot integrity report
@@ -221,6 +235,7 @@ cd server && node tools/reset-to-root.mjs              # delete every evolved ve
 cd server && node tools/truncate-chain.mjs --keep-through <generation>   # delete every step above one generation, keep it
 cd server && node tools/capture-frame.mjs --version <id> [--force]   # frame for a version outside any run
 cd server && node tools/chain-index.mjs                # rewrite docs/chain.json after a run
+cd server && node tools/calibrate-gate.mjs [--json]    # fit the perceptual gate floors, read-only
 node tools/live-check.mjs --version <id>               # the live artwork on both routes
 ```
 
@@ -236,19 +251,24 @@ A step does these actions, in order:
 4. Review the edits against the manifest, and check the package and the
    configuration. A technical failure gets one bounded repair session.
 5. Publish the snapshot.
-6. Capture one late square frame: 1024 x 1024, seed 1337, step 1000.
-7. Promote the child.
+6. Capture TWO ordered frames: an early frame at half the late step, then the
+   late square frame: 1024 x 1024, seed 1337, step 1000.
+7. Run the perceptual gate: measure the frames, run the hard tests, compute the
+   coherence and the novelty, judge a survivor, then decide keep or park. In park
+   mode a parked step gets one bounded self-repair.
+8. Promote the child, or park it.
 
 A technical failure after the repair marks the version `failed`, keeps the chain
-head, and the next step starts from the last good version.
+head, and the next step starts from the last good version. A parked step also
+keeps the chain head, but it is a completed step and it consumes its step.
 
 A failed step is **NOT shown** in the interface: the chain is the record of the
 work that was kept, and a refusal is not a step of the artwork. The record stays,
 and `tools/failed-steps.mjs` reports every failure with its reason.
 
-There is **NO quality gate**. Every child that passes the package checks is kept,
-whatever the frame looks like. A step is refused only for a real technical fault:
-a package that does not load, or a capture that fails or passes its time limit.
+A parked step **IS shown**, as a thin rejected card with its frame, its verdict,
+and its reason. A technical fault is refused on its own; the perceptual gate
+refuses a step that fails the hard tests or a score floor, and only in park mode.
 
 Observed on 2026-09-19, with `deepseek/deepseek-v4.1-flash`:
 
@@ -291,6 +311,14 @@ Observed on 2026-09-19, with `deepseek/deepseek-v4.1-flash`:
 | `PHYGEN_SESSION_TIMEOUT_MS` | `1800000` | Limit for one author session. |
 | `PHYGEN_CLEANUP_WORKSPACES` | `1` | Remove candidate workspaces when a run ends. |
 | `PHYGEN_DATA` | `data-evolve` | The records directory. |
+| `PHYGEN_GATE_MODE` | `warn` | `off`, `warn`, or `park`. Warn records the verdict and parks nothing. |
+| `PHYGEN_JUDGE_MODE` | `borderline` | `off`, `always`, or `borderline` (a paid judgment only near a floor). |
+| `PHYGEN_GATE_COHERENCE_FLOOR` | `0.27` | The coherence floor, fitted from the chain. |
+| `PHYGEN_GATE_NOVELTY_FLOOR` | `0.016` | The novelty floor, fitted from the chain. |
+| `PHYGEN_GATE_QUALITY_FLOOR` | `0.4` | The archive quality floor. |
+| `PHYGEN_GATE_MAX_REPAIRS` | `1` | The bounded self-repairs after a park. |
+| `PHYGEN_GATE_EARLY_FRACTION` | `0.5` | The early frame step, as a share of the late step. |
+| `PHYGEN_GATE_CORD_RIDGE_MAX` | `1` | The ridge ceiling. Inactive on this artwork. |
 
 ## The interface
 
@@ -333,6 +361,12 @@ The interface is read-only. It has one button.
   plays instead — that is what a page shows when it loads during a run. Every
   other card shows its still frame. A card with no frame yet shows its stage.
 - A large live view opens from the card.
+- Each card carries a thin gate strip: the verdict reads `kept`, `repaired`,
+  `parked`, or `would park` in warn mode. Selecting a version opens the reason
+  panel above the shell: the coherence, the novelty with its nearest reference,
+  the hard tests, the criterion scores, the weaknesses, and the direction.
+- A parked step is a thin rejected card: its frame is smaller and quiet, and it
+  carries a `parked` status.
 - A resizable shell holds the agent log, newest at the bottom. It follows the
   work while a step runs. The reasoning rows are dim, the agent text is normal,
   and a tool row names the tool, the short path, and the line counts. The shell
@@ -355,6 +389,8 @@ artwork for the initial state.
 - `server/` — the controller. `src/controller/run.mjs` owns the step loop, the
   budgets, and the chain head. `src/providers/` holds the Pi driver and the test
   double. `src/capture/` holds the browser capture and the container worker.
+  `src/vision/` holds the free image metrics, the hard tests, the rubric, and the
+  blind judge. `src/gate/` holds the archive, the direction, and the measure step.
   `src/api/` holds the controller API and the separate artwork origin.
 - `web/` — the React and TypeScript interface.
 - `docs/` — the API contract, the measurements, the flow diagram, and images.
@@ -370,19 +406,23 @@ artwork for the initial state.
 | 3. One step | Complete with the test double and with the real model. |
 | 4. Interface | Complete: the forward chain, the still frames, the single live card, the resizable shell, the live modal, and the status line. |
 | 5. Repeated runs | Complete: multi-step runs, stop, resume after a pause, and restart recovery. |
-| 6. Deployment | Not started. It needs separate approval. |
+| 6. Perceptual gate | Complete: the free metrics, the hard tests, the blind judge, the archive, the self-repair, the strip and reason panel. Warn mode is on; parking is one setting away. |
+| 7. Deployment | Not started. It needs separate approval. |
 
 ## Next task
 
-Watch the chain. The frames are the evidence. When a step is weak, the chain
-still holds it: a person can see the change and judge it, and the next step
-starts from that child.
+Watch the chain and the gate verdicts together. The frames are the evidence. Run
+one gated run in WARN mode, read the reason panel on every step, and confirm that
+a `would park` verdict agrees with what you see. When it does, set
+`PHYGEN_GATE_MODE=park`.
 
 Possible later work, none of it requested yet:
 
 - A pop tool, to remove a weak child and its descendants.
 - A second artwork, and an artwork selector.
 - A per-step diff view of the source.
+- A better cord measure, to replace the inactive `cordRidgeMax` test.
+- A flicker probe, to replace the provisional ordered-frame `strobe` band.
 
 ## Open risks
 
@@ -396,7 +436,9 @@ Possible later work, none of it requested yet:
 - The server must run with `PHYGEN_CAPTURE_TIMEOUT_MS=1800000` and
   `PHYGEN_CONTAINER_TIMEOUT_MS=2400000` (the container value must stay the
   larger), or every capture of the late-chain artwork dies at the default
-  600 s. The running server carries them since 2026-09-21.
+  600 s. The running server carries them since 2026-09-21. The gate captures two
+  ordered frames in one batch, and the container limit now scales with the frame
+  count, so the batch fits without a new setting.
 - The Pi child process needs its standard input closed. An open pipe makes it wait
   forever. `server/src/providers/pi.mjs` sets this.
 - Source-code candidates run in the sandboxed artwork page, not in a container.
@@ -404,7 +446,12 @@ Possible later work, none of it requested yet:
   (`server/docker/Dockerfile`) for the stronger boundary. The image is untested.
 - The API has no authentication and no CSRF control. Keep it on the loopback
   address until Phase 6.
-- There is NO quality gate. Every child that passes the package checks is kept,
-  whatever it looks like. The chain is the record, and a person judges the
-  frames. A step is refused only for a real technical fault: a package that does
-  not load, or a capture that fails or passes its time limit.
+- The perceptual gate starts in WARN mode, so it parks nothing yet. Turn parking
+  on with `PHYGEN_GATE_MODE=park` after a warning-only run confirms the verdicts.
+  The floors are fitted from the current chain, so a new artwork needs a new fit:
+  run `node tools/calibrate-gate.mjs`.
+- The `cordRidgeMax` hard test is inactive on this artwork, because a healthy
+  physarum frame is one connected network. A better cord measure is a separate
+  task; until then the test records a skip.
+- The ordered-frame `frameDelta` band has no fit yet, because the chain holds no
+  early frame. Fit it after a gated run has captured a pair.

@@ -121,7 +121,7 @@ the interface renders it newest first.
   "palette": "white",
   "stillUrl": "/api/captures/cap_9.png",
   "stillStage": "late",
-  "stillStep": 2500,
+  "stillStep": 1000,
   "livePath": "/live/ver_0004",
   "liveUrl": "http://127.0.0.1:8788/v/ver_0004/",
   "sourceHash": "b941ac34…",
@@ -132,11 +132,14 @@ the interface renders it newest first.
   "stub": false,
   "usageUsd": 0.0017,
   "tokens": 3108,
-  "error": null
+  "error": null,
+  "verdict": "kept",
+  "verdictEnforced": false,
+  "repaired": false
 }
 ```
 
-`status` is one of `queued | authoring | validating | capturing | promoted | failed`.
+`status` is one of `queued | authoring | validating | capturing | promoted | parked | failed`.
 
 - Exactly one version plays live: the newest one with status `promoted`. Every
   other version shows `stillUrl`, its stage, or its failure reason.
@@ -146,6 +149,10 @@ the interface renders it newest first.
 - `changes` names what THIS step changed, against its parent.
 - `stub` is true when the run used the deterministic test double.
 - `error` is `{ "code", "message" }` for a failed version.
+- `verdict` is the perceptual gate verdict: `kept | parked | pending | null`.
+- `verdictEnforced` is true only when the verdict stopped the step (park mode).
+  In warn mode a `parked` verdict is recorded but not enforced.
+- `repaired` is true when a step was parked and then kept after one self-repair.
 
 `Edge` → `{ "id": "e_ver_0004", "source": "ver_0003", "target": "ver_0004", "onLineage": true }`
 
@@ -200,6 +207,46 @@ match a stage.
 
 `GET /api/captures/:captureId.png` returns one captured frame. The response
 carries a strong `etag`, so a second request returns HTTP 304.
+
+## The perceptual gate
+
+`GET /api/versions/:versionId/judgment` → `{ "judgment": Judgment }`. It is 404
+with code `judgment_not_found` when the version has no judgment.
+
+```json
+{
+  "versionId": "ver_0004",
+  "runId": "run_9c1a",
+  "status": "kept",
+  "enforced": false,
+  "repaired": false,
+  "branch": "novelty",
+  "reason": "Kept: the step is novel (coherence 0.42, novelty 0.31).",
+  "direction": "Change how the current version is built…",
+  "features": { "occupiedFraction": 0.21, "luminanceEntropy": 0.34 },
+  "tests": [{ "name": "rainbow", "tripped": false, "value": 0.12, "floor": 0.89, "note": "", "available": true }],
+  "scores": [{ "criterion": "composition", "score": 0.6, "frames": ["A|late@1000"] }],
+  "novelty": { "novelty": 0.31, "nearest": { "id": "ver_0003", "role": "parent", "distance": 0.31 }, "coherence": 0.42, "parentQuality": 0.55, "quality": 0.58 },
+  "judge": { "observations": [], "weaknesses": ["…"], "mean": 0.58, "confidence": 0.6, "uncertainty": "low", "error": null },
+  "judgeCostUsd": 0.0021,
+  "frames": [{ "stage": "late", "step": 1000, "seed": 1337, "captureId": "cap_9", "url": "/api/captures/cap_9.png" }],
+  "createdAt": "2026-10-11T09:00:00.000Z"
+}
+```
+
+A value that was not measured is never zero. A skipped hard test carries
+`"available": false`, a missing frame leaves `features` empty, and a malformed
+judge answer sets `judge.error` and leaves `scores` empty.
+
+`GET /api/artworks/:artworkId/archive` → the computed archive of the most diverse
+kept versions.
+
+```json
+{
+  "members": [{ "versionId": "ver_0003", "generation": 3, "quality": 0.62, "novelty": 0.4, "addedBy": "best quality" }],
+  "refused": [{ "versionId": "ver_0002", "reason": "near duplicate", "quality": 0.51, "novelty": 0.03 }]
+}
+```
 
 ## Operator actions
 
@@ -348,6 +395,11 @@ Event types:
 | `version.created` | `{ "version": Node }` |
 | `version.state` | `{ "versionId", "status", "detail", "errorCode" }` |
 | `capture.ready` | `{ "versionId", "captureId", "stage", "step", "seed", "url" }` |
+| `judgment.metrics` | `{ "versionId", "features", "tests", "novelty" }` |
+| `judgment.verdict` | `{ "versionId", "status", "enforced", "repaired", "branch", "reason" }` |
+| `judgment.judge` | `{ "versionId", "scores", "weaknesses", "mean", "error" }` |
+| `direction.written` | `{ "versionId", "text" }` |
+| `archive.updated` | `{ "artworkId", "versionId", "members", "refused" }` |
 | `agent` | one AgentRow, with `versionId` |
 | `file` | `{ "versionId", "kind": "inventory" \| "change", "path", "lines", "bytes", "added", "removed" }` |
 | `usage` | `{ "model", "inputTokens", "outputTokens", "costUsd", "costSource", "spentUsd", "limitUsd" }` |

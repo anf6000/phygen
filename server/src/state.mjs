@@ -15,9 +15,10 @@ export const VERSION_STATES = Object.freeze([
   'validating',
   'capturing',
   'promoted',
+  'parked',
   'failed',
 ]);
-export const TERMINAL_VERSION_STATES = Object.freeze(['promoted', 'failed']);
+export const TERMINAL_VERSION_STATES = Object.freeze(['promoted', 'parked', 'failed']);
 
 export const JOB_KINDS = Object.freeze(['author', 'capture', 'publish']);
 export const JOB_STATES = Object.freeze(['queued', 'running', 'done', 'failed', 'cancelled']);
@@ -37,8 +38,9 @@ const VERSION_TRANSITIONS = {
   queued: ['authoring', 'failed'],
   authoring: ['validating', 'failed'],
   validating: ['capturing', 'failed'],
-  capturing: ['promoted', 'failed'],
+  capturing: ['promoted', 'parked', 'failed'],
   promoted: [],
+  parked: [],
   failed: [],
 };
 

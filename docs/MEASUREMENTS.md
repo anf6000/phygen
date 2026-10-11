@@ -67,3 +67,75 @@ Four frames, sequential: 23 909 ms total, about 6 seconds per frame.
 The capture path is deterministic by step count, not by wall-clock time. The
 same seed, the same step, and the same configuration give the same trail
 checksum on one machine. Run `npm run capture-check` again to confirm.
+
+## Perceptual gate floors
+
+Date: 2026-10-11. Owner: Phygen.
+
+The perceptual gate measures each captured frame and gives it a keep or park
+verdict. The floors below were fitted from the chain, so about ninety-five
+percent of the known-good frames stay kept.
+
+Command:
+
+```bash
+cd server
+node tools/calibrate-gate.mjs --json
+```
+
+The tool is read-only. It measures every captured frame of one artwork, prints
+the score distribution grouped by seed, step, and renderer, and suggests a floor
+at the fifth percentile of the kept versions with a bootstrapped interval.
+
+### The measured chain
+
+| Item | Value |
+| --- | --- |
+| Measured versions | 124 |
+| Kept versions | 124 |
+| Renderer | `ANGLE (NVIDIA GeForce RTX 3090, D3D11)` |
+| Frame | 1024 × 1024, seed 1337, step 1000 |
+
+### Score distributions (kept versions)
+
+| Score | Min | p5 | Median | p95 | Max |
+| --- | --- | --- | --- | --- | --- |
+| Coherence | 0.192 | 0.270 | 0.336 | 0.634 | 0.680 |
+| Novelty | 0.000 | 0.016 | 0.057 | 0.347 | 0.536 |
+
+The coherence interval for the fifth percentile is 0.217 to 0.280. The novelty
+interval is 0.000 to 0.023. The novelty is small because each step refines its
+parent; a copy of the parent has a novelty near zero.
+
+### Fitted hard-test thresholds
+
+A test that trips on a HIGH value gets a ceiling at the p95 of the kept frames.
+A test that trips on a LOW value gets a floor at the p5.
+
+| Threshold | Fitted value | Keeps |
+| --- | --- | --- |
+| `saturationClipMax` | 0.151 | 95% |
+| `uniformEdgeMin` | 0.602 | 95% |
+| `uniformEntropyMax` | 0.071 | 95% |
+| `emptyOccupiedMin` | 0.054 | 95% |
+| `rainbowHueSpreadMax` | 0.891 | 95% |
+| `cordRidgeMax` | 1.000 | 100% |
+
+The `cordRidgeMax` ceiling is INACTIVE on this artwork. A healthy physarum frame
+is one connected network, so the largest connected component holds a median of
+0.998 of the occupied area. The ridge metric cannot separate a network from a
+cord here, so the ceiling sits at 1.0 and the test records a skip. A better cord
+measure is a separate task.
+
+The `uniform_noise` test needs a high edge density AND a low tonal entropy, so
+the p95 edge ceiling and the p5 entropy floor almost never coincide. That test
+tripped once in 124 frames.
+
+The ordered-frame `frameDelta` band has no fit: the chain holds no early frame
+yet. Capture an early frame and a late frame, then fit the band again.
+
+### Operating point
+
+The fitted values are the defaults in `server/src/config.mjs`. The gate starts in
+WARN mode: it records the verdict and parks nothing. The operator turns parking
+on with `PHYGEN_GATE_MODE=park` after a warning-only run confirms the verdicts.

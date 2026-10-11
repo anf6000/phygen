@@ -129,10 +129,14 @@ export function createDockerCapture({ config, logger = () => {} }) {
       ];
 
       logger('info', `Running the capture container for ${samples.length} frame(s)`);
+      // The container renders the whole batch, so its wall-clock limit scales
+      // with the frame count. The gate adds a second ordered frame per step, so a
+      // single-frame limit would kill the batch before the controller ceiling.
+      const timeoutMs = config.capture.containerTimeoutMs * Math.max(1, samples.length);
       let result;
       let parsed = null;
       try {
-        result = await run('docker', args, { timeoutMs: config.capture.containerTimeoutMs, signal });
+        result = await run('docker', args, { timeoutMs, signal });
         if (result.code === 0) {
           try {
             parsed = JSON.parse((await readFile(resultPath, 'utf8')).trim() || '{}');

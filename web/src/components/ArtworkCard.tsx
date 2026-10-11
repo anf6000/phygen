@@ -1,4 +1,5 @@
 import type { TreeNode } from '../types';
+import { JudgmentStrip } from './JudgmentStrip';
 import { LoadingArt } from './LoadingArt';
 
 const STAGE_LABEL: Record<string, string> = {
@@ -7,6 +8,7 @@ const STAGE_LABEL: Record<string, string> = {
   validating: 'checking the package',
   capturing: 'rendering the frame',
   promoted: 'kept',
+  parked: 'parked by the gate',
   failed: 'failed',
 };
 
@@ -39,6 +41,10 @@ export function ArtworkCard({ node, label, stage, playing, livePaused, selected,
   if (selected) classes.push('is-selected');
   if (playing) classes.push('is-playing');
   if (node.status === 'failed') classes.push('is-failed');
+  // A parked step is a thin rejected card: the frame stays visible, but the
+  // card does not carry the weight of a kept artwork.
+  if (node.status === 'parked') classes.push('is-parked');
+  if (node.repaired) classes.push('is-repaired');
 
   // Two live players at once halve the frame rate of both. While the large view
   // is open, this card shows its still frame instead of a second live player.
@@ -68,6 +74,8 @@ export function ArtworkCard({ node, label, stage, playing, livePaused, selected,
         {playing ? <span className="card-live-chip">{livePaused ? 'paused' : 'live'}</span> : null}
         {node.stub ? <span className="stub-chip">test double</span> : null}
       </header>
+
+      <JudgmentStrip node={node} />
 
       <div className="card-media">
         {node.status === 'promoted' && live ? (

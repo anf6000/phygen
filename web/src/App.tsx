@@ -3,10 +3,11 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 
 import { RequestError, api, useRunEvents } from './api';
 import { READING_LINE_FRACTION, autoplayCardId, playingVersionId, stepLabels } from './chain';
-import type { AgentRow, Health, ModelList, RunDetail, Tree, TreeNode } from './types';
+import type { ArchiveReport, AgentRow, Health, Judgment, ModelList, RunDetail, Tree, TreeNode } from './types';
 import { Timeline } from './components/Timeline';
 import { Shell } from './components/Shell';
 import { LiveModal } from './components/LiveModal';
+import { JudgmentPanel } from './components/JudgmentPanel';
 
 // A build stamp shows in the status line, so a stale tab is easy to spot.
 const BUILD_STAMP = typeof __BUILD__ === 'string' ? __BUILD__ : 'dev';
@@ -26,6 +27,8 @@ export default function App() {
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
   const [modalVersionId, setModalVersionId] = useState<string | null>(null);
   const [storedRows, setStoredRows] = useState<AgentRow[]>([]);
+  const [judgment, setJudgment] = useState<Judgment | null>(null);
+  const [archive, setArchive] = useState<ArchiveReport | null>(null);
   const [shellHeight, setShellHeight] = useState<number | null>(() => {
     const raw = window.localStorage.getItem(SHELL_HEIGHT_KEY);
     const value = raw === null ? NaN : Number(raw);
@@ -99,6 +102,26 @@ export default function App() {
     if (artworkId) void loadTree(artworkId);
   }, [artworkId, loadTree]);
 
+  // The archive report of the artwork, for the footer count.
+  useEffect(() => {
+    if (!artworkId) {
+      setArchive(null);
+      return;
+    }
+    let cancelled = false;
+    void api
+      .archive(artworkId)
+      .then((report) => {
+        if (!cancelled) setArchive(report);
+      })
+      .catch(() => {
+        if (!cancelled) setArchive(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [artworkId, tree]);
+
   // Show the latest run of this artwork, so a reload does not lose the record.
   useEffect(() => {
     if (run || !artworkId) return undefined;
@@ -141,6 +164,23 @@ export default function App() {
   }, [artworkId, loadTree, run, runId]);
 
   const nodes = tree?.nodes ?? [];
+  const gateCounts = useMemo(() => {
+    let kept = 0;
+    let wouldPark = 0;
+    let parked = 0;
+    let repaired = 0;
+    for (const node of nodes) {
+      if (!node.verdict) continue;
+      if (node.verdict === 'kept') {
+        kept += 1;
+        if (node.repaired) repaired += 1;
+      } else if (node.verdict === 'parked') {
+        if (node.verdictEnforced) parked += 1;
+        else wouldPark += 1;
+      }
+    }
+    return { kept, wouldPark, parked, repaired };
+  }, [nodes]);
   // A failed step is not part of the chain the interface shows.
   const shownNodes = useMemo(() => nodes.filter((node) => node.status !== 'failed'), [nodes]);
   const newestId = useMemo(() => playingVersionId(shownNodes), [shownNodes]);
@@ -213,6 +253,26 @@ export default function App() {
       window.clearTimeout(timer);
     };
   }, [feedVersionId]);
+
+  // The judgment of the selected version, for the reason panel.
+  useEffect(() => {
+    if (!selected) {
+      setJudgment(null);
+      return undefined;
+    }
+    let cancelled = false;
+    void api
+      .judgment(selected)
+      .then((result) => {
+        if (!cancelled) setJudgment(result.judgment);
+      })
+      .catch(() => {
+        if (!cancelled) setJudgment(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected, tree]);
 
   const liveRows = useMemo(
     () =>
@@ -356,6 +416,7 @@ export default function App() {
           <span className="split-grip" />
         </div>
         <div className="shell-wrap" style={{ height: shellHeight !== null ? `${shellHeight}px` : '50%' }}>
+          {judgment ? <JudgmentPanel judgment={judgment} label={labels[judgment.versionId] ?? 'Step'} /> : null}
           <Shell rows={shellRows} label={shellLabel(feedVersion, labels, feedVersionId === activeVersionId)} active={Boolean(activeVersionId && feedVersionId === activeVersionId)} />
         </div>
       </main>
@@ -367,6 +428,29 @@ export default function App() {
         <span className="pill">
           step <strong>{run ? `${run.run.evolutionsDone} of ${run.run.evolutionsRequested}` : '—'}</strong>
         </span>
+        <span className="pill">
+          kept <strong>{gateCounts.kept}</strong>
+        </span>
+        {gateCounts.repaired > 0 ? (
+          <span className="pill">
+            repaired <strong>{gateCounts.repaired}</strong>
+          </span>
+        ) : null}
+        {gateCounts.wouldPark > 0 ? (
+          <span className="pill warn">
+            would park <strong>{gateCounts.wouldPark}</strong>
+          </span>
+        ) : null}
+        {gateCounts.parked > 0 ? (
+          <span className="pill warn">
+            parked <strong>{gateCounts.parked}</strong>
+          </span>
+        ) : null}
+        {archive ? (
+          <span className="pill">
+            archive <strong>{archive.members.length}</strong>
+          </span>
+        ) : null}
         <span className="pill">
           spend <strong>{run ? run.run.spentUsd.toFixed(4) : '0.0000'}</strong> USD
         </span>
