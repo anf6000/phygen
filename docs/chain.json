@@ -1,7 +1,7 @@
 {
   "note": "Chain structure for the committed snapshots. The record database stays local; this file is its text mirror for the chain. Regenerate with server/tools/chain-index.mjs after a run.",
-  "generatedAt": "2026-10-11T13:59:01.530Z",
-  "versionCount": 4,
+  "generatedAt": "2026-10-12T08:59:39.519Z",
+  "versionCount": 32,
   "versions": [
     {
       "id": "ver_mu7yy6qkaa12f051",
@@ -131,27 +131,1210 @@
       "generation": 3,
       "round": 1,
       "parentId": "ver_mv3vl3x6e7ec9284",
-      "status": "authoring",
-      "onLineage": false,
-      "title": "Step 3",
-      "snapshot": "34bae391486be598520d88145dfb21a9558b2ea0f23b7c0951d063cdc1abfb37",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I changed the composition of the simulation, not its identity.",
+      "snapshot": "5b7974ff948d6f68e3e4ba2d74690550a24225b47ce3c5ea488dba679d7be0f5",
       "createdAt": "2026-10-11T13:57:24.914Z",
       "configuration": {
         "palette": "ember",
         "gamma": 1,
         "dpr": 1,
-        "num": 700,
+        "num": 340,
         "sensorAngle": 30,
-        "sensorDist": 19,
+        "sensorDist": 26,
         "rotAngle": 26,
         "decay": 0,
-        "spawnRadius": 26,
+        "spawnRadius": 12,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 8,
+          "removed": 7
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 9,
+          "removed": 20
+        }
+      ]
+    },
+    {
+      "id": "ver_mv3wasr149b8b0fe",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 4,
+      "round": 2,
+      "parentId": "ver_mv3w0rw1d574d94d",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I made the edits. Here is the review.",
+      "snapshot": "d36c770ffbc2e01d1aba61548737f16312ea32a4594d358da8515ab265c5c3a9",
+      "createdAt": "2026-10-11T14:05:12.589Z",
+      "configuration": {
+        "palette": "bone",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 260,
+        "sensorAngle": 45,
+        "sensorDist": 36,
+        "rotAngle": 32,
+        "decay": 0,
+        "spawnRadius": 12,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 9,
+          "removed": 7
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 7,
+          "removed": 7
+        }
+      ]
+    },
+    {
+      "id": "ver_mv3wr7gf0f8b3b88",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 5,
+      "round": 3,
+      "parentId": "ver_mv3wasr149b8b0fe",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I made one strong compositional decision: the colony no longer starts...",
+      "snapshot": "2775a5e323862292a77cf31cacb3baa540fe7dcae8a8e30f5fbf3ef7391fd2d8",
+      "createdAt": "2026-10-11T14:17:58.144Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 240,
+        "sensorAngle": 45,
+        "sensorDist": 30,
+        "rotAngle": 24,
+        "decay": 0,
+        "spawnRadius": 10,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 27,
+          "removed": 17
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 71,
+          "removed": 18
+        }
+      ]
+    },
+    {
+      "id": "ver_mv3z2u8652f0a5b8",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 6,
+      "round": 1,
+      "parentId": "ver_mv3wr7gf0f8b3b88",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I made the visual decision first, then implemented it.",
+      "snapshot": "9efc8ab68b2473f9359e2674bbff77c9cc4f8d331dad1b57cde7ae84733230f2",
+      "createdAt": "2026-10-11T15:23:00.102Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 320,
+        "sensorAngle": 45,
+        "sensorDist": 22,
+        "rotAngle": 32,
+        "decay": 0,
+        "spawnRadius": 14,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 34,
+          "removed": 43
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 4,
+          "removed": 34
+        }
+      ]
+    },
+    {
+      "id": "ver_mv3zagwva0f31dca",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 7,
+      "round": 2,
+      "parentId": "ver_mv3z2u8652f0a5b8",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I changed the artwork to one colony with one heart. The image now rea...",
+      "snapshot": "56b88733aa1c7fe0d4fb9749cee588b6d2461bed05f50cc0efc529dfa7077a7c",
+      "createdAt": "2026-10-11T15:28:56.095Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 240,
+        "sensorAngle": 45,
+        "sensorDist": 16,
+        "rotAngle": 32,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1.2,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 44,
+          "removed": 54
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 21,
+          "removed": 33
+        }
+      ]
+    },
+    {
+      "id": "ver_mv3zl91fa86b049c",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 8,
+      "round": 3,
+      "parentId": "ver_mv3zagwva0f31dca",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I changed the artwork. Here is the report.",
+      "snapshot": "f561bb608f3326de69614243994b1d51a3d2847480057ef3f6cc14ca51ad0eaa",
+      "createdAt": "2026-10-11T15:37:19.107Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 240,
+        "sensorAngle": 45,
+        "sensorDist": 16,
+        "rotAngle": 40,
+        "decay": 0,
+        "spawnRadius": 5,
+        "scale": 1,
+        "gain": 1.2,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 71,
+          "removed": 47
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 25,
+          "removed": 12
+        }
+      ]
+    },
+    {
+      "id": "ver_mv3ztmbeb5faa108",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 9,
+      "round": 4,
+      "parentId": "ver_mv3zl91fa86b049c",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I changed the artwork in three allowed files.",
+      "snapshot": "5a8bb77afd33651fe9d2ec59df171150926858e0da2ffe722f09ed37ad9d87ed",
+      "createdAt": "2026-10-11T15:43:49.562Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 240,
+        "sensorAngle": 45,
+        "sensorDist": 11,
+        "rotAngle": 28,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1.25,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 28,
+          "removed": 34
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 58,
+          "removed": 37
+        }
+      ]
+    },
+    {
+      "id": "ver_mv404as9dfb2ab2a",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 10,
+      "round": 5,
+      "parentId": "ver_mv3ztmbeb5faa108",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I made the edits, then re-read every changed region. Here is the report.",
+      "snapshot": "0e073304a104d4bcf35025cb1f5af8d0b40e37ffee7182d0b4387b52d6f3faba",
+      "createdAt": "2026-10-11T15:52:07.833Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 150,
+        "sensorAngle": 40,
+        "sensorDist": 20,
+        "rotAngle": 40,
+        "decay": 0,
+        "spawnRadius": 4,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 9,
+          "removed": 43
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 7,
+          "removed": 7
+        }
+      ]
+    },
+    {
+      "id": "ver_mv40kdu07d37813f",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 11,
+      "round": 6,
+      "parentId": "ver_mv404as9dfb2ab2a",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I re-read the changed sections of both source files and the config. H...",
+      "snapshot": "62c9729bc9ac96d0dcbfe4eb87ef90bb5bac3e17bf61cf0e2aa03e8939114862",
+      "createdAt": "2026-10-11T16:04:38.280Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 200,
+        "sensorAngle": 50,
+        "sensorDist": 12,
+        "rotAngle": 26,
+        "decay": 0,
+        "spawnRadius": 4,
+        "scale": 1,
+        "gain": 1.15,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 15,
+          "removed": 9
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 24,
+          "removed": 39
+        }
+      ]
+    },
+    {
+      "id": "ver_mv40wbhz0c0ec5ed",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 12,
+      "round": 7,
+      "parentId": "ver_mv40kdu07d37813f",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "What I changed",
+      "snapshot": "15a179fffd9accc021ecd920be6a2a2b8d4fa8f1fb27ac9f07cfb372e9eaca1a",
+      "createdAt": "2026-10-11T16:13:55.127Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 260,
+        "sensorAngle": 40,
+        "sensorDist": 16,
+        "rotAngle": 21,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 18,
+          "removed": 33
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 36,
+          "removed": 26
+        }
+      ]
+    },
+    {
+      "id": "ver_mv418b3t9e6c382d",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 13,
+      "round": 8,
+      "parentId": "ver_mv40wbhz0c0ec5ed",
+      "status": "failed",
+      "onLineage": false,
+      "title": "Step 13",
+      "snapshot": "15a179fffd9accc021ecd920be6a2a2b8d4fa8f1fb27ac9f07cfb372e9eaca1a",
+      "createdAt": "2026-10-11T16:23:14.489Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 1,
+        "dpr": 1,
+        "num": 260,
+        "sensorAngle": 40,
+        "sensorDist": 16,
+        "rotAngle": 21,
+        "decay": 0,
+        "spawnRadius": 6,
         "scale": 1,
         "gain": 1,
         "speed": 1,
         "seed": 1337
       },
       "changedFiles": []
+    },
+    {
+      "id": "ver_mv41afdqc17c6b7e",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 13,
+      "round": 1,
+      "parentId": "ver_mv40wbhz0c0ec5ed",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "The candidate is an ice → magma color step with a rebuilt density win...",
+      "snapshot": "42966065ed0795e5f2b10bad4249352ccc4b33adff3de13182224959fa33859d",
+      "createdAt": "2026-10-11T16:24:53.342Z",
+      "configuration": {
+        "palette": "magma",
+        "gamma": 0.92,
+        "dpr": 1,
+        "num": 260,
+        "sensorAngle": 40,
+        "sensorDist": 16,
+        "rotAngle": 21,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1.18,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 9,
+          "removed": 8
+        }
+      ]
+    },
+    {
+      "id": "ver_mv41f7z19e4709b3",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 14,
+      "round": 2,
+      "parentId": "ver_mv41afdqc17c6b7e",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I changed the collective behavior of the colony. The parent wove one ...",
+      "snapshot": "9c603db5f8cd6006b806119aeca49a0d0be8e8177634139a4c0a38b27dc0d56c",
+      "createdAt": "2026-10-11T16:28:37.021Z",
+      "configuration": {
+        "palette": "magma",
+        "gamma": 0.92,
+        "dpr": 1,
+        "num": 260,
+        "sensorAngle": 40,
+        "sensorDist": 22,
+        "rotAngle": 21,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1.18,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 60,
+          "removed": 37
+        }
+      ]
+    },
+    {
+      "id": "ver_mv41pehsfa90b5f3",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 15,
+      "round": 3,
+      "parentId": "ver_mv41f7z19e4709b3",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Both edits are in the source. I could not render a frame in this sess...",
+      "snapshot": "c21e37c34f0174f998e14bc219462ce55c71b4251a6e3fbf3df5505e7d4cf15e",
+      "createdAt": "2026-10-11T16:36:32.032Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1.5,
+        "dpr": 1,
+        "num": 260,
+        "sensorAngle": 40,
+        "sensorDist": 22,
+        "rotAngle": 21,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        }
+      ]
+    },
+    {
+      "id": "ver_mv4sxoky25654d30",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 16,
+      "round": 1,
+      "parentId": "ver_mv41pehsfa90b5f3",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I changed the display color mapping and nothing in the simulation. Th...",
+      "snapshot": "d4ba2e7610584233314c0af981bbc25a411c58dbaf4443686ff2655dd34e4914",
+      "createdAt": "2026-10-12T05:18:47.986Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 0.85,
+        "dpr": 1,
+        "num": 260,
+        "sensorAngle": 40,
+        "sensorDist": 22,
+        "rotAngle": 21,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 4,
+          "removed": 3
+        }
+      ]
+    },
+    {
+      "id": "ver_mv4t3b4d33b989a6",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 17,
+      "round": 2,
+      "parentId": "ver_mv4sxoky25654d30",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Structure step done. The palette is untouched (ice, gamma 0.85, gain ...",
+      "snapshot": "269f6acf7ee5aba53c8205a59c9a87e1dbbabd192617ccb7f0e6de0fd0fca860",
+      "createdAt": "2026-10-12T05:23:10.478Z",
+      "configuration": {
+        "palette": "ice",
+        "gamma": 0.85,
+        "dpr": 1,
+        "num": 400,
+        "sensorAngle": 40,
+        "sensorDist": 16,
+        "rotAngle": 21,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 43,
+          "removed": 24
+        }
+      ]
+    },
+    {
+      "id": "ver_mv4tbtih0dff985e",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 18,
+      "round": 3,
+      "parentId": "ver_mv4t3b4d33b989a6",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I made the color step in the display path and the configuration.",
+      "snapshot": "55676ac43f38a1869e4ea5d7d5e7fdc9698adf308cf6f045690f27905062d61f",
+      "createdAt": "2026-10-12T05:29:47.561Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1.05,
+        "dpr": 1,
+        "num": 400,
+        "sensorAngle": 40,
+        "sensorDist": 16,
+        "rotAngle": 21,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1.1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 3,
+          "removed": 11
+        }
+      ]
+    },
+    {
+      "id": "ver_mv4un9xk3a746f4b",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 19,
+      "round": 1,
+      "parentId": "ver_mv4tbtih0dff985e",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Visual intent",
+      "snapshot": "3751a97b254c2ec51fa693160447fc5f5992dfb9b2339bbd93602937954e1f35",
+      "createdAt": "2026-10-12T06:06:41.673Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1.7,
+        "dpr": 1,
+        "num": 400,
+        "sensorAngle": 40,
+        "sensorDist": 16,
+        "rotAngle": 21,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1.05,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 8,
+          "removed": 2
+        }
+      ]
+    },
+    {
+      "id": "ver_mv4uwazab0449158",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 20,
+      "round": 2,
+      "parentId": "ver_mv4un9xk3a746f4b",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I changed the collective behavior of the colony. The palette is uncha...",
+      "snapshot": "8a72dc75c04e1ac9ebc7435e7d5ce977f20a084a817b151f617a9688c7ea9e92",
+      "createdAt": "2026-10-12T06:13:42.934Z",
+      "configuration": {
+        "palette": "viridis",
+        "gamma": 1.7,
+        "dpr": 1,
+        "num": 300,
+        "sensorAngle": 40,
+        "sensorDist": 20,
+        "rotAngle": 21,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1.05,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 10,
+          "removed": 5
+        }
+      ]
+    },
+    {
+      "id": "ver_mv4v4xws83ec3fbc",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 21,
+      "round": 3,
+      "parentId": "ver_mv4uwazab0449158",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I changed the display color path. Here is the review.",
+      "snapshot": "319eb3734d3fe082ca3964c8f40740c010592ef131619dd0b3dddf79561cd7f7",
+      "createdAt": "2026-10-12T06:20:25.900Z",
+      "configuration": {
+        "palette": "magma",
+        "gamma": 2,
+        "dpr": 1,
+        "num": 300,
+        "sensorAngle": 40,
+        "sensorDist": 20,
+        "rotAngle": 21,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 12,
+          "removed": 2
+        }
+      ]
+    },
+    {
+      "id": "ver_mv4w60w4970cee81",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 22,
+      "round": 1,
+      "parentId": "ver_mv4v4xws83ec3fbc",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I will read the artwork source first.",
+      "snapshot": "319eb3734d3fe082ca3964c8f40740c010592ef131619dd0b3dddf79561cd7f7",
+      "createdAt": "2026-10-12T06:49:16.036Z",
+      "configuration": {
+        "palette": "magma",
+        "gamma": 2,
+        "dpr": 1,
+        "num": 300,
+        "sensorAngle": 40,
+        "sensorDist": 20,
+        "rotAngle": 21,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": []
+    },
+    {
+      "id": "ver_mv4wz6xb7b8622f4",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 23,
+      "round": 1,
+      "parentId": "ver_mv4w60w4970cee81",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "Visual intent — ash and ember. The parent showed a bright cream-and-p...",
+      "snapshot": "396edf0c3695cdb4c451670012c56919e17056a3f6c324384396eb302f0b08ad",
+      "createdAt": "2026-10-12T07:11:56.879Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1.6,
+        "dpr": 1,
+        "num": 300,
+        "sensorAngle": 40,
+        "sensorDist": 20,
+        "rotAngle": 21,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 4,
+          "removed": 10
+        }
+      ]
+    },
+    {
+      "id": "ver_mv4xahnt5e6b2697",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 24,
+      "round": 1,
+      "parentId": "ver_mv4wz6xb7b8622f4",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I made a structure step. The palette, the gamma, the viewport, the se...",
+      "snapshot": "a38e0d42f38507e94307a2caf52ef640d0c9246ddb66228a39d0809b9b1993fa",
+      "createdAt": "2026-10-12T07:20:44.009Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1.6,
+        "dpr": 1,
+        "num": 200,
+        "sensorAngle": 31,
+        "sensorDist": 12,
+        "rotAngle": 29,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 28,
+          "removed": 18
+        }
+      ]
+    },
+    {
+      "id": "ver_mv4xm9c01258468c",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 25,
+      "round": 2,
+      "parentId": "ver_mv4xahnt5e6b2697",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I re-read every changed region. The steering table, its signs, the se...",
+      "snapshot": "44335203e7dd9f85ae73028575cf7918fba79065ef374a03c94f6fb78c8d6d12",
+      "createdAt": "2026-10-12T07:29:53.088Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1.6,
+        "dpr": 1,
+        "num": 200,
+        "sensorAngle": 31,
+        "sensorDist": 12,
+        "rotAngle": 29,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 64,
+          "removed": 34
+        }
+      ]
+    },
+    {
+      "id": "ver_mv4xw3e647e3c23b",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 26,
+      "round": 3,
+      "parentId": "ver_mv4xm9c01258468c",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I made the color step. The physics file stays untouched: the sensor r...",
+      "snapshot": "8760b2d02cf1ac436036800da9080fe5315ead34aa4e6d2af7184f1d76758d69",
+      "createdAt": "2026-10-12T07:37:31.950Z",
+      "configuration": {
+        "palette": "magma",
+        "gamma": 1.3,
+        "dpr": 1,
+        "num": 200,
+        "sensorAngle": 31,
+        "sensorDist": 12,
+        "rotAngle": 29,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 1,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 25,
+          "removed": 3
+        }
+      ]
+    },
+    {
+      "id": "ver_mv4y0n45eec68520",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 27,
+      "round": 4,
+      "parentId": "ver_mv4xw3e647e3c23b",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I made a texture step. The palette stays. The scale of the ground, th...",
+      "snapshot": "0c5f4da1c23c4039a533ee355cdb650dbe6a42dbbaecd90eed5b869c34599021",
+      "createdAt": "2026-10-12T07:41:04.133Z",
+      "configuration": {
+        "palette": "magma",
+        "gamma": 1.5,
+        "dpr": 1,
+        "num": 320,
+        "sensorAngle": 31,
+        "sensorDist": 12,
+        "rotAngle": 29,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 0.5,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 11,
+          "removed": 3
+        }
+      ]
+    },
+    {
+      "id": "ver_mv4yos0w7fce2991",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 28,
+      "round": 1,
+      "parentId": "ver_mv4y0n45eec68520",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I changed the color ramp and its display path. The simulation is unto...",
+      "snapshot": "c12fb8bdafd5cb7206b2482ad91b0bc94d10b9719f3fb66424f393c00ef0f756",
+      "createdAt": "2026-10-12T07:59:50.240Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1.35,
+        "dpr": 1,
+        "num": 320,
+        "sensorAngle": 31,
+        "sensorDist": 12,
+        "rotAngle": 29,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 0.5,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 24,
+          "removed": 34
+        }
+      ]
+    },
+    {
+      "id": "ver_mv4yyk0l8e3cba0d",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 29,
+      "round": 2,
+      "parentId": "ver_mv4yos0w7fce2991",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I changed the launch geometry of the simulation. The colony now grows...",
+      "snapshot": "9beb8306c7c2289d9d441caeca734c149679ee5926287a21b4053a8e7bb75d4b",
+      "createdAt": "2026-10-12T08:07:26.422Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1.35,
+        "dpr": 1,
+        "num": 400,
+        "sensorAngle": 31,
+        "sensorDist": 12,
+        "rotAngle": 29,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 0.5,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "config.json",
+          "status": "changed",
+          "added": 1,
+          "removed": 1
+        },
+        {
+          "path": "src/physarum.js",
+          "status": "changed",
+          "added": 21,
+          "removed": 16
+        }
+      ]
+    },
+    {
+      "id": "ver_mv4z5ndqe4021a8b",
+      "artworkId": "art_mu7yy6qlfc033044",
+      "generation": 30,
+      "round": 3,
+      "parentId": "ver_mv4yyk0l8e3cba0d",
+      "status": "promoted",
+      "onLineage": true,
+      "title": "I changed the display stage only. The simulation, the sensor rules, t...",
+      "snapshot": "be136d8cb235fc57709effbe89debe888837d6cfc755d55a5a3b544c499870d1",
+      "createdAt": "2026-10-12T08:12:57.374Z",
+      "configuration": {
+        "palette": "ember",
+        "gamma": 1.35,
+        "dpr": 1,
+        "num": 400,
+        "sensorAngle": 31,
+        "sensorDist": 12,
+        "rotAngle": 29,
+        "decay": 0,
+        "spawnRadius": 6,
+        "scale": 0.5,
+        "gain": 1,
+        "speed": 1,
+        "seed": 1337
+      },
+      "changedFiles": [
+        {
+          "path": "src/renderer.js",
+          "status": "changed",
+          "added": 42,
+          "removed": 22
+        }
+      ]
     }
   ]
 }

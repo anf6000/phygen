@@ -1,0 +1,16 @@
+{
+  "name": "phyvolution-threejs",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Physarum (slime mould) transport network — p5 sketch ported to three.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "validate": "node tools/validate-package.mjs",
+    "snapshot": "node tools/snapshot.mjs"
+  },
+  "dependencies": {
+    "three": "0.170.0"
+  }
+}

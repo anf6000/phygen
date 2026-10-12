@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Physarum configuration",
+  "description": "Every key is required. A candidate may change any value inside these bounds. Values outside the bounds fail the candidate.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "palette",
+    "gamma",
+    "dpr",
+    "num",
+    "sensorAngle",
+    "sensorDist",
+    "rotAngle",
+    "decay",
+    "spawnRadius",
+    "scale",
+    "gain",
+    "speed",
+    "seed"
+  ],
+  "properties": {
+    "palette": {
+      "description": "Named colour ramp used by the renderer.",
+      "type": "string",
+      "enum": [
+        "white",
+        "bone",
+        "ice",
+        "ember",
+        "viridis",
+        "inferno",
+        "magma"
+      ]
+    },
+    "gamma": {
+      "description": "Display gamma. Values below 1 brighten the trail.",
+      "type": "number",
+      "minimum": 0.05,
+      "maximum": 8
+    },
+    "dpr": {
+      "description": "Device pixel ratio. Evaluation pins this to 1.",
+      "type": "number",
+      "minimum": 0.25,
+      "maximum": 4
+    },
+    "num": {
+      "description": "Number of molds.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200000
+    },
+    "sensorAngle": {
+      "description": "Angular offset of the left and right sensors, in degrees.",
+      "type": "number",
+      "minimum": -360,
+      "maximum": 360
+    },
+    "sensorDist": {
+      "description": "Sensor distance in trail pixels.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 4096
+    },
+    "rotAngle": {
+      "description": "Turn size in degrees.",
+      "type": "number",
+      "minimum": -360,
+      "maximum": 360
+    },
+    "decay": {
+      "description": "Trail fade alpha per step, 0 keeps the trail, 255 clears it.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "spawnRadius": {
+      "description": "Half-size of the square spawn box at the centre, in trail pixels.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 8192
+    },
+    "scale": {
+      "description": "Trail resolution as a fraction of the viewport.",
+      "type": "number",
+      "minimum": 0.0625,
+      "maximum": 2
+    },
+    "gain": {
+      "description": "Trail value that maps to full brightness.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 64
+    },
+    "speed": {
+      "description": "Simulation steps per rendered frame during live playback.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8
+    },
+    "seed": {
+      "description": "Random seed. 0 is a valid seed.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    }
+  }
+}

@@ -27,7 +27,7 @@ import { BudgetError } from '../budget.mjs';
 import { copyPackage, publishSnapshot, reviewEdits } from '../artwork/workspace.mjs';
 import { assertSourceMode, decideSourceMode, isLocalHost } from '../capture/index.mjs';
 import { isTransientProviderError } from '../providers/index.mjs';
-import { EVOLVE_SYSTEM_PROMPT, REFACTOR_SYSTEM_PROMPT, STEP_INSTRUCTION, buildEvolvePrompt, buildRefactorPrompt, buildRepairPrompt, buildSelfCritiquePrompt } from './prompts.mjs';
+import { EVOLVE_SYSTEM_PROMPT, REFACTOR_SYSTEM_PROMPT, STEP_INSTRUCTION, buildEvolvePrompt, buildRefactorPrompt, buildRepairPrompt, buildSelfCritiquePrompt, chooseAppearanceFocus } from './prompts.mjs';
 import { feedRows } from './agent-events.mjs';
 import { WorkspaceReader } from './workspace-reader.mjs';
 import { recordedWeaknesses, unexploredAxes, writeDirection } from '../gate/direction.mjs';
@@ -1192,11 +1192,20 @@ export class RunController {
           ...earlier.map((entry) => `step ${entry.round}: ${truncate(entry.note ?? 'no note', 160)}`),
           ...parent.changes.slice(0, 8).map((change) => `the parent changed ${change.path} (+${change.added} -${change.removed})`),
         ];
+        // The change axis for this step. A chain that stopped changing color is
+        // pushed back to a color step.
+        const recentConfigurations = [...this.store.lineage(parent.id)].reverse().map((version) => version.configuration);
+        const focus = chooseAppearanceFocus({ round, parentConfiguration: parent.configuration, recentConfigurations });
+        this.#emit(run.id, 'log', {
+          level: 'info',
+          message: `Step ${round} change axis: ${focus.axis}${focus.forced ? ' (forced: the palette has not changed for two steps)' : ''}`,
+        });
         const prompt = buildEvolvePrompt({
           instruction: STEP_INSTRUCTION,
           manifest: context.manifest,
           parentConfiguration: parent.configuration,
           history,
+          focus,
         });
         const images = this.#chainFrames(parent, 3).map((frame) => frame.path);
         const sessionId = `phygen-${versionId}`;
